@@ -1,0 +1,21 @@
+[project]
+name = "api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "quellen-sol", email = "52678959+quellen-sol@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[standard]>=0.141.1",
+    "typing>=3.10.0.0",
+    "uvicorn>=0.52.4",
+]
+
+[project.scripts]
+api = "api:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
