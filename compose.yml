@@ -9,15 +9,27 @@ services:
       - ./backend/api/.env
     environment:
       AMQP_URL: amqp://guest:guest@amqp:5672/
+      PYTHONUNBUFFERED: "1"
+    networks:
+      - resland_network
+    depends_on:
+      amqp:
+        condition: service_healthy
 
-  indexer:
+  dispatcher:
     build:
       context: .
-    command: uv run indexer
+    command: uv run dispatcher
     env_file:
-      - ./backend/indexer/.env
+      - ./backend/dispatcher/.env
     environment:
       AMQP_URL: amqp://guest:guest@amqp:5672/
+      PYTHONUNBUFFERED: "1"
+    networks:
+      - resland_network
+    depends_on:
+      amqp:
+        condition: service_healthy
 
   amqp:
     image: rabbitmq:4-management
@@ -27,4 +39,15 @@ services:
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
-    
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 3s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - resland_network
+
+networks:
+  resland_network:
+    driver: bridge

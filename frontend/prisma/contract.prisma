@@ -1,10 +1,36 @@
 // use prisma-next
 
 model User {
-  id        Int      @id @default(autoincrement())
-  auth0Id   String   @unique()
+  id           Int      @id @default(autoincrement())
+  auth0Id      String   @unique()
+  hasOnboarded Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  // For resume headers
+  fullName String?
+  email String?
+  phone String?
+  location String?
 
   @@map("user")
+  @@index([auth0Id])
+}
+
+enum SocialLinkType {
+  LINKEDIN
+  GITHUB
+  WEBSITE
+}
+
+model UserSocialLink {
+  id Int @id @default(autoincrement())
+  link String
+  type SocialLinkType
+  userId Int
+  user User @relation(fields: [userId], references: [id])
+  
+  @@map("user_social_link")
+  @@unique([userId, type])
+  @@index([userId])
 }
 
 enum JobStatus {
@@ -18,8 +44,76 @@ model UserUploadJob {
   id        String    @id
   userId    Int
   user      User      @relation(fields: [userId], references: [id])
-  status    JobStatus
+  status    JobStatus @default(PENDING)
   createdAt DateTime  @default(now())
 
   @@map("user_upload_job")
+  @@index([userId])
+}
+
+model UserJobExperience {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  companyName String
+  title       String
+  startDate   DateTime
+  endDate     DateTime?
+  description String?
+
+  @@map("user_job_experience")
+  @@index([userId])
+}
+
+model UserJobExperienceBullet {
+  id                   Int               @id @default(autoincrement())
+  userJobExperienceId  Int
+  userJobExperience    UserJobExperience @relation(fields: [userJobExperienceId], references: [id])
+  bullet               String
+  
+  @@map("user_job_experience_bullet")
+  @@index([userJobExperienceId])
+}
+
+model UserSkill {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  user        User      @relation(fields: [userId], references: [id])
+  name        String
+  
+  @@map("user_skill")
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model UserEducation {
+  id Int @id @default(autoincrement())
+  userId Int  
+  user User @relation(fields: [userId], references: [id])
+  institution String
+  degree String
+  fieldOfStudy String
+  startDate DateTime
+  endDate DateTime?
+  description String?
+  
+  @@map("user_education_entry")
+  @@unique([userId, institution, degree, fieldOfStudy, startDate])
+  @@index([userId])
+}
+
+model UserProject {
+  id Int @id @default(autoincrement())
+  userId Int  
+  user User @relation(fields: [userId], references: [id])
+  name String
+  link String?
+  description String?
+  startDate DateTime
+  endDate DateTime?
+  
+  @@map("user_project")
+  @@unique([userId, name, startDate])
+  @@unique([userId, link])
+  @@index([userId])
 }

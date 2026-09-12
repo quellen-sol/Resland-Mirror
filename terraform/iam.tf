@@ -10,7 +10,9 @@ resource "aws_iam_policy" "resland_user_policy" {
       {
         Effect = "Allow"
         Action = [
-            "s3:PutObject"
+            "s3:PutObject",
+            "s3:GetObject",
+            "s3:DeleteObject"
         ]
         Resource = "${aws_s3_bucket.resland_user_resumes.arn}/*"
       }

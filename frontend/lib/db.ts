@@ -27,3 +27,39 @@ export async function getUser() {
 export async function upsertUser() {
     await getUser();
 }
+
+export async function getUserProfileData(userId: number) {
+    const [uploadJobs, skills, experiences, education, projects, socialLinks] =
+        await Promise.all([
+            db.orm.public.UserUploadJob
+                .where((j) => j.userId.eq(userId))
+                .orderBy((j) => j.createdAt.desc())
+                .all(),
+            db.orm.public.UserSkill.where((s) => s.userId.eq(userId)).all(),
+            db.orm.public.UserJobExperience.where((e) => e.userId.eq(userId))
+                .all(),
+            db.orm.public.UserEducation.where((e) => e.userId.eq(userId)).all(),
+            db.orm.public.UserProject.where((p) => p.userId.eq(userId)).all(),
+            db.orm.public.UserSocialLink.where((l) => l.userId.eq(userId))
+                .all(),
+        ]);
+
+    const experienceIds = experiences.map((e) => e.id);
+    const bullets = experienceIds.length
+        ? await db.orm.public.UserJobExperienceBullet.where((b) =>
+              b.userJobExperienceId.in(experienceIds),
+          ).all()
+        : [];
+
+    return {
+        uploadJobs,
+        skills,
+        experiences,
+        bullets,
+        education,
+        projects,
+        socialLinks,
+    };
+}
+
+

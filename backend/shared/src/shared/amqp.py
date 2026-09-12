@@ -15,6 +15,10 @@ from rabbitmq_amqp_python_client import (
     Message,
 )
 
+RESUME_QUEUE_NAME = "test-queue"
+RESUME_EXCHANGE_NAME = "test-exchange"
+RESUME_DLQ_NAME = "test-dlq"
+RESUME_DLX_NAME = "test-dlx"
 
 @dataclass
 class AMQPJob:
@@ -28,8 +32,10 @@ class AMQPJob:
     def as_message(self) -> Message:
         return Message(body=self.to_bytes())
 
+
 class AMQPClientException(Exception):
     pass
+
 
 class AMQPClient:
     async_env: AsyncEnvironment
@@ -38,9 +44,10 @@ class AMQPClient:
     def __init__(self, uri: str):
         self.async_env = AsyncEnvironment(uri=uri)
 
-    async def setup(self):
+    async def setup(self, declare_topology=True):
         await self.connect()
-        await self.declare_topology()
+        if declare_topology:
+            await self.declare_topology()
 
     async def connect(self):
         try:
@@ -71,7 +78,7 @@ class AMQPClient:
         if not self.amqp_connection:
             raise AMQPClientException("AMQPClient not connected")
         queue_addr = AddressHelper.queue_address(queue_name)
-        return await self.amqp_connection.consumer(queue_addr, message_handler=handler)
+        return await self.amqp_connection.consumer(destination=queue_addr, message_handler=handler)
 
     async def get_manager(self):
         if not self.amqp_connection:
@@ -82,7 +89,47 @@ class AMQPClient:
         if not self.amqp_connection:
             raise AMQPClientException("AMQPClient not connected")
         manager = await self.get_manager()
+
+        # DLQs/DLXs
+        await manager.declare_exchange(
+            ExchangeSpecification(
+                name=RESUME_DLX_NAME,
+                exchange_type=ExchangeType.topic,
+                is_auto_delete=True,
+                is_durable=False,
+            )
+        )
+        await manager.declare_queue(
+            ClassicQueueSpecification(name=RESUME_DLQ_NAME, is_durable=True)
+        )
+        await manager.bind(
+            ExchangeToQueueBindingSpecification(
+                source_exchange=RESUME_DLX_NAME,
+                destination_queue=RESUME_DLQ_NAME,
+                binding_key="#",
+            )
+        )
+
         # Declare exchanges, queues, bindings here
-        await manager.declare_exchange(ExchangeSpecification(name="test-exchange", exchange_type=ExchangeType.topic, is_auto_delete=True, is_durable=False))
-        await manager.declare_queue(ClassicQueueSpecification(name="test-queue", is_durable=True))
-        await manager.bind(ExchangeToQueueBindingSpecification(source_exchange="test-exchange", destination_queue="test-queue", binding_key="#"))
+        await manager.declare_exchange(
+            ExchangeSpecification(
+                name=RESUME_EXCHANGE_NAME,
+                exchange_type=ExchangeType.topic,
+                is_auto_delete=True,
+                is_durable=False,
+            )
+        )
+        await manager.declare_queue(
+            ClassicQueueSpecification(
+                name=RESUME_QUEUE_NAME,
+                is_durable=True,
+                dead_letter_exchange=RESUME_DLX_NAME,
+            )
+        )
+        await manager.bind(
+            ExchangeToQueueBindingSpecification(
+                source_exchange=RESUME_EXCHANGE_NAME,
+                destination_queue=RESUME_QUEUE_NAME,
+                binding_key="#",
+            )
+        )
