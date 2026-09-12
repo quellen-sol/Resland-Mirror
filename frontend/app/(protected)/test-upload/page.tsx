@@ -33,7 +33,7 @@ export default async function TestUploadPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <UploadForm userId={user.id} />
+          <UploadForm userId={user.auth0Id} />
         </CardContent>
       </Card>
     </div>

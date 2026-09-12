@@ -74,14 +74,13 @@ class LocalThreadJobRunner(JobRunner):
                 raise ValueError("Job ID is required")
             job_id = self.job_data["job_id"]
 
-            # Get user info from db
+            # user_id in the job message is the Auth0 sub — the user PK now
+            user_id = self.job_data["user_id"]
             user_result = pg_client.execute("""
-                SELECT id, auth0Id from "user" where id = $1
-            """, [self.job_data["user_id"]])
+                SELECT "auth0Id" from "user" where "auth0Id" = %s
+            """, [user_id]).fetchone()
             if not user_result:
                 raise ValueError("User not found")
-            user_id = user_result[0]["id"]
-            auth0_id = user_result[0]["auth0Id"]
 
             # Pull document from s3
             if not self.job_data.get("s3_key"):
@@ -123,21 +122,51 @@ class LocalThreadJobRunner(JobRunner):
             print("Agent invoked successfully")
 
             # Agent will have sent results here, then we write to pg
-            if not profile_queue.empty():
-                profile = profile_queue.get()
-                # Upsert all relevant info to pg
+            if profile_queue.empty():
+                raise ValueError("No profile found in queue")
+            profile = profile_queue.get()
+            # Upsert all relevant info to pg
+            with pg_client.transaction():
                 pg_client.execute("""
                     INSERT INTO "user" ("auth0Id", "fullName", "email", "phone", "location")
-                    VALUES ($1, $2, $3, $4, $5)
-                    ON CONFLICT ("auth0Id") DO UPDATE SET
-                        "fullName" = EXCLUDED."fullName",
-                        "email" = EXCLUDED."email",
-                        "phone" = EXCLUDED."phone",
-                        "location" = EXCLUDED."location"
-                """, [auth0_id, profile.basic_info.name, profile.basic_info.email, profile.basic_info.phone, profile.basic_info.location])
-            else:
-                print("No profile found in queue - this is unexpected")
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT ("auth0Id") DO UPDATE SET
+                            "fullName" = EXCLUDED."fullName",
+                            "email" = EXCLUDED."email",
+                            "phone" = EXCLUDED."phone",
+                            "location" = EXCLUDED."location"
+                    """, [user_id, profile.basic_info.name, profile.basic_info.email, profile.basic_info.phone, profile.basic_info.location])
 
+                pg_client.execute("""
+                    DELETE FROM user_base_experience WHERE "userId" = %s
+                """, [user_id])
+
+                pg_client.execute("""
+                    INSERT INTO user_base_experience ("userId", "companyName", "title", "startDate", "endDate", "description")
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, [user_id, profile.work_history[0].company_name, profile.work_history[0].title, profile.work_history[0].start_date, profile.work_history[0].end_date, profile.work_history[0].description])
+
+                pg_client.execute("""
+                    DELETE FROM user_base_skill WHERE "userId" = %s
+                """, [user_id])
+                
+                for skill_category in profile.skills:
+                    for skill in skill_category.skills:
+                        pg_client.execute("""
+                            INSERT INTO user_base_skill ("userId", "name", "category")
+                            VALUES (%s, %s, %s)
+                        """, [user_id, skill, skill_category.category])
+
+                    # pg_client.execute("""
+                    #     DELETE FROM user_base_education WHERE "userId" = %s
+                    # """, [user_id])
+
+                    # for education in profile.education:
+                    #     pg_client.execute("""
+                    #         INSERT INTO user_base_education ("userId", "institution", "degree", "fieldOfStudy", "startDate", "endDate")
+                    #         VALUES (%s, %s, %s, %s, %s, %s)
+                    #     """, [user_id, education.institution, education.degree, education.field_of_study, education.start_date, education.end_date])
+                
         except Exception as e:
             print(f"Error in job runner: {e}")
             queue.put((threading.current_thread().name, e))

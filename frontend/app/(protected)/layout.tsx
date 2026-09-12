@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth";
+import { Toaster } from "@/components/ui/sonner";
 
 export default async function ProtectedLayout({
   children,
@@ -6,5 +7,10 @@ export default async function ProtectedLayout({
   children: React.ReactNode;
 }) {
   await requireUser();
-  return children;
+  return (
+    <>
+      {children}
+      <Toaster theme="dark" richColors position="bottom-right" />
+    </>
+  );
 }

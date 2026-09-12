@@ -1,0 +1,61 @@
+"use client";
+
+import { useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+
+const POLL_INTERVAL_MS = 3000;
+const TERMINAL_STATES = new Set(["COMPLETED", "FAILED"]);
+
+export default function JobStatusPoller({ jobIds }: { jobIds: string[] }) {
+  const router = useRouter();
+  const finishedRef = useRef<Set<string>>(new Set());
+
+  const key = jobIds.join(",");
+
+  useEffect(() => {
+    if (jobIds.length === 0) return;
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+    if (!baseUrl) return;
+
+    let cancelled = false;
+
+    async function poll() {
+      let shouldRefresh = false;
+      for (const jobId of jobIds) {
+        if (finishedRef.current.has(jobId)) continue;
+        try {
+          const res = await fetch(`${baseUrl}/check-job-status/${jobId}`);
+          if (!res.ok) continue;
+          const { status } = (await res.json()) as { status: string };
+          if (!TERMINAL_STATES.has(status)) continue;
+
+          finishedRef.current.add(jobId);
+          shouldRefresh = true;
+          if (status === "COMPLETED") {
+            toast.success("Resume processed", {
+              description: "Your profile was updated from your resume.",
+            });
+          } else {
+            toast.error("Resume processing failed", {
+              description: "Something went wrong — try uploading again.",
+            });
+          }
+        } catch {
+          // Transient network error — retry on next tick.
+        }
+      }
+      if (shouldRefresh && !cancelled) router.refresh();
+    }
+
+    void poll();
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, router]);
+
+  return null;
+}

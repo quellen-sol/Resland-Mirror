@@ -23,7 +23,7 @@ export default function UploadForm({
   userId,
   onSuccess,
 }: {
-  userId: number;
+  userId: string;
   onSuccess?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);

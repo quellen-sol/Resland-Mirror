@@ -19,7 +19,7 @@ import { completeOnboarding, saveManualProfile } from "./actions";
 
 type Step = "choice" | "upload" | "manual";
 
-export default function OnboardingFlow({ userId }: { userId: number }) {
+export default function OnboardingFlow({ userId }: { userId: string }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("choice");
   const [isPending, startTransition] = useTransition();

@@ -13,7 +13,7 @@ export default async function EditProfilePage() {
   if (!user) redirect("/auth/login");
 
   const { skills, experiences, bullets, education, projects, socialLinks } =
-    await getUserProfileData(user.id);
+    await getUserProfileData(user.auth0Id);
 
   const initial: ProfileFormValues = {
     fullName: user.fullName ?? "",

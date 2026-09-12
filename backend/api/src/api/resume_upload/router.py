@@ -3,13 +3,22 @@ import os
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
-from shared.amqp import AMQPJob, RESUME_EXCHANGE_NAME
+from shared.amqp import RESUME_EXCHANGE_NAME, AMQPJob
 from shared.pg import get_pg_client
+from shared.s3 import get_s3_client
+
+from ..env_vars import (
+    AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY,
+    PG_URL,
+    S3_RESUME_BUCKET,
+)
 
 router = APIRouter()
 
+# TODO: Need to verify that the user is actually the one sending this request... wow
 @router.post("/upload-initial-resume", status_code=200)
-async def upload_initial_resume(file: UploadFile, user_id: int, req: Request):
+async def upload_initial_resume(file: UploadFile, user_id: str, req: Request):
     if file.filename is None:
         raise HTTPException(status_code=400, detail="No filename provided")
 
@@ -24,42 +33,56 @@ async def upload_initial_resume(file: UploadFile, user_id: int, req: Request):
     # This is safe to read. Read all bytes
     file_content = await file.read()
 
-    bucket = os.getenv("S3_RESUME_BUCKET")
+    bucket = S3_RESUME_BUCKET
     if not bucket:
         raise HTTPException(
             status_code=500, detail="S3_RESUME_BUCKET is not configured"
         )
 
     job_id = uuid.uuid4()
-    obj_key = f"tmp/resumes/{job_id}-{file.filename}"
+    obj_key = f"resumes/{user_id}/{file.filename}"
     try:
-        req.app.state.s3_client.upload_fileobj(io.BytesIO(file_content), bucket, obj_key)
+        s3_client = get_s3_client(
+            aws_access_key_id=AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+        )
+        s3_client.upload_fileobj(io.BytesIO(file_content), bucket, obj_key)
     except Exception as e:
         raise HTTPException(
             status_code=500, detail="Failed to upload file to S3"
         ) from e
 
+    pg_client = get_pg_client(PG_URL)
+    in_flight = pg_client.execute(
+        'SELECT 1 FROM user_upload_job WHERE "userId" = %s AND status IN (\'PENDING\', \'PROCESSING\') LIMIT 1',
+        (user_id,),
+    ).fetchone()
+    if in_flight:
+        pg_client.close()
+        raise HTTPException(
+            status_code=409,
+            detail="A resume is already being processed for this user",
+        )
+
     amqp_publisher = await req.app.state.amqp_client.get_publisher(RESUME_EXCHANGE_NAME, "#")
-    job = AMQPJob(s3_key=obj_key, job_id=str(job_id))
+    job = AMQPJob(s3_key=obj_key, job_id=str(job_id), user_id=user_id)
     await amqp_publisher.publish(job.as_message())
 
-    pg_client = get_pg_client(os.getenv("PG_URL"))
     pg_client.execute(
-        'INSERT INTO user_upload_job (id, "userId", status) VALUES (%s, %s, %s)',
-        (str(job_id), user_id, "PENDING"),
+        'INSERT INTO user_upload_job (id, "userId", "s3Key", status) VALUES (%s, %s, %s, %s)',
+        (str(job_id), user_id, obj_key, "PENDING"),
     )
     pg_client.close()
 
     return {"job_id": str(job_id)}
 
 @router.get("/check-job-status/{job_id}", status_code=200)
-async def check_job_status(job_id: str, req: Request):
-    pg_client = get_pg_client(os.getenv("PG_URL"))
-    result = pg_client.execute(
+async def check_job_status(job_id: str):
+    pg_client = get_pg_client(PG_URL)
+    row = pg_client.execute(
         'SELECT status FROM user_upload_job WHERE id = %s',
         (job_id,)
-    )
-    pg_client.close()
-    if not result:
+    ).fetchone()
+    if not row:
         raise HTTPException(status_code=404, detail="Job not found")
-    return {"status": result[0][0]}
+    return {"status": row[0]}

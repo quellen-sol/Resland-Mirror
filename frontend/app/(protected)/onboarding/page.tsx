@@ -12,5 +12,5 @@ export default async function OnboardingPage() {
     redirect("/dashboard");
   }
 
-  return <OnboardingFlow userId={user.id} />;
+  return <OnboardingFlow userId={user.auth0Id} />;
 }

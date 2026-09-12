@@ -56,7 +56,7 @@ export async function completeOnboarding() {
   const user = await getUser();
   if (!user) redirect("/auth/login");
   if (!user.hasOnboarded) {
-    await db.orm.public.User.where({ id: user.id }).update({
+    await db.orm.public.User.where({ auth0Id: user.auth0Id }).update({
       hasOnboarded: true,
     });
   }
@@ -66,7 +66,7 @@ export async function saveManualProfile(input: SaveProfileInput) {
   const user = await getUser();
   if (!user) redirect("/auth/login");
 
-  await db.orm.public.User.where({ id: user.id }).update({
+  await db.orm.public.User.where({ auth0Id: user.auth0Id }).update({
     fullName: orNull(input.fullName),
     email: orNull(input.email),
     phone: orNull(input.phone),
@@ -75,19 +75,19 @@ export async function saveManualProfile(input: SaveProfileInput) {
 
   for (const link of input.socialLinks) {
     await db.orm.public.UserSocialLink.create({
-      userId: user.id,
+      userId: user.auth0Id,
       type: link.type,
       link: link.link,
     });
   }
 
   for (const name of input.skills) {
-    await db.orm.public.UserSkill.create({ userId: user.id, name });
+    await db.orm.public.UserBaseSkill.create({ userId: user.auth0Id, name });
   }
 
   for (const exp of input.experiences) {
-    const experience = await db.orm.public.UserJobExperience.create({
-      userId: user.id,
+    const experience = await db.orm.public.UserBaseJobExperience.create({
+      userId: user.auth0Id,
       companyName: exp.companyName,
       title: exp.title,
       startDate: toInstant(exp.startDate)!,
@@ -95,7 +95,7 @@ export async function saveManualProfile(input: SaveProfileInput) {
       description: exp.description,
     });
     for (const bullet of exp.bullets) {
-      await db.orm.public.UserJobExperienceBullet.create({
+      await db.orm.public.UserBaseJobExperienceBullet.create({
         userJobExperienceId: experience.id,
         bullet,
       });
@@ -103,8 +103,8 @@ export async function saveManualProfile(input: SaveProfileInput) {
   }
 
   for (const edu of input.education) {
-    await db.orm.public.UserEducation.create({
-      userId: user.id,
+    await db.orm.public.UserBaseEducation.create({
+      userId: user.auth0Id,
       institution: edu.institution,
       degree: edu.degree,
       fieldOfStudy: edu.fieldOfStudy,
@@ -115,8 +115,8 @@ export async function saveManualProfile(input: SaveProfileInput) {
   }
 
   for (const proj of input.projects) {
-    await db.orm.public.UserProject.create({
-      userId: user.id,
+    await db.orm.public.UserBaseProject.create({
+      userId: user.auth0Id,
       name: proj.name,
       link: proj.link,
       description: proj.description,
@@ -126,7 +126,7 @@ export async function saveManualProfile(input: SaveProfileInput) {
   }
 
   if (!user.hasOnboarded) {
-    await db.orm.public.User.where({ id: user.id }).update({
+    await db.orm.public.User.where({ auth0Id: user.auth0Id }).update({
       hasOnboarded: true,
     });
   }

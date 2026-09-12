@@ -28,25 +28,25 @@ export async function upsertUser() {
     await getUser();
 }
 
-export async function getUserProfileData(userId: number) {
+export async function getUserProfileData(userId: string) {
     const [uploadJobs, skills, experiences, education, projects, socialLinks] =
         await Promise.all([
             db.orm.public.UserUploadJob
                 .where((j) => j.userId.eq(userId))
                 .orderBy((j) => j.createdAt.desc())
                 .all(),
-            db.orm.public.UserSkill.where((s) => s.userId.eq(userId)).all(),
-            db.orm.public.UserJobExperience.where((e) => e.userId.eq(userId))
+            db.orm.public.UserBaseSkill.where((s) => s.userId.eq(userId)).all(),
+            db.orm.public.UserBaseJobExperience.where((e) => e.userId.eq(userId))
                 .all(),
-            db.orm.public.UserEducation.where((e) => e.userId.eq(userId)).all(),
-            db.orm.public.UserProject.where((p) => p.userId.eq(userId)).all(),
+            db.orm.public.UserBaseEducation.where((e) => e.userId.eq(userId)).all(),
+            db.orm.public.UserBaseProject.where((p) => p.userId.eq(userId)).all(),
             db.orm.public.UserSocialLink.where((l) => l.userId.eq(userId))
                 .all(),
         ]);
 
     const experienceIds = experiences.map((e) => e.id);
     const bullets = experienceIds.length
-        ? await db.orm.public.UserJobExperienceBullet.where((b) =>
+        ? await db.orm.public.UserBaseJobExperienceBullet.where((b) =>
               b.userJobExperienceId.in(experienceIds),
           ).all()
         : [];

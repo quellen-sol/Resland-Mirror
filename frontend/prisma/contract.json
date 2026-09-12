@@ -8,24 +8,24 @@
       "model": "User",
       "namespace": "public"
     },
-    "user_education_entry": {
-      "model": "UserEducation",
+    "user_base_education": {
+      "model": "UserBaseEducation",
       "namespace": "public"
     },
-    "user_job_experience": {
-      "model": "UserJobExperience",
+    "user_base_experience": {
+      "model": "UserBaseJobExperience",
       "namespace": "public"
     },
-    "user_job_experience_bullet": {
-      "model": "UserJobExperienceBullet",
+    "user_base_experience_bullet": {
+      "model": "UserBaseJobExperienceBullet",
       "namespace": "public"
     },
-    "user_project": {
-      "model": "UserProject",
+    "user_base_project": {
+      "model": "UserBaseProject",
       "namespace": "public"
     },
-    "user_skill": {
-      "model": "UserSkill",
+    "user_base_skill": {
+      "model": "UserBaseSkill",
       "namespace": "public"
     },
     "user_social_link": {
@@ -118,13 +118,6 @@
                   "kind": "scalar"
                 }
               },
-              "id": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              },
               "location": {
                 "nullable": true,
                 "type": {
@@ -158,9 +151,6 @@
                 "hasOnboarded": {
                   "column": "hasOnboarded"
                 },
-                "id": {
-                  "column": "id"
-                },
                 "location": {
                   "column": "location"
                 },
@@ -172,7 +162,7 @@
               "table": "user"
             }
           },
-          "UserEducation": {
+          "UserBaseEducation": {
             "fields": {
               "degree": {
                 "nullable": false,
@@ -226,7 +216,7 @@
               "userId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/int4@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -239,7 +229,7 @@
                     "userId"
                   ],
                   "targetFields": [
-                    "id"
+                    "auth0Id"
                   ]
                 },
                 "to": {
@@ -276,15 +266,22 @@
                 }
               },
               "namespaceId": "public",
-              "table": "user_education_entry"
+              "table": "user_base_education"
             }
           },
-          "UserJobExperience": {
+          "UserBaseJobExperience": {
             "fields": {
               "companyName": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
                   "kind": "scalar"
                 }
               },
@@ -326,7 +323,7 @@
               "userId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/int4@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -339,7 +336,7 @@
                     "userId"
                   ],
                   "targetFields": [
-                    "id"
+                    "auth0Id"
                   ]
                 },
                 "to": {
@@ -352,6 +349,9 @@
               "fields": {
                 "companyName": {
                   "column": "companyName"
+                },
+                "createdAt": {
+                  "column": "createdAt"
                 },
                 "description": {
                   "column": "description"
@@ -373,15 +373,22 @@
                 }
               },
               "namespaceId": "public",
-              "table": "user_job_experience"
+              "table": "user_base_experience"
             }
           },
-          "UserJobExperienceBullet": {
+          "UserBaseJobExperienceBullet": {
             "fields": {
               "bullet": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "createdAt": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
                   "kind": "scalar"
                 }
               },
@@ -412,7 +419,7 @@
                   ]
                 },
                 "to": {
-                  "model": "UserJobExperience",
+                  "model": "UserBaseJobExperience",
                   "namespace": "public"
                 }
               }
@@ -422,6 +429,9 @@
                 "bullet": {
                   "column": "bullet"
                 },
+                "createdAt": {
+                  "column": "createdAt"
+                },
                 "id": {
                   "column": "id"
                 },
@@ -430,10 +440,10 @@
                 }
               },
               "namespaceId": "public",
-              "table": "user_job_experience_bullet"
+              "table": "user_base_experience_bullet"
             }
           },
-          "UserProject": {
+          "UserBaseProject": {
             "fields": {
               "description": {
                 "nullable": true,
@@ -480,7 +490,7 @@
               "userId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/int4@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -493,7 +503,7 @@
                     "userId"
                   ],
                   "targetFields": [
-                    "id"
+                    "auth0Id"
                   ]
                 },
                 "to": {
@@ -527,11 +537,18 @@
                 }
               },
               "namespaceId": "public",
-              "table": "user_project"
+              "table": "user_base_project"
             }
           },
-          "UserSkill": {
+          "UserBaseSkill": {
             "fields": {
+              "category": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "id": {
                 "nullable": false,
                 "type": {
@@ -549,7 +566,7 @@
               "userId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/int4@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -562,7 +579,7 @@
                     "userId"
                   ],
                   "targetFields": [
-                    "id"
+                    "auth0Id"
                   ]
                 },
                 "to": {
@@ -573,6 +590,9 @@
             },
             "storage": {
               "fields": {
+                "category": {
+                  "column": "category"
+                },
                 "id": {
                   "column": "id"
                 },
@@ -584,7 +604,7 @@
                 }
               },
               "namespaceId": "public",
-              "table": "user_skill"
+              "table": "user_base_skill"
             }
           },
           "UserSocialLink": {
@@ -619,7 +639,7 @@
               "userId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/int4@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -632,7 +652,7 @@
                     "userId"
                   ],
                   "targetFields": [
-                    "id"
+                    "auth0Id"
                   ]
                 },
                 "to": {
@@ -676,6 +696,13 @@
                   "kind": "scalar"
                 }
               },
+              "s3Key": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "status": {
                 "nullable": false,
                 "type": {
@@ -692,7 +719,7 @@
               "userId": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/int4@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               }
@@ -705,7 +732,7 @@
                     "userId"
                   ],
                   "targetFields": [
-                    "id"
+                    "auth0Id"
                   ]
                 },
                 "to": {
@@ -721,6 +748,9 @@
                 },
                 "id": {
                   "column": "id"
+                },
+                "s3Key": {
+                  "column": "s3Key"
                 },
                 "status": {
                   "column": "status"
@@ -777,15 +807,6 @@
                   "nativeType": "bool",
                   "nullable": false
                 },
-                "id": {
-                  "codecId": "pg/int4@1",
-                  "default": {
-                    "expression": "autoincrement()",
-                    "kind": "function"
-                  },
-                  "nativeType": "int4",
-                  "nullable": false
-                },
                 "location": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -810,18 +831,12 @@
               ],
               "primaryKey": {
                 "columns": [
-                  "id"
+                  "auth0Id"
                 ]
               },
-              "uniques": [
-                {
-                  "columns": [
-                    "auth0Id"
-                  ]
-                }
-              ]
+              "uniques": []
             },
-            "user_education_entry": {
+            "user_base_education": {
               "columns": {
                 "degree": {
                   "codecId": "pg/text@1",
@@ -863,8 +878,8 @@
                   "nullable": false
                 },
                 "userId": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 }
               },
@@ -875,11 +890,11 @@
                       "userId"
                     ],
                     "namespaceId": "public",
-                    "tableName": "user_education_entry"
+                    "tableName": "user_base_education"
                   },
                   "target": {
                     "columns": [
-                      "id"
+                      "auth0Id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -891,8 +906,8 @@
                   "columns": [
                     "userId"
                   ],
-                  "name": "user_education_entry_userId_idx_a489d58a",
-                  "prefix": "user_education_entry_userId_idx",
+                  "name": "user_base_education_userId_idx_a489d58a",
+                  "prefix": "user_base_education_userId_idx",
                   "unique": false
                 }
               ],
@@ -913,11 +928,20 @@
                 }
               ]
             },
-            "user_job_experience": {
+            "user_base_experience": {
               "columns": {
                 "companyName": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
                   "nullable": false
                 },
                 "description": {
@@ -950,8 +974,8 @@
                   "nullable": false
                 },
                 "userId": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 }
               },
@@ -962,11 +986,11 @@
                       "userId"
                     ],
                     "namespaceId": "public",
-                    "tableName": "user_job_experience"
+                    "tableName": "user_base_experience"
                   },
                   "target": {
                     "columns": [
-                      "id"
+                      "auth0Id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -978,8 +1002,8 @@
                   "columns": [
                     "userId"
                   ],
-                  "name": "user_job_experience_userId_idx_a489d58a",
-                  "prefix": "user_job_experience_userId_idx",
+                  "name": "user_base_experience_userId_idx_a489d58a",
+                  "prefix": "user_base_experience_userId_idx",
                   "unique": false
                 }
               ],
@@ -990,11 +1014,20 @@
               },
               "uniques": []
             },
-            "user_job_experience_bullet": {
+            "user_base_experience_bullet": {
               "columns": {
                 "bullet": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
+                  "nullable": false
+                },
+                "createdAt": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
                   "nullable": false
                 },
                 "id": {
@@ -1019,14 +1052,14 @@
                       "userJobExperienceId"
                     ],
                     "namespaceId": "public",
-                    "tableName": "user_job_experience_bullet"
+                    "tableName": "user_base_experience_bullet"
                   },
                   "target": {
                     "columns": [
                       "id"
                     ],
                     "namespaceId": "public",
-                    "tableName": "user_job_experience"
+                    "tableName": "user_base_experience"
                   }
                 }
               ],
@@ -1035,8 +1068,8 @@
                   "columns": [
                     "userJobExperienceId"
                   ],
-                  "name": "user_job_experience_bullet_userJobExperienceId_idx_a33695c5",
-                  "prefix": "user_job_experience_bullet_userJobExperienceId_idx",
+                  "name": "user_base_experience_bullet_userJobExperienceId_idx_a33695c5",
+                  "prefix": "user_base_experience_bullet_userJobExperienceId_idx",
                   "unique": false
                 }
               ],
@@ -1047,7 +1080,7 @@
               },
               "uniques": []
             },
-            "user_project": {
+            "user_base_project": {
               "columns": {
                 "description": {
                   "codecId": "pg/text@1",
@@ -1084,8 +1117,8 @@
                   "nullable": false
                 },
                 "userId": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 }
               },
@@ -1096,11 +1129,11 @@
                       "userId"
                     ],
                     "namespaceId": "public",
-                    "tableName": "user_project"
+                    "tableName": "user_base_project"
                   },
                   "target": {
                     "columns": [
-                      "id"
+                      "auth0Id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -1112,8 +1145,8 @@
                   "columns": [
                     "userId"
                   ],
-                  "name": "user_project_userId_idx_a489d58a",
-                  "prefix": "user_project_userId_idx",
+                  "name": "user_base_project_userId_idx_a489d58a",
+                  "prefix": "user_base_project_userId_idx",
                   "unique": false
                 }
               ],
@@ -1138,8 +1171,13 @@
                 }
               ]
             },
-            "user_skill": {
+            "user_base_skill": {
               "columns": {
+                "category": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "id": {
                   "codecId": "pg/int4@1",
                   "default": {
@@ -1155,8 +1193,8 @@
                   "nullable": false
                 },
                 "userId": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 }
               },
@@ -1167,11 +1205,11 @@
                       "userId"
                     ],
                     "namespaceId": "public",
-                    "tableName": "user_skill"
+                    "tableName": "user_base_skill"
                   },
                   "target": {
                     "columns": [
-                      "id"
+                      "auth0Id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -1183,8 +1221,8 @@
                   "columns": [
                     "userId"
                   ],
-                  "name": "user_skill_userId_idx_a489d58a",
-                  "prefix": "user_skill_userId_idx",
+                  "name": "user_base_skill_userId_idx_a489d58a",
+                  "prefix": "user_base_skill_userId_idx",
                   "unique": false
                 }
               ],
@@ -1237,8 +1275,8 @@
                   }
                 },
                 "userId": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 }
               },
@@ -1253,7 +1291,7 @@
                   },
                   "target": {
                     "columns": [
-                      "id"
+                      "auth0Id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -1307,6 +1345,11 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "s3Key": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
                 "status": {
                   "codecId": "pg/text@1",
                   "default": {
@@ -1323,8 +1366,8 @@
                   }
                 },
                 "userId": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 }
               },
@@ -1339,7 +1382,7 @@
                   },
                   "target": {
                     "columns": [
-                      "id"
+                      "auth0Id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -1388,7 +1431,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "38eef46eed16800acebb2dbe36e1ccb1b6ffe8382e94b186fa1f218399350ce0"
+    "storageHash": "ca30d5e72089dd3abb4feb98187f0f4a80f24457d07faafccdb92e17818f8657"
   },
   "capabilities": {
     "postgres": {

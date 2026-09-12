@@ -20,7 +20,7 @@ export async function saveProfileEdit(input: SaveProfileInput) {
   if (!user) redirect("/auth/login");
 
   await db.transaction(async (tx) => {
-    await tx.orm.public.User.where({ id: user.id }).update({
+    await tx.orm.public.User.where({ auth0Id: user.auth0Id }).update({
       fullName: orNull(input.fullName),
       email: orNull(input.email),
       phone: orNull(input.phone),
@@ -29,41 +29,41 @@ export async function saveProfileEdit(input: SaveProfileInput) {
 
     // Delete existing profile rows (bullets first — they FK to experiences).
     const expIds = (
-      await tx.orm.public.UserJobExperience.where((e) =>
-        e.userId.eq(user.id),
+      await tx.orm.public.UserBaseJobExperience.where((e) =>
+        e.userId.eq(user.auth0Id),
       ).all()
     ).map((e) => e.id);
 
     if (expIds.length > 0) {
-      await tx.orm.public.UserJobExperienceBullet.where((b) =>
+      await tx.orm.public.UserBaseJobExperienceBullet.where((b) =>
         b.userJobExperienceId.in(expIds),
       ).delete();
     }
-    await tx.orm.public.UserJobExperience.where((e) =>
-      e.userId.eq(user.id),
+    await tx.orm.public.UserBaseJobExperience.where((e) =>
+      e.userId.eq(user.auth0Id),
     ).delete();
-    await tx.orm.public.UserSkill.where((s) => s.userId.eq(user.id)).delete();
-    await tx.orm.public.UserEducation.where((e) => e.userId.eq(user.id))
+    await tx.orm.public.UserBaseSkill.where((s) => s.userId.eq(user.auth0Id)).delete();
+    await tx.orm.public.UserBaseEducation.where((e) => e.userId.eq(user.auth0Id))
       .delete();
-    await tx.orm.public.UserProject.where((p) => p.userId.eq(user.id)).delete();
-    await tx.orm.public.UserSocialLink.where((l) => l.userId.eq(user.id))
+    await tx.orm.public.UserBaseProject.where((p) => p.userId.eq(user.auth0Id)).delete();
+    await tx.orm.public.UserSocialLink.where((l) => l.userId.eq(user.auth0Id))
       .delete();
 
     for (const link of input.socialLinks) {
       await tx.orm.public.UserSocialLink.create({
-        userId: user.id,
+        userId: user.auth0Id,
         type: link.type,
         link: link.link,
       });
     }
 
     for (const name of input.skills) {
-      await tx.orm.public.UserSkill.create({ userId: user.id, name });
+      await tx.orm.public.UserBaseSkill.create({ userId: user.auth0Id, name });
     }
 
     for (const exp of input.experiences) {
-      const experience = await tx.orm.public.UserJobExperience.create({
-        userId: user.id,
+      const experience = await tx.orm.public.UserBaseJobExperience.create({
+        userId: user.auth0Id,
         companyName: exp.companyName,
         title: exp.title,
         startDate: toInstant(exp.startDate)!,
@@ -71,7 +71,7 @@ export async function saveProfileEdit(input: SaveProfileInput) {
         description: exp.description,
       });
       for (const bullet of exp.bullets) {
-        await tx.orm.public.UserJobExperienceBullet.create({
+        await tx.orm.public.UserBaseJobExperienceBullet.create({
           userJobExperienceId: experience.id,
           bullet,
         });
@@ -79,8 +79,8 @@ export async function saveProfileEdit(input: SaveProfileInput) {
     }
 
     for (const edu of input.education) {
-      await tx.orm.public.UserEducation.create({
-        userId: user.id,
+      await tx.orm.public.UserBaseEducation.create({
+        userId: user.auth0Id,
         institution: edu.institution,
         degree: edu.degree,
         fieldOfStudy: edu.fieldOfStudy,
@@ -91,8 +91,8 @@ export async function saveProfileEdit(input: SaveProfileInput) {
     }
 
     for (const proj of input.projects) {
-      await tx.orm.public.UserProject.create({
-        userId: user.id,
+      await tx.orm.public.UserBaseProject.create({
+        userId: user.auth0Id,
         name: proj.name,
         link: proj.link,
         description: proj.description,

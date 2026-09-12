@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
+import JobStatusPoller from "@/components/job-status-poller";
 import UploadResumeDialog from "./upload-resume-dialog";
 
 function fmtDate(date: Temporal.Instant | null) {
@@ -56,7 +57,11 @@ export default async function DashboardPage() {
     education,
     projects,
     socialLinks,
-  } = await getUserProfileData(user.id);
+  } = await getUserProfileData(user.auth0Id);
+
+  const activeJobIds = uploadJobs
+    .filter((j) => j.status === "PENDING" || j.status === "PROCESSING")
+    .map((j) => j.id);
 
   const bulletsFor = (expId: number) =>
     bullets.filter((b) => b.userJobExperienceId === expId);
@@ -66,6 +71,7 @@ export default async function DashboardPage() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
 
       <main className="relative flex w-full max-w-3xl flex-col gap-6">
+        <JobStatusPoller jobIds={activeJobIds} />
         <header className="flex items-center justify-between">
           <div>
             <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
@@ -76,7 +82,10 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <UploadResumeDialog userId={user.id} />
+            <UploadResumeDialog
+              userId={user.auth0Id}
+              disabled={activeJobIds.length > 0}
+            />
             <Link
               href="/edit-profile"
               className={cn(

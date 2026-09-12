@@ -24,9 +24,16 @@ RESUME_DLX_NAME = "test-dlx"
 class AMQPJob:
     s3_key: str
     job_id: str
+    user_id: str
 
     def to_bytes(self) -> bytes:
-        as_json = json.dumps({"s3_key": self.s3_key, "job_id": self.job_id})
+        as_json = json.dumps(
+            {
+                "s3_key": self.s3_key,
+                "job_id": self.job_id,
+                "user_id": self.user_id,
+            }
+        )
         return as_json.encode()
 
     def as_message(self) -> Message:
@@ -43,6 +50,7 @@ class AMQPClient:
 
     def __init__(self, uri: str):
         self.async_env = AsyncEnvironment(uri=uri)
+        self._publishers: dict = {}
 
     async def setup(self, declare_topology=True):
         await self.connect()
@@ -50,6 +58,8 @@ class AMQPClient:
             await self.declare_topology()
 
     async def connect(self):
+        # A fresh connection invalidates any previously opened senders.
+        self._publishers.clear()
         try:
             self.amqp_connection = await self.async_env.connection()
             await self.amqp_connection.dial()
@@ -65,14 +75,20 @@ class AMQPClient:
         if not self.amqp_connection:
             raise AMQPClientException("AMQPClient not connected")
         exchange_addr = AddressHelper.exchange_address(exchange_name, routing_key)
+        # Reuse senders — a second link with the same address gets the same
+        # link name, and the broker kills the connection (amqp:invalid-field).
+        if exchange_addr in self._publishers:
+            return self._publishers[exchange_addr]
         try:
-            return await self.amqp_connection.publisher(exchange_addr)
+            publisher = await self.amqp_connection.publisher(exchange_addr)
         except ConnectionClosed:
             # The broker may have dropped an idle connection; re-dial and retry once.
             with suppress(Exception):
                 await self.amqp_connection.close()
             await self.connect()
-            return await self.amqp_connection.publisher(exchange_addr)
+            publisher = await self.amqp_connection.publisher(exchange_addr)
+        self._publishers[exchange_addr] = publisher
+        return publisher
 
     async def get_consumer(self, queue_name: str, handler: AMQPMessagingHandler):
         if not self.amqp_connection:
