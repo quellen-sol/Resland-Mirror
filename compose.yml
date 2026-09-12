@@ -1,0 +1,30 @@
+services:
+  api:
+    build:
+      context: .
+    command: uv run api
+    ports:
+      - "3001:3001"
+    env_file:
+      - ./backend/api/.env
+    environment:
+      AMQP_URL: amqp://guest:guest@amqp:5672/
+
+  indexer:
+    build:
+      context: .
+    command: uv run indexer
+    env_file:
+      - ./backend/indexer/.env
+    environment:
+      AMQP_URL: amqp://guest:guest@amqp:5672/
+
+  amqp:
+    image: rabbitmq:4-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    

@@ -1,5 +1,5 @@
 [project]
-name = "api"
+name = "shared"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -8,14 +8,10 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "fastapi[standard]>=0.141.1",
-    "typing>=3.10.0.0",
-    "uvicorn>=0.52.4",
+    "psycopg[binary,pool]>=3.3.5",
+    "rabbitmq-amqp-python-client>=1.0.1",
 ]
 
-[project.scripts]
-api = "api:main"
-
 [build-system]
-requires = ["uv_build>=0.12.5,<0.13.0"]
+requires = ["uv_build>=0.12.13,<0.13.0"]
 build-backend = "uv_build"

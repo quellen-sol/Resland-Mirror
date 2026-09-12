@@ -1,9 +1,26 @@
 import Image from "next/image";
+import { auth0 } from "@/lib/auth0";
 
-export default function Home() {
+export default async function Home() {
+  const session = await auth0.getSession();
+
   return (
     <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
       <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
+        <div className="w-full flex justify-end text-sm">
+          {session ? (
+            <span className="text-zinc-600 dark:text-zinc-400">
+              {session.user.name ?? session.user.email} ·{" "}
+              <a href="/auth/logout" className="underline">
+                Sign out
+              </a>
+            </span>
+          ) : (
+            <a href="/auth/login" className="underline text-zinc-600 dark:text-zinc-400">
+              Sign in
+            </a>
+          )}
+        </div>
         <Image
           className="dark:invert h-5 w-[100px]"
           src="/next.svg"

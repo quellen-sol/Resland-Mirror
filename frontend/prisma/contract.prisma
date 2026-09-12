@@ -2,16 +2,24 @@
 
 model User {
   id        Int      @id @default(autoincrement())
-  email     String
-  auth0Id   String
+  auth0Id   String   @unique()
+
+  @@map("user")
 }
 
-// model Post {
-//   id        Int      @id @default(autoincrement())
-//   title     String
-//   content   String?
-//   author    User     @relation(fields: [authorId], references: [id])
-//   authorId  Int
-//   createdAt TimestamptzString @default(now())
-//   updatedAt temporal.updatedAtString()
-// }
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model UserUploadJob {
+  id        String    @id
+  userId    Int
+  user      User      @relation(fields: [userId], references: [id])
+  status    JobStatus
+  createdAt DateTime  @default(now())
+
+  @@map("user_upload_job")
+}

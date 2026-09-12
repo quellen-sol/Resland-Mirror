@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'765fbd2aeef001f2b55f32a01b81fb4c5775ab123a32e9807195a55a129f56cb'>;
+  StorageHashBase<'a45c8da596c1d2d041bfcd399971f6f9fee7c58f89b9e1029d5957b60372fd6f'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -242,8 +242,13 @@ export type FieldOutputTypes = {
   readonly public: {
     readonly User: {
       readonly id: CodecTypes['pg/int4@1']['output'];
-      readonly email: CodecTypes['pg/text@1']['output'];
       readonly auth0Id: CodecTypes['pg/text@1']['output'];
+    };
+    readonly UserUploadJob: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly userId: CodecTypes['pg/int4@1']['output'];
+      readonly status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
   };
 };
@@ -251,8 +256,13 @@ export type FieldInputTypes = {
   readonly public: {
     readonly User: {
       readonly id: CodecTypes['pg/int4@1']['input'];
-      readonly email: CodecTypes['pg/text@1']['input'];
       readonly auth0Id: CodecTypes['pg/text@1']['input'];
+    };
+    readonly UserUploadJob: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly userId: CodecTypes['pg/int4@1']['input'];
+      readonly status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
   };
 };
@@ -260,8 +270,13 @@ export type StorageColumnTypes = {
   readonly public: {
     readonly user: {
       readonly auth0Id: CodecTypes['pg/text@1']['output'];
-      readonly email: CodecTypes['pg/text@1']['output'];
       readonly id: CodecTypes['pg/int4@1']['output'];
+    };
+    readonly user_upload_job: {
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+      readonly userId: CodecTypes['pg/int4@1']['output'];
     };
   };
 };
@@ -269,8 +284,13 @@ export type StorageColumnInputTypes = {
   readonly public: {
     readonly user: {
       readonly auth0Id: CodecTypes['pg/text@1']['input'];
-      readonly email: CodecTypes['pg/text@1']['input'];
       readonly id: CodecTypes['pg/int4@1']['input'];
+    };
+    readonly user_upload_job: {
+      readonly createdAt: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+      readonly userId: CodecTypes['pg/int4@1']['input'];
     };
   };
 };
@@ -303,11 +323,6 @@ type ContractBase = Omit<
                     readonly expression: 'autoincrement()';
                   };
                 };
-                readonly email: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
                 readonly auth0Id: {
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
@@ -315,9 +330,64 @@ type ContractBase = Omit<
                 };
               };
               primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [];
+              uniques: readonly [{ readonly columns: readonly ['auth0Id'] }];
               indexes: readonly [];
               foreignKeys: readonly [];
+            };
+            readonly user_upload_job: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly userId: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                };
+                readonly status: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly createdAt: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'user_upload_job_userId_idx_a489d58a';
+                  readonly prefix: 'user_upload_job_userId_idx';
+                  readonly columns: readonly ['userId'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'user_upload_job';
+                    readonly columns: readonly ['userId'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'user';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+              ];
+            };
+          };
+          readonly valueSet: {
+            readonly JobStatus: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'];
             };
           };
         };
@@ -331,6 +401,10 @@ type ContractBase = Omit<
   readonly targetFamily: 'sql';
   readonly roots: {
     readonly user: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
+    readonly user_upload_job: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'UserUploadJob';
+    };
   };
   readonly domain: {
     readonly namespaces: {
@@ -341,10 +415,6 @@ type ContractBase = Omit<
               readonly id: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly email: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
               readonly auth0Id: {
                 readonly nullable: false;
@@ -357,10 +427,63 @@ type ContractBase = Omit<
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
-                readonly email: { readonly column: 'email' };
                 readonly auth0Id: { readonly column: 'auth0Id' };
               };
             };
+          };
+          readonly UserUploadJob: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly userId: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly status: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly createdAt: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+            };
+            readonly relations: {
+              readonly user: {
+                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['userId'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+            };
+            readonly storage: {
+              readonly table: 'user_upload_job';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly userId: { readonly column: 'userId' };
+                readonly status: { readonly column: 'status' };
+                readonly createdAt: { readonly column: 'createdAt' };
+              };
+            };
+          };
+        };
+        readonly enum: {
+          readonly JobStatus: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'PENDING'; readonly value: 'PENDING' },
+              { readonly name: 'PROCESSING'; readonly value: 'PROCESSING' },
+              { readonly name: 'COMPLETED'; readonly value: 'COMPLETED' },
+              { readonly name: 'FAILED'; readonly value: 'FAILED' },
+            ];
           };
         };
       };
