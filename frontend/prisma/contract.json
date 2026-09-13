@@ -181,7 +181,7 @@
               "endDate": {
                 "nullable": true,
                 "type": {
-                  "codecId": "pg/timestamptz-temporal@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -209,7 +209,7 @@
               "startDate": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/timestamptz-temporal@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -295,7 +295,7 @@
               "endDate": {
                 "nullable": true,
                 "type": {
-                  "codecId": "pg/timestamptz-temporal@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -309,7 +309,7 @@
               "startDate": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/timestamptz-temporal@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -455,7 +455,7 @@
               "endDate": {
                 "nullable": true,
                 "type": {
-                  "codecId": "pg/timestamptz-temporal@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -483,7 +483,7 @@
               "startDate": {
                 "nullable": false,
                 "type": {
-                  "codecId": "pg/timestamptz-temporal@1",
+                  "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
@@ -849,8 +849,8 @@
                   "nullable": true
                 },
                 "endDate": {
-                  "codecId": "pg/timestamptz-temporal@1",
-                  "nativeType": "timestamptz",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": true
                 },
                 "fieldOfStudy": {
@@ -873,8 +873,8 @@
                   "nullable": false
                 },
                 "startDate": {
-                  "codecId": "pg/timestamptz-temporal@1",
-                  "nativeType": "timestamptz",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 },
                 "userId": {
@@ -950,8 +950,8 @@
                   "nullable": true
                 },
                 "endDate": {
-                  "codecId": "pg/timestamptz-temporal@1",
-                  "nativeType": "timestamptz",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": true
                 },
                 "id": {
@@ -964,8 +964,8 @@
                   "nullable": false
                 },
                 "startDate": {
-                  "codecId": "pg/timestamptz-temporal@1",
-                  "nativeType": "timestamptz",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 },
                 "title": {
@@ -1088,8 +1088,8 @@
                   "nullable": true
                 },
                 "endDate": {
-                  "codecId": "pg/timestamptz-temporal@1",
-                  "nativeType": "timestamptz",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": true
                 },
                 "id": {
@@ -1112,8 +1112,8 @@
                   "nullable": false
                 },
                 "startDate": {
-                  "codecId": "pg/timestamptz-temporal@1",
-                  "nativeType": "timestamptz",
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
                   "nullable": false
                 },
                 "userId": {
@@ -1431,7 +1431,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "ca30d5e72089dd3abb4feb98187f0f4a80f24457d07faafccdb92e17818f8657"
+    "storageHash": "da64458fc9375917df82e2194b765a0f0c638882fd3821b0398b4a01e4e028c0"
   },
   "capabilities": {
     "postgres": {

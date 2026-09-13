@@ -19,7 +19,11 @@ import { completeOnboarding, saveManualProfile } from "./actions";
 
 type Step = "choice" | "upload" | "manual";
 
-export default function OnboardingFlow({ userId }: { userId: string }) {
+export default function OnboardingFlow({
+  accessToken,
+}: {
+  accessToken: string;
+}) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("choice");
   const [isPending, startTransition] = useTransition();
@@ -113,7 +117,10 @@ export default function OnboardingFlow({ userId }: { userId: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-              <UploadForm userId={userId} onSuccess={handleUploadSuccess} />
+              <UploadForm
+                accessToken={accessToken}
+                onSuccess={handleUploadSuccess}
+              />
               <Button
                 variant="ghost"
                 onClick={() => setStep("choice")}

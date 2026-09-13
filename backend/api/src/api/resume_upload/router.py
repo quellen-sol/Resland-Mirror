@@ -2,12 +2,14 @@ import io
 import os
 import uuid
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
-from shared.amqp import RESUME_EXCHANGE_NAME, AMQPJob
+from fastapi import APIRouter, HTTPException, UploadFile
+from shared.amqp import RESUME_EXCHANGE_NAME, AMQPClient, AMQPJob
 from shared.pg import get_pg_client
 from shared.s3 import get_s3_client
 
+from ..auth import Auth0UserId
 from ..env_vars import (
+    AMQP_URL,
     AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY,
     PG_URL,
@@ -16,9 +18,9 @@ from ..env_vars import (
 
 router = APIRouter()
 
-# TODO: Need to verify that the user is actually the one sending this request... wow
+
 @router.post("/upload-initial-resume", status_code=200)
-async def upload_initial_resume(file: UploadFile, user_id: str, req: Request):
+async def upload_initial_resume(file: UploadFile, user_id: Auth0UserId):
     if file.filename is None:
         raise HTTPException(status_code=400, detail="No filename provided")
 
@@ -40,7 +42,7 @@ async def upload_initial_resume(file: UploadFile, user_id: str, req: Request):
         )
 
     job_id = uuid.uuid4()
-    obj_key = f"resumes/{user_id}/{file.filename}"
+    obj_key = f"resumes/{user_id}/resume_doc.unknown"
     try:
         s3_client = get_s3_client(
             aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -64,7 +66,9 @@ async def upload_initial_resume(file: UploadFile, user_id: str, req: Request):
             detail="A resume is already being processed for this user",
         )
 
-    amqp_publisher = await req.app.state.amqp_client.get_publisher(RESUME_EXCHANGE_NAME, "#")
+    amqp_client = AMQPClient(AMQP_URL)
+    await amqp_client.connect()
+    amqp_publisher = await amqp_client.get_publisher(RESUME_EXCHANGE_NAME, "#")
     job = AMQPJob(s3_key=obj_key, job_id=str(job_id), user_id=user_id)
     await amqp_publisher.publish(job.as_message())
 
@@ -83,6 +87,7 @@ async def check_job_status(job_id: str):
         'SELECT status FROM user_upload_job WHERE id = %s',
         (job_id,)
     ).fetchone()
+    pg_client.close()
     if not row:
         raise HTTPException(status_code=404, detail="Job not found")
     return {"status": row[0]}

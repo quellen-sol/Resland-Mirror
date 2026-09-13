@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/db";
+import { auth0 } from "@/lib/auth0";
 import OnboardingFlow from "./onboarding-flow";
 
 export default async function OnboardingPage() {
@@ -11,6 +12,7 @@ export default async function OnboardingPage() {
   if (user.hasOnboarded) {
     redirect("/dashboard");
   }
+  const { token: accessToken } = await auth0.getAccessToken();
 
-  return <OnboardingFlow userId={user.auth0Id} />;
+  return <OnboardingFlow accessToken={accessToken} />;
 }

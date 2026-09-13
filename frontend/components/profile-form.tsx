@@ -117,7 +117,8 @@ function DateField({
   return (
     <Field label={label} required={required}>
       <Input
-        type="date"
+        type="text"
+        placeholder="e.g. Jan 2020"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={inputCls}

@@ -1,4 +1,5 @@
 import { getUser } from "@/lib/db";
+import { auth0 } from "@/lib/auth0";
 import { redirect } from "next/navigation";
 import {
   Card,
@@ -15,6 +16,7 @@ export default async function TestUploadPage() {
   if (!user) {
     redirect("/auth/login");
   }
+  const { token: accessToken } = await auth0.getAccessToken();
 
   return (
     <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-zinc-950 p-6 font-sans">
@@ -33,7 +35,7 @@ export default async function TestUploadPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <UploadForm userId={user.auth0Id} />
+          <UploadForm accessToken={accessToken} />
         </CardContent>
       </Card>
     </div>

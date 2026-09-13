@@ -59,8 +59,8 @@ model UserBaseJobExperience {
   user        User      @relation(fields: [userId], references: [auth0Id])
   companyName String
   title       String
-  startDate   DateTime
-  endDate     DateTime?
+  startDate   String
+  endDate     String?
   description String?
   createdAt   DateTime  @default(now())
 
@@ -98,8 +98,8 @@ model UserBaseEducation {
   institution String
   degree String
   fieldOfStudy String
-  startDate DateTime
-  endDate DateTime?
+  startDate String
+  endDate String?
   description String?
   
   @@map("user_base_education")
@@ -114,8 +114,8 @@ model UserBaseProject {
   name String
   link String?
   description String?
-  startDate DateTime
-  endDate DateTime?
+  startDate String
+  endDate String?
   
   @@map("user_base_project")
   @@unique([userId, name, startDate])

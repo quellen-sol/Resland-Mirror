@@ -1,4 +1,3 @@
-import os
 import queue
 import threading
 from typing import Any
@@ -15,6 +14,7 @@ from ..env_vars import (
     PG_URL,
     S3_RESUME_BUCKET,
 )
+from .db_ops import upsert_user_profile
 from .generic import JobHandle, JobRunner
 
 
@@ -126,46 +126,7 @@ class LocalThreadJobRunner(JobRunner):
                 raise ValueError("No profile found in queue")
             profile = profile_queue.get()
             # Upsert all relevant info to pg
-            with pg_client.transaction():
-                pg_client.execute("""
-                    INSERT INTO "user" ("auth0Id", "fullName", "email", "phone", "location")
-                        VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT ("auth0Id") DO UPDATE SET
-                            "fullName" = EXCLUDED."fullName",
-                            "email" = EXCLUDED."email",
-                            "phone" = EXCLUDED."phone",
-                            "location" = EXCLUDED."location"
-                    """, [user_id, profile.basic_info.name, profile.basic_info.email, profile.basic_info.phone, profile.basic_info.location])
-
-                pg_client.execute("""
-                    DELETE FROM user_base_experience WHERE "userId" = %s
-                """, [user_id])
-
-                pg_client.execute("""
-                    INSERT INTO user_base_experience ("userId", "companyName", "title", "startDate", "endDate", "description")
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, [user_id, profile.work_history[0].company_name, profile.work_history[0].title, profile.work_history[0].start_date, profile.work_history[0].end_date, profile.work_history[0].description])
-
-                pg_client.execute("""
-                    DELETE FROM user_base_skill WHERE "userId" = %s
-                """, [user_id])
-                
-                for skill_category in profile.skills:
-                    for skill in skill_category.skills:
-                        pg_client.execute("""
-                            INSERT INTO user_base_skill ("userId", "name", "category")
-                            VALUES (%s, %s, %s)
-                        """, [user_id, skill, skill_category.category])
-
-                    # pg_client.execute("""
-                    #     DELETE FROM user_base_education WHERE "userId" = %s
-                    # """, [user_id])
-
-                    # for education in profile.education:
-                    #     pg_client.execute("""
-                    #         INSERT INTO user_base_education ("userId", "institution", "degree", "fieldOfStudy", "startDate", "endDate")
-                    #         VALUES (%s, %s, %s, %s, %s, %s)
-                    #     """, [user_id, education.institution, education.degree, education.field_of_study, education.start_date, education.end_date])
+            upsert_user_profile(pg_client, user_id, profile)
                 
         except Exception as e:
             print(f"Error in job runner: {e}")

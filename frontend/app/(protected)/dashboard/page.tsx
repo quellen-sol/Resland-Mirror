@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import type { Temporal } from "temporal-polyfill";
 import {
   Briefcase,
   ClipboardCheck,
@@ -26,9 +25,11 @@ import { cn } from "cn";
 import JobStatusPoller from "@/components/job-status-poller";
 import UploadResumeDialog from "./upload-resume-dialog";
 
-function fmtDate(date: Temporal.Instant | null) {
+function fmtDate(date: string | null) {
   if (!date) return "Present";
-  return new Date(date.epochMilliseconds).toLocaleDateString("en-US", {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString("en-US", {
     month: "short",
     year: "numeric",
   });
@@ -48,6 +49,7 @@ function Empty({ text }: { text: string }) {
 export default async function DashboardPage() {
   const [session, user] = await Promise.all([auth0.getSession(), getUser()]);
   if (!user) redirect("/auth/login");
+  const { token: accessToken } = await auth0.getAccessToken();
 
   const {
     uploadJobs,
@@ -83,7 +85,7 @@ export default async function DashboardPage() {
           </div>
           <div className="flex items-center gap-2">
             <UploadResumeDialog
-              userId={user.auth0Id}
+              accessToken={accessToken}
               disabled={activeJobIds.length > 0}
             />
             <Link

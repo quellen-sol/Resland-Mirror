@@ -16,10 +16,10 @@ import { cn } from "cn";
 import UploadForm from "@/components/upload-form";
 
 export default function UploadResumeDialog({
-  userId,
+  accessToken,
   disabled,
 }: {
-  userId: string;
+  accessToken: string;
   disabled?: boolean;
 }) {
   const router = useRouter();
@@ -52,7 +52,7 @@ export default function UploadResumeDialog({
           </DialogDescription>
         </DialogHeader>
         <UploadForm
-          userId={userId}
+          accessToken={accessToken}
           onSuccess={() => {
             setOpen(false);
             router.refresh();

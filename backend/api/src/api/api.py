@@ -1,5 +1,4 @@
-import os
-from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,16 +7,12 @@ from shared.amqp import AMQPClient
 from .env_vars import AMQP_URL
 from .resume_upload.router import router as resume_upload_router
 
-amqp_client = AMQPClient(AMQP_URL)
+setup_amqp_client = AMQPClient(AMQP_URL)
+asyncio.run(setup_amqp_client.setup())
+setup_amqp_client.close()
+setup_amqp_client = None
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await amqp_client.setup()
-    yield
-    await amqp_client.close()
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 origins = [
     "http://localhost:3000",
@@ -31,7 +26,5 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.state.amqp_client = amqp_client
 
 app.include_router(resume_upload_router)

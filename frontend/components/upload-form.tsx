@@ -20,10 +20,10 @@ type UploadResult =
   | { kind: "error"; message: string };
 
 export default function UploadForm({
-  userId,
+  accessToken,
   onSuccess,
 }: {
-  userId: string;
+  accessToken: string;
   onSuccess?: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,8 +48,9 @@ export default function UploadForm({
     formData.append("file", file);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/upload-initial-resume?user_id=${userId}`, {
+      const response = await fetch(`${apiBaseUrl}/upload-initial-resume`, {
         method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}` },
         body: formData,
       });
       const body = await response.text();

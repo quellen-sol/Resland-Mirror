@@ -1,14 +1,9 @@
 "use server";
 
-import { Temporal } from "temporal-polyfill";
 import { redirect } from "next/navigation";
 import { getUser } from "@/lib/db";
 import { db } from "@/prisma/db";
 import type { SaveProfileInput } from "../onboarding/actions";
-
-function toInstant(date: string | null): Temporal.Instant | null {
-  return date ? Temporal.Instant.from(`${date}T00:00:00Z`) : null;
-}
 
 function orNull(value: string): string | null {
   const trimmed = value.trim();
@@ -66,8 +61,8 @@ export async function saveProfileEdit(input: SaveProfileInput) {
         userId: user.auth0Id,
         companyName: exp.companyName,
         title: exp.title,
-        startDate: toInstant(exp.startDate)!,
-        endDate: toInstant(exp.endDate),
+        startDate: exp.startDate,
+        endDate: exp.endDate,
         description: exp.description,
       });
       for (const bullet of exp.bullets) {
@@ -84,8 +79,8 @@ export async function saveProfileEdit(input: SaveProfileInput) {
         institution: edu.institution,
         degree: edu.degree,
         fieldOfStudy: edu.fieldOfStudy,
-        startDate: toInstant(edu.startDate)!,
-        endDate: toInstant(edu.endDate),
+        startDate: edu.startDate,
+        endDate: edu.endDate,
         description: edu.description,
       });
     }
@@ -96,8 +91,8 @@ export async function saveProfileEdit(input: SaveProfileInput) {
         name: proj.name,
         link: proj.link,
         description: proj.description,
-        startDate: toInstant(proj.startDate)!,
-        endDate: toInstant(proj.endDate),
+        startDate: proj.startDate,
+        endDate: proj.endDate,
       });
     }
   });

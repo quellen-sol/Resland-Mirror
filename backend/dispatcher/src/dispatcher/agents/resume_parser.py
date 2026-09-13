@@ -49,11 +49,29 @@ class UserSkillByCategory:
     skills: list[str]
 
 @dataclass
+class UserEducationEntry:
+    institution: str
+    degree: str
+    field_of_study: str
+    start_date: str
+    end_date: str
+    description: str
+
+@dataclass
+class UserProjectEntry:
+    name: str
+    link: str
+    description: str
+    start_date: str
+    end_date: str
+
+@dataclass
 class UserProfile:
     basic_info: UserProfileBasicInfo
     experience: list[UserProfileExperienceEntry]
     skills: list[UserSkillByCategory]
-    
+    education: list[UserEducationEntry]
+    projects: list[UserProjectEntry]
 
 class BuildAgentOutput:
     agent: Any

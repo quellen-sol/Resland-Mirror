@@ -1,11 +1,10 @@
 import { redirect } from "next/navigation";
-import type { Temporal } from "temporal-polyfill";
 import { getUser, getUserProfileData } from "@/lib/db";
 import type { ProfileFormValues } from "@/components/profile-form";
 import EditProfileForm from "./edit-profile-form";
 
-function toDateString(date: Temporal.Instant | null): string {
-  return date ? date.toString().slice(0, 10) : "";
+function toDateString(date: string | null): string {
+  return date ?? "";
 }
 
 export default async function EditProfilePage() {
