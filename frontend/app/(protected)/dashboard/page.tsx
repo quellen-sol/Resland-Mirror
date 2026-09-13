@@ -7,16 +7,13 @@ import {
   GraduationCap,
   Link2,
   PenLine,
-  Upload,
 } from "lucide-react";
 import { auth0 } from "@/lib/auth0";
 import { getUser, getUserProfileData } from "@/lib/db";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -35,15 +32,14 @@ function fmtDate(date: string | null) {
   });
 }
 
-const statusStyles: Record<string, string> = {
-  PENDING: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-  PROCESSING: "border-purple-500/30 bg-purple-500/10 text-purple-300",
-  COMPLETED: "border-green-500/30 bg-green-500/10 text-green-300",
-  FAILED: "border-red-500/30 bg-red-500/10 text-red-300",
-};
-
 function Empty({ text }: { text: string }) {
   return <p className="text-sm text-zinc-500">{text}</p>;
+}
+
+// Agent/user-entered links may lack a scheme — without one, <a href> resolves
+// relative to the current page.
+function normalizeHref(url: string) {
+  return /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
 }
 
 export default async function DashboardPage() {
@@ -69,10 +65,11 @@ export default async function DashboardPage() {
     bullets.filter((b) => b.userJobExperienceId === expId);
 
   return (
-    <div className="relative flex flex-1 justify-center overflow-hidden bg-zinc-950 px-6 py-10 font-sans">
+    <div className="relative flex flex-1 overflow-hidden bg-zinc-950 font-sans">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
 
-      <main className="relative flex w-full max-w-3xl flex-col gap-6">
+      {/* A future <aside> sidemenu can slot in here as a flex sibling */}
+      <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
         <JobStatusPoller jobIds={activeJobIds} />
         <header className="flex items-center justify-between">
           <div>
@@ -108,71 +105,47 @@ export default async function DashboardPage() {
 
         {/* Contact */}
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-          <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-6">
-            {user.fullName && (
-              <span className="font-medium text-zinc-100">{user.fullName}</span>
-            )}
-            {user.email && (
-              <span className="text-sm text-zinc-400">{user.email}</span>
-            )}
-            {user.phone && (
-              <span className="text-sm text-zinc-400">{user.phone}</span>
-            )}
-            {user.location && (
-              <span className="text-sm text-zinc-400">{user.location}</span>
-            )}
-            {socialLinks.map((link) => (
-              <a
-                key={link.id}
-                href={link.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-purple-300 underline-offset-4 hover:underline"
-              >
-                <Link2 className="size-3.5" />
-                {link.type.toLowerCase()}
-              </a>
-            ))}
-            {!user.fullName &&
-              !user.email &&
-              !user.phone &&
-              !user.location &&
-              socialLinks.length === 0 && (
-                <Empty text="No contact info yet — add it via Edit profile." />
-              )}
-          </CardContent>
-        </Card>
-
-        {/* Resume uploads */}
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Upload className="size-4 text-purple-400" /> Resume uploads
-            </CardTitle>
-            <CardDescription className="text-zinc-400">
-              Files you&apos;ve uploaded for parsing.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {uploadJobs.length === 0 && (
-              <Empty text="No uploads yet." />
-            )}
-            {uploadJobs.map((job) => (
-              <div
-                key={job.id}
-                className="flex items-center justify-between rounded-lg border border-zinc-800 bg-zinc-950/40 px-3 py-2"
-              >
-                <span className="truncate font-mono text-xs text-zinc-400">
-                  {job.id}
-                </span>
-                <Badge
-                  variant="outline"
-                  className={statusStyles[job.status] ?? ""}
-                >
-                  {job.status}
-                </Badge>
+          <CardContent className="flex flex-col gap-4 pt-6">
+            <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
+              {(
+                [
+                  ["Name", user.fullName],
+                  ["Email", user.email],
+                  ["Phone", user.phone],
+                  ["Location", user.location],
+                ] as const
+              ).map(([label, value]) => (
+                <div key={label}>
+                  <p className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
+                    {label}
+                  </p>
+                  <p
+                    className={cn(
+                      "text-sm",
+                      value ? "text-zinc-100" : "text-zinc-600",
+                    )}
+                  >
+                    {value ?? "—"}
+                  </p>
+                </div>
+              ))}
+            </div>
+            {socialLinks.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                {socialLinks.map((link) => (
+                  <a
+                    key={link.id}
+                    href={normalizeHref(link.link)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-sm text-purple-300 underline-offset-4 hover:underline"
+                  >
+                    <Link2 className="size-3.5" />
+                    {link.type.toLowerCase()}
+                  </a>
+                ))}
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
 
@@ -287,7 +260,7 @@ export default async function DashboardPage() {
                       <>
                         {" "}
                         <a
-                          href={proj.link}
+                          href={normalizeHref(proj.link)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-purple-300 underline-offset-4 hover:underline"

@@ -32,17 +32,17 @@ export async function saveProfileEdit(input: SaveProfileInput) {
     if (expIds.length > 0) {
       await tx.orm.public.UserBaseJobExperienceBullet.where((b) =>
         b.userJobExperienceId.in(expIds),
-      ).delete();
+      ).deleteAll();
     }
     await tx.orm.public.UserBaseJobExperience.where((e) =>
       e.userId.eq(user.auth0Id),
-    ).delete();
-    await tx.orm.public.UserBaseSkill.where((s) => s.userId.eq(user.auth0Id)).delete();
+    ).deleteAll();
+    await tx.orm.public.UserBaseSkill.where((s) => s.userId.eq(user.auth0Id)).deleteAll();
     await tx.orm.public.UserBaseEducation.where((e) => e.userId.eq(user.auth0Id))
-      .delete();
-    await tx.orm.public.UserBaseProject.where((p) => p.userId.eq(user.auth0Id)).delete();
+      .deleteAll();
+    await tx.orm.public.UserBaseProject.where((p) => p.userId.eq(user.auth0Id)).deleteAll();
     await tx.orm.public.UserSocialLink.where((l) => l.userId.eq(user.auth0Id))
-      .delete();
+      .deleteAll();
 
     for (const link of input.socialLinks) {
       await tx.orm.public.UserSocialLink.create({

@@ -2,6 +2,7 @@ import io
 import os
 import uuid
 
+import puremagic
 from fastapi import APIRouter, HTTPException, UploadFile
 from shared.amqp import RESUME_EXCHANGE_NAME, AMQPClient, AMQPJob
 from shared.pg import get_pg_client
@@ -34,6 +35,22 @@ async def upload_initial_resume(file: UploadFile, user_id: Auth0UserId):
 
     # This is safe to read. Read all bytes
     file_content = await file.read()
+
+    try:
+        file_type = puremagic.from_string(file_content)
+        if not file_type:
+            raise HTTPException(
+                status_code=400, detail="Failed to determine file type"
+            )
+        
+        if file_type not in [".docx"]:
+            raise HTTPException(
+                status_code=400, detail="Unsupported file type"
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, detail=f"Failed to determine file type: {e}"
+        ) from e
 
     bucket = S3_RESUME_BUCKET
     if not bucket:

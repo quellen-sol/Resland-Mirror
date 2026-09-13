@@ -1,9 +1,9 @@
 from psycopg import Connection
 
-from ..agents.resume_parser import UserProfile
+from ..agents.docx_parser import UserDocxProfile
 
 
-def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserProfile):
+def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxProfile):
     with pg_client.transaction():
         pg_client.execute("""
             INSERT INTO "user" ("auth0Id", "fullName", "email", "phone", "location")
@@ -20,10 +20,16 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserProfil
         """, [user_id])
 
         for experience in profile.experience:
-            pg_client.execute("""
+            experience_id = pg_client.execute("""
                 INSERT INTO user_base_experience ("userId", "companyName", "title", "startDate", "endDate")
-                VALUES (%s, %s, %s, %s, %s)
-            """, [user_id, experience.company, experience.position, experience.start_date, experience.end_date])
+                VALUES (%s, %s, %s, %s, %s) RETURNING id
+            """, [user_id, experience.company, experience.position, experience.start_date, experience.end_date]).fetchone()[0]
+
+            for bullet in experience.bullets:
+                pg_client.execute("""
+                    INSERT INTO user_base_experience_bullet ("userJobExperienceId", "bullet")
+                    VALUES (%s, %s)
+                """, [experience_id, bullet.text])
 
         pg_client.execute("""
             DELETE FROM user_base_skill WHERE "userId" = %s

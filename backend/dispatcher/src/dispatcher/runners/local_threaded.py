@@ -6,7 +6,7 @@ import puremagic
 from shared.pg import get_pg_client
 from shared.s3 import get_s3_client
 
-from ..agents.resume_parser import build_agent
+from ..agents.docx_parser import agent_parse_docx
 from ..doc_parsers.docx import parse_docx
 from ..env_vars import (
     AWS_ACCESS_KEY_ID,
@@ -101,25 +101,15 @@ class LocalThreadJobRunner(JobRunner):
             body_data = body.read()
             file_type = puremagic.from_string(body_data)
             print(f"File type: {file_type}")
-            parsed_text: str | None = None
+            profile_queue = None
+
+            # Parse document based on file type
             match file_type:
                 case '.docx':
                     parsed_text = parse_docx(body_data)
+                    profile_queue = agent_parse_docx(parsed_text)
                 case _:
                     raise TypeError("Unsupported file type")
-
-            # Give text to agent to parse
-            agent_result = build_agent()
-            agent = agent_result.agent
-            profile_queue = agent_result.profile_queue
-
-            print("Invoking agent...")
-            agent.invoke({"messages": [{"role": "user", "content": f"""Parse this document and extract the candidate's information.
-            Document:
-            ```
-            {parsed_text}
-            ```"""}]})
-            print("Agent invoked successfully")
 
             # Agent will have sent results here, then we write to pg
             if profile_queue.empty():
