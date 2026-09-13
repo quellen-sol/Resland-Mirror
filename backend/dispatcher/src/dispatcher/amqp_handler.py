@@ -1,5 +1,4 @@
 import json
-import os
 import threading
 import time
 
@@ -7,11 +6,12 @@ from rabbitmq_amqp_python_client import AMQPMessagingHandler, Event
 from shared.pg import get_pg_client
 
 from .env_vars import PG_URL
-from .runners.local_threaded import LocalThreadedJobHandle, LocalThreadJobRunner
+from .runners.generic import JobHandle
+from .runners.local_threaded import LocalThreadJobRunner
 
 
 class DispatcherHandler(AMQPMessagingHandler):
-    running_jobs: dict[str, tuple[LocalThreadedJobHandle, Event]]
+    running_jobs: dict[str, tuple[JobHandle, Event]]
     cleanup_thread: threading.Thread
 
     def __init__(self):

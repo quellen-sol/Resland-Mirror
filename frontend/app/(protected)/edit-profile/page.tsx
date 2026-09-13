@@ -12,10 +12,10 @@ export default async function EditProfilePage() {
   if (!user) redirect("/auth/login");
 
   const { skills, experiences, bullets, education, projects, socialLinks } =
-    await getUserProfileData(user.auth0Id);
+    await getUserProfileData(user.auth0_id);
 
   const initial: ProfileFormValues = {
-    fullName: user.fullName ?? "",
+    fullName: user.full_name ?? "",
     email: user.email ?? "",
     phone: user.phone ?? "",
     location: user.location ?? "",
@@ -23,29 +23,29 @@ export default async function EditProfilePage() {
     skills: skills.map((s) => s.name),
     experiences: experiences.map((e) => ({
       id: e.id,
-      companyName: e.companyName,
+      companyName: e.company_name,
       title: e.title,
-      startDate: toDateString(e.startDate),
-      endDate: toDateString(e.endDate),
+      startDate: toDateString(e.start_date),
+      endDate: toDateString(e.end_date),
       description: e.description ?? "",
       bullets: bullets
-        .filter((b) => b.userJobExperienceId === e.id)
+        .filter((b) => b.user_experience_id === e.id)
         .map((b) => ({ id: b.id, text: b.bullet })),
     })),
     education: education.map((e) => ({
       institution: e.institution,
       degree: e.degree,
-      fieldOfStudy: e.fieldOfStudy,
-      startDate: toDateString(e.startDate),
-      endDate: toDateString(e.endDate),
+      fieldOfStudy: e.field_of_study,
+      startDate: toDateString(e.start_date),
+      endDate: toDateString(e.end_date),
       description: e.description ?? "",
     })),
     projects: projects.map((p) => ({
       name: p.name,
       link: p.link ?? "",
       description: p.description ?? "",
-      startDate: toDateString(p.startDate),
-      endDate: toDateString(p.endDate),
+      startDate: toDateString(p.start_date),
+      endDate: toDateString(p.end_date),
     })),
   };
 

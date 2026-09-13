@@ -27,30 +27,32 @@ BULLET_SUGG_DLX_NAME = "bullet-sugg-dlx"
 
 
 @dataclass
-class AMQPJob:
+class BaseAmqpJob:
+    def to_bytes(self) -> bytes:
+        as_json = json.dumps(self.__dict__)
+        return as_json.encode()
+
+    def to_message(self) -> Message:
+        return Message(body=self.to_bytes())
+
+
+@dataclass
+class AmqpResumeJob(BaseAmqpJob):
     s3_key: str
     job_id: str
     user_id: str
 
-    def to_bytes(self) -> bytes:
-        as_json = json.dumps(
-            {
-                "s3_key": self.s3_key,
-                "job_id": self.job_id,
-                "user_id": self.user_id,
-            }
-        )
-        return as_json.encode()
 
-    def as_message(self) -> Message:
-        return Message(body=self.to_bytes())
+@dataclass
+class AmqpSuggestionJob(BaseAmqpJob):
+    session_id: str
 
 
-class AMQPClientException(Exception):
+class AmqpClientException(Exception):
     pass
 
 
-class AMQPClient:
+class AmqpClient:
     async_env: AsyncEnvironment
     amqp_connection: AsyncConnection | None = None
 
@@ -70,7 +72,7 @@ class AMQPClient:
             self.amqp_connection = await self.async_env.connection()
             await self.amqp_connection.dial()
         except Exception as e:
-            raise AMQPClientException("Failed to connect to AMQP") from e
+            raise AmqpClientException("Failed to connect to AMQP") from e
 
     async def close(self):
         if self.amqp_connection:
@@ -79,7 +81,7 @@ class AMQPClient:
 
     async def get_publisher(self, exchange_name: str, routing_key: str):
         if not self.amqp_connection:
-            raise AMQPClientException("AMQPClient not connected")
+            raise AmqpClientException("AMQPClient not connected")
         exchange_addr = AddressHelper.exchange_address(exchange_name, routing_key)
         # Reuse senders — a second link with the same address gets the same
         # link name, and the broker kills the connection (amqp:invalid-field).
@@ -98,7 +100,7 @@ class AMQPClient:
 
     async def get_consumer(self, queue_name: str, handler: AMQPMessagingHandler):
         if not self.amqp_connection:
-            raise AMQPClientException("AMQPClient not connected")
+            raise AmqpClientException("AMQPClient not connected")
         queue_addr = AddressHelper.queue_address(queue_name)
         return await self.amqp_connection.consumer(
             destination=queue_addr, message_handler=handler
@@ -106,12 +108,12 @@ class AMQPClient:
 
     async def get_manager(self):
         if not self.amqp_connection:
-            raise AMQPClientException("AMQPClient not connected")
+            raise AmqpClientException("AMQPClient not connected")
         return await self.amqp_connection.management()
 
     async def declare_topology(self):
         if not self.amqp_connection:
-            raise AMQPClientException("AMQPClient not connected")
+            raise AmqpClientException("AMQPClient not connected")
         manager = await self.get_manager()
 
         # DLQs/DLXs

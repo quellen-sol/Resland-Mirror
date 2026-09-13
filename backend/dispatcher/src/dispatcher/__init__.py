@@ -1,14 +1,14 @@
 import asyncio
 import signal
 
-from shared.amqp import RESUME_QUEUE_NAME, AMQPClient
+from shared.amqp import RESUME_QUEUE_NAME, AmqpClient
 
 from .amqp_handler import DispatcherHandler
 from .env_vars import AMQP_URL
 
 
 async def async_main() -> None:
-    amqp_client = AMQPClient(AMQP_URL)
+    amqp_client = AmqpClient(AMQP_URL)
     # Declarations are idempotent — whichever service starts first creates the
     # topology, so consumers never race a missing queue.
     await amqp_client.setup()

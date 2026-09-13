@@ -13,11 +13,11 @@
       "namespace": "public"
     },
     "user_base_experience": {
-      "model": "UserBaseJobExperience",
+      "model": "UserBaseExperience",
       "namespace": "public"
     },
     "user_base_experience_bullet": {
-      "model": "UserBaseJobExperienceBullet",
+      "model": "UserBaseExperienceBullet",
       "namespace": "public"
     },
     "user_base_project": {
@@ -30,6 +30,10 @@
     },
     "user_social_link": {
       "model": "UserSocialLink",
+      "namespace": "public"
+    },
+    "user_suggestion": {
+      "model": "UserSuggestion",
       "namespace": "public"
     },
     "user_upload_job": {
@@ -78,19 +82,36 @@
                 "value": "WEBSITE"
               }
             ]
+          },
+          "SuggestionStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "PROCESSING",
+                "value": "PROCESSING"
+              },
+              {
+                "name": "WAITING_FOR_INPUT",
+                "value": "WAITING_FOR_INPUT"
+              },
+              {
+                "name": "COMPLETED",
+                "value": "COMPLETED"
+              }
+            ]
           }
         },
         "models": {
           "User": {
             "fields": {
-              "auth0Id": {
+              "auth0_id": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
-              "createdAt": {
+              "created_at": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/timestamptz-temporal@1",
@@ -104,14 +125,14 @@
                   "kind": "scalar"
                 }
               },
-              "fullName": {
+              "full_name": {
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
-              "hasOnboarded": {
+              "has_onboarded": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/bool@1",
@@ -136,20 +157,20 @@
             "relations": {},
             "storage": {
               "fields": {
-                "auth0Id": {
-                  "column": "auth0Id"
+                "auth0_id": {
+                  "column": "auth0_id"
                 },
-                "createdAt": {
-                  "column": "createdAt"
+                "created_at": {
+                  "column": "created_at"
                 },
                 "email": {
                   "column": "email"
                 },
-                "fullName": {
-                  "column": "fullName"
+                "full_name": {
+                  "column": "full_name"
                 },
-                "hasOnboarded": {
-                  "column": "hasOnboarded"
+                "has_onboarded": {
+                  "column": "has_onboarded"
                 },
                 "location": {
                   "column": "location"
@@ -178,14 +199,14 @@
                   "kind": "scalar"
                 }
               },
-              "endDate": {
+              "end_date": {
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
-              "fieldOfStudy": {
+              "field_of_study": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -206,14 +227,14 @@
                   "kind": "scalar"
                 }
               },
-              "startDate": {
+              "start_date": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
-              "userId": {
+              "user_id": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -226,10 +247,10 @@
                 "cardinality": "N:1",
                 "on": {
                   "localFields": [
-                    "userId"
+                    "user_id"
                   ],
                   "targetFields": [
-                    "auth0Id"
+                    "auth0_id"
                   ]
                 },
                 "to": {
@@ -246,11 +267,11 @@
                 "description": {
                   "column": "description"
                 },
-                "endDate": {
-                  "column": "endDate"
+                "end_date": {
+                  "column": "end_date"
                 },
-                "fieldOfStudy": {
-                  "column": "fieldOfStudy"
+                "field_of_study": {
+                  "column": "field_of_study"
                 },
                 "id": {
                   "column": "id"
@@ -258,27 +279,27 @@
                 "institution": {
                   "column": "institution"
                 },
-                "startDate": {
-                  "column": "startDate"
+                "start_date": {
+                  "column": "start_date"
                 },
-                "userId": {
-                  "column": "userId"
+                "user_id": {
+                  "column": "user_id"
                 }
               },
               "namespaceId": "public",
               "table": "user_base_education"
             }
           },
-          "UserBaseJobExperience": {
+          "UserBaseExperience": {
             "fields": {
-              "companyName": {
+              "company_name": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
-              "createdAt": {
+              "created_at": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/timestamptz-temporal@1",
@@ -292,7 +313,7 @@
                   "kind": "scalar"
                 }
               },
-              "endDate": {
+              "end_date": {
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
@@ -306,7 +327,7 @@
                   "kind": "scalar"
                 }
               },
-              "startDate": {
+              "start_date": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -320,7 +341,7 @@
                   "kind": "scalar"
                 }
               },
-              "userId": {
+              "user_id": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -333,10 +354,10 @@
                 "cardinality": "N:1",
                 "on": {
                   "localFields": [
-                    "userId"
+                    "user_id"
                   ],
                   "targetFields": [
-                    "auth0Id"
+                    "auth0_id"
                   ]
                 },
                 "to": {
@@ -347,36 +368,36 @@
             },
             "storage": {
               "fields": {
-                "companyName": {
-                  "column": "companyName"
+                "company_name": {
+                  "column": "company_name"
                 },
-                "createdAt": {
-                  "column": "createdAt"
+                "created_at": {
+                  "column": "created_at"
                 },
                 "description": {
                   "column": "description"
                 },
-                "endDate": {
-                  "column": "endDate"
+                "end_date": {
+                  "column": "end_date"
                 },
                 "id": {
                   "column": "id"
                 },
-                "startDate": {
-                  "column": "startDate"
+                "start_date": {
+                  "column": "start_date"
                 },
                 "title": {
                   "column": "title"
                 },
-                "userId": {
-                  "column": "userId"
+                "user_id": {
+                  "column": "user_id"
                 }
               },
               "namespaceId": "public",
               "table": "user_base_experience"
             }
           },
-          "UserBaseJobExperienceBullet": {
+          "UserBaseExperienceBullet": {
             "fields": {
               "bullet": {
                 "nullable": false,
@@ -385,7 +406,7 @@
                   "kind": "scalar"
                 }
               },
-              "createdAt": {
+              "created_at": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/timestamptz-temporal@1",
@@ -399,7 +420,7 @@
                   "kind": "scalar"
                 }
               },
-              "userJobExperienceId": {
+              "user_experience_id": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/int4@1",
@@ -408,18 +429,18 @@
               }
             },
             "relations": {
-              "userJobExperience": {
+              "user_experience": {
                 "cardinality": "N:1",
                 "on": {
                   "localFields": [
-                    "userJobExperienceId"
+                    "user_experience_id"
                   ],
                   "targetFields": [
                     "id"
                   ]
                 },
                 "to": {
-                  "model": "UserBaseJobExperience",
+                  "model": "UserBaseExperience",
                   "namespace": "public"
                 }
               }
@@ -429,14 +450,14 @@
                 "bullet": {
                   "column": "bullet"
                 },
-                "createdAt": {
-                  "column": "createdAt"
+                "created_at": {
+                  "column": "created_at"
                 },
                 "id": {
                   "column": "id"
                 },
-                "userJobExperienceId": {
-                  "column": "userJobExperienceId"
+                "user_experience_id": {
+                  "column": "user_experience_id"
                 }
               },
               "namespaceId": "public",
@@ -452,7 +473,7 @@
                   "kind": "scalar"
                 }
               },
-              "endDate": {
+              "end_date": {
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
@@ -480,14 +501,14 @@
                   "kind": "scalar"
                 }
               },
-              "startDate": {
+              "start_date": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
               },
-              "userId": {
+              "user_id": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -500,10 +521,10 @@
                 "cardinality": "N:1",
                 "on": {
                   "localFields": [
-                    "userId"
+                    "user_id"
                   ],
                   "targetFields": [
-                    "auth0Id"
+                    "auth0_id"
                   ]
                 },
                 "to": {
@@ -517,8 +538,8 @@
                 "description": {
                   "column": "description"
                 },
-                "endDate": {
-                  "column": "endDate"
+                "end_date": {
+                  "column": "end_date"
                 },
                 "id": {
                   "column": "id"
@@ -529,11 +550,11 @@
                 "name": {
                   "column": "name"
                 },
-                "startDate": {
-                  "column": "startDate"
+                "start_date": {
+                  "column": "start_date"
                 },
-                "userId": {
-                  "column": "userId"
+                "user_id": {
+                  "column": "user_id"
                 }
               },
               "namespaceId": "public",
@@ -563,7 +584,7 @@
                   "kind": "scalar"
                 }
               },
-              "userId": {
+              "user_id": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -576,10 +597,10 @@
                 "cardinality": "N:1",
                 "on": {
                   "localFields": [
-                    "userId"
+                    "user_id"
                   ],
                   "targetFields": [
-                    "auth0Id"
+                    "auth0_id"
                   ]
                 },
                 "to": {
@@ -599,8 +620,8 @@
                 "name": {
                   "column": "name"
                 },
-                "userId": {
-                  "column": "userId"
+                "user_id": {
+                  "column": "user_id"
                 }
               },
               "namespaceId": "public",
@@ -636,7 +657,7 @@
                   "plane": "domain"
                 }
               },
-              "userId": {
+              "user_id": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -649,10 +670,10 @@
                 "cardinality": "N:1",
                 "on": {
                   "localFields": [
-                    "userId"
+                    "user_id"
                   ],
                   "targetFields": [
-                    "auth0Id"
+                    "auth0_id"
                   ]
                 },
                 "to": {
@@ -672,17 +693,160 @@
                 "type": {
                   "column": "type"
                 },
-                "userId": {
-                  "column": "userId"
+                "user_id": {
+                  "column": "user_id"
                 }
               },
               "namespaceId": "public",
               "table": "user_social_link"
             }
           },
+          "UserSuggestion": {
+            "fields": {
+              "bullet_id": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "created_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "experience_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "pending_question": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "result": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "SuggestionStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "user_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "bullet": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "bullet_id"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "UserBaseExperienceBullet",
+                  "namespace": "public"
+                }
+              },
+              "experience": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "experience_id"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "UserBaseExperience",
+                  "namespace": "public"
+                }
+              },
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "user_id"
+                  ],
+                  "targetFields": [
+                    "auth0_id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "bullet_id": {
+                  "column": "bullet_id"
+                },
+                "created_at": {
+                  "column": "created_at"
+                },
+                "experience_id": {
+                  "column": "experience_id"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "pending_question": {
+                  "column": "pending_question"
+                },
+                "result": {
+                  "column": "result"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "user_id": {
+                  "column": "user_id"
+                }
+              },
+              "namespaceId": "public",
+              "table": "user_suggestion"
+            }
+          },
           "UserUploadJob": {
             "fields": {
-              "createdAt": {
+              "created_at": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/timestamptz-temporal@1",
@@ -696,7 +860,7 @@
                   "kind": "scalar"
                 }
               },
-              "s3Key": {
+              "s3_key": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -716,7 +880,7 @@
                   "plane": "domain"
                 }
               },
-              "userId": {
+              "user_id": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
@@ -729,10 +893,10 @@
                 "cardinality": "N:1",
                 "on": {
                   "localFields": [
-                    "userId"
+                    "user_id"
                   ],
                   "targetFields": [
-                    "auth0Id"
+                    "auth0_id"
                   ]
                 },
                 "to": {
@@ -743,20 +907,20 @@
             },
             "storage": {
               "fields": {
-                "createdAt": {
-                  "column": "createdAt"
+                "created_at": {
+                  "column": "created_at"
                 },
                 "id": {
                   "column": "id"
                 },
-                "s3Key": {
-                  "column": "s3Key"
+                "s3_key": {
+                  "column": "s3_key"
                 },
                 "status": {
                   "column": "status"
                 },
-                "userId": {
-                  "column": "userId"
+                "user_id": {
+                  "column": "user_id"
                 }
               },
               "namespaceId": "public",
@@ -774,12 +938,12 @@
           "table": {
             "user": {
               "columns": {
-                "auth0Id": {
+                "auth0_id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
-                "createdAt": {
+                "created_at": {
                   "codecId": "pg/timestamptz-temporal@1",
                   "default": {
                     "expression": "now()",
@@ -793,12 +957,12 @@
                   "nativeType": "text",
                   "nullable": true
                 },
-                "fullName": {
+                "full_name": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
                 },
-                "hasOnboarded": {
+                "has_onboarded": {
                   "codecId": "pg/bool@1",
                   "default": {
                     "kind": "literal",
@@ -822,16 +986,16 @@
               "indexes": [
                 {
                   "columns": [
-                    "auth0Id"
+                    "auth0_id"
                   ],
-                  "name": "user_auth0Id_idx_a52724c9",
-                  "prefix": "user_auth0Id_idx",
+                  "name": "user_auth0_id_idx_0e027ea8",
+                  "prefix": "user_auth0_id_idx",
                   "unique": false
                 }
               ],
               "primaryKey": {
                 "columns": [
-                  "auth0Id"
+                  "auth0_id"
                 ]
               },
               "uniques": []
@@ -848,12 +1012,12 @@
                   "nativeType": "text",
                   "nullable": true
                 },
-                "endDate": {
+                "end_date": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
                 },
-                "fieldOfStudy": {
+                "field_of_study": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -872,12 +1036,12 @@
                   "nativeType": "text",
                   "nullable": false
                 },
-                "startDate": {
+                "start_date": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
-                "userId": {
+                "user_id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -887,14 +1051,14 @@
                 {
                   "source": {
                     "columns": [
-                      "userId"
+                      "user_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user_base_education"
                   },
                   "target": {
                     "columns": [
-                      "auth0Id"
+                      "auth0_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -904,10 +1068,10 @@
               "indexes": [
                 {
                   "columns": [
-                    "userId"
+                    "user_id"
                   ],
-                  "name": "user_base_education_userId_idx_a489d58a",
-                  "prefix": "user_base_education_userId_idx",
+                  "name": "user_base_education_user_id_idx_6c952402",
+                  "prefix": "user_base_education_user_id_idx",
                   "unique": false
                 }
               ],
@@ -919,23 +1083,23 @@
               "uniques": [
                 {
                   "columns": [
-                    "userId",
+                    "user_id",
                     "institution",
                     "degree",
-                    "fieldOfStudy",
-                    "startDate"
+                    "field_of_study",
+                    "start_date"
                   ]
                 }
               ]
             },
             "user_base_experience": {
               "columns": {
-                "companyName": {
+                "company_name": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
-                "createdAt": {
+                "created_at": {
                   "codecId": "pg/timestamptz-temporal@1",
                   "default": {
                     "expression": "now()",
@@ -949,7 +1113,7 @@
                   "nativeType": "text",
                   "nullable": true
                 },
-                "endDate": {
+                "end_date": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
@@ -963,7 +1127,7 @@
                   "nativeType": "int4",
                   "nullable": false
                 },
-                "startDate": {
+                "start_date": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -973,7 +1137,7 @@
                   "nativeType": "text",
                   "nullable": false
                 },
-                "userId": {
+                "user_id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -983,14 +1147,14 @@
                 {
                   "source": {
                     "columns": [
-                      "userId"
+                      "user_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user_base_experience"
                   },
                   "target": {
                     "columns": [
-                      "auth0Id"
+                      "auth0_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -1000,10 +1164,10 @@
               "indexes": [
                 {
                   "columns": [
-                    "userId"
+                    "user_id"
                   ],
-                  "name": "user_base_experience_userId_idx_a489d58a",
-                  "prefix": "user_base_experience_userId_idx",
+                  "name": "user_base_experience_user_id_idx_6c952402",
+                  "prefix": "user_base_experience_user_id_idx",
                   "unique": false
                 }
               ],
@@ -1021,7 +1185,7 @@
                   "nativeType": "text",
                   "nullable": false
                 },
-                "createdAt": {
+                "created_at": {
                   "codecId": "pg/timestamptz-temporal@1",
                   "default": {
                     "expression": "now()",
@@ -1039,7 +1203,7 @@
                   "nativeType": "int4",
                   "nullable": false
                 },
-                "userJobExperienceId": {
+                "user_experience_id": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
                   "nullable": false
@@ -1049,7 +1213,7 @@
                 {
                   "source": {
                     "columns": [
-                      "userJobExperienceId"
+                      "user_experience_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user_base_experience_bullet"
@@ -1066,10 +1230,10 @@
               "indexes": [
                 {
                   "columns": [
-                    "userJobExperienceId"
+                    "user_experience_id"
                   ],
-                  "name": "user_base_experience_bullet_userJobExperienceId_idx_a33695c5",
-                  "prefix": "user_base_experience_bullet_userJobExperienceId_idx",
+                  "name": "user_base_experience_bullet_user_experience_id_idx_b5f82fb4",
+                  "prefix": "user_base_experience_bullet_user_experience_id_idx",
                   "unique": false
                 }
               ],
@@ -1087,7 +1251,7 @@
                   "nativeType": "text",
                   "nullable": true
                 },
-                "endDate": {
+                "end_date": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
@@ -1111,12 +1275,12 @@
                   "nativeType": "text",
                   "nullable": false
                 },
-                "startDate": {
+                "start_date": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
                 },
-                "userId": {
+                "user_id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -1126,14 +1290,14 @@
                 {
                   "source": {
                     "columns": [
-                      "userId"
+                      "user_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user_base_project"
                   },
                   "target": {
                     "columns": [
-                      "auth0Id"
+                      "auth0_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -1143,10 +1307,10 @@
               "indexes": [
                 {
                   "columns": [
-                    "userId"
+                    "user_id"
                   ],
-                  "name": "user_base_project_userId_idx_a489d58a",
-                  "prefix": "user_base_project_userId_idx",
+                  "name": "user_base_project_user_id_idx_6c952402",
+                  "prefix": "user_base_project_user_id_idx",
                   "unique": false
                 }
               ],
@@ -1158,14 +1322,14 @@
               "uniques": [
                 {
                   "columns": [
-                    "userId",
+                    "user_id",
                     "name",
-                    "startDate"
+                    "start_date"
                   ]
                 },
                 {
                   "columns": [
-                    "userId",
+                    "user_id",
                     "link"
                   ]
                 }
@@ -1192,7 +1356,7 @@
                   "nativeType": "text",
                   "nullable": false
                 },
-                "userId": {
+                "user_id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -1202,14 +1366,14 @@
                 {
                   "source": {
                     "columns": [
-                      "userId"
+                      "user_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user_base_skill"
                   },
                   "target": {
                     "columns": [
-                      "auth0Id"
+                      "auth0_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -1219,10 +1383,10 @@
               "indexes": [
                 {
                   "columns": [
-                    "userId"
+                    "user_id"
                   ],
-                  "name": "user_base_skill_userId_idx_a489d58a",
-                  "prefix": "user_base_skill_userId_idx",
+                  "name": "user_base_skill_user_id_idx_6c952402",
+                  "prefix": "user_base_skill_user_id_idx",
                   "unique": false
                 }
               ],
@@ -1234,7 +1398,7 @@
               "uniques": [
                 {
                   "columns": [
-                    "userId",
+                    "user_id",
                     "name"
                   ]
                 }
@@ -1274,7 +1438,7 @@
                     "plane": "storage"
                   }
                 },
-                "userId": {
+                "user_id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -1284,14 +1448,14 @@
                 {
                   "source": {
                     "columns": [
-                      "userId"
+                      "user_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user_social_link"
                   },
                   "target": {
                     "columns": [
-                      "auth0Id"
+                      "auth0_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -1301,10 +1465,10 @@
               "indexes": [
                 {
                   "columns": [
-                    "userId"
+                    "user_id"
                   ],
-                  "name": "user_social_link_userId_idx_a489d58a",
-                  "prefix": "user_social_link_userId_idx",
+                  "name": "user_social_link_user_id_idx_6c952402",
+                  "prefix": "user_social_link_user_id_idx",
                   "unique": false
                 }
               ],
@@ -1316,8 +1480,163 @@
               "uniques": [
                 {
                   "columns": [
-                    "userId",
+                    "user_id",
                     "type"
+                  ]
+                }
+              ]
+            },
+            "user_suggestion": {
+              "checks": [
+                {
+                  "expression": "\"status\" IN ('PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED')",
+                  "name": "user_suggestion_status_check_8152fec2",
+                  "prefix": "user_suggestion_status_check"
+                }
+              ],
+              "columns": {
+                "bullet_id": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": true
+                },
+                "created_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "experience_id": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "pending_question": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "result": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "PROCESSING"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "SuggestionStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "user_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "user_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_suggestion"
+                  },
+                  "target": {
+                    "columns": [
+                      "auth0_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                },
+                {
+                  "source": {
+                    "columns": [
+                      "experience_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_suggestion"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_base_experience"
+                  }
+                },
+                {
+                  "source": {
+                    "columns": [
+                      "bullet_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_suggestion"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_base_experience_bullet"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "bullet_id"
+                  ],
+                  "name": "user_suggestion_bullet_id_idx_829f89ed",
+                  "prefix": "user_suggestion_bullet_id_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "experience_id"
+                  ],
+                  "name": "user_suggestion_experience_id_idx_9b808d03",
+                  "prefix": "user_suggestion_experience_id_idx",
+                  "unique": false
+                },
+                {
+                  "columns": [
+                    "user_id"
+                  ],
+                  "name": "user_suggestion_user_id_idx_6c952402",
+                  "prefix": "user_suggestion_user_id_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": [
+                {
+                  "columns": [
+                    "user_id",
+                    "experience_id",
+                    "bullet_id"
                   ]
                 }
               ]
@@ -1331,7 +1650,7 @@
                 }
               ],
               "columns": {
-                "createdAt": {
+                "created_at": {
                   "codecId": "pg/timestamptz-temporal@1",
                   "default": {
                     "expression": "now()",
@@ -1345,7 +1664,7 @@
                   "nativeType": "text",
                   "nullable": false
                 },
-                "s3Key": {
+                "s3_key": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -1365,7 +1684,7 @@
                     "plane": "storage"
                   }
                 },
-                "userId": {
+                "user_id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
@@ -1375,14 +1694,14 @@
                 {
                   "source": {
                     "columns": [
-                      "userId"
+                      "user_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user_upload_job"
                   },
                   "target": {
                     "columns": [
-                      "auth0Id"
+                      "auth0_id"
                     ],
                     "namespaceId": "public",
                     "tableName": "user"
@@ -1392,10 +1711,10 @@
               "indexes": [
                 {
                   "columns": [
-                    "userId"
+                    "user_id"
                   ],
-                  "name": "user_upload_job_userId_idx_a489d58a",
-                  "prefix": "user_upload_job_userId_idx",
+                  "name": "user_upload_job_user_id_idx_6c952402",
+                  "prefix": "user_upload_job_user_id_idx",
                   "unique": false
                 }
               ],
@@ -1424,6 +1743,14 @@
                 "GITHUB",
                 "WEBSITE"
               ]
+            },
+            "SuggestionStatus": {
+              "kind": "valueSet",
+              "values": [
+                "PROCESSING",
+                "WAITING_FOR_INPUT",
+                "COMPLETED"
+              ]
             }
           }
         },
@@ -1431,7 +1758,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "da64458fc9375917df82e2194b765a0f0c638882fd3821b0398b4a01e4e028c0"
+    "storageHash": "2ebc10a638e3daa23818a89dda5ef8edbc44a3a68f2cdcfb1ee01d700cf1c472"
   },
   "capabilities": {
     "postgres": {

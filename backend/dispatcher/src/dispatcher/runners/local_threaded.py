@@ -72,13 +72,12 @@ class LocalThreadJobRunner(JobRunner):
 
             if not self.job_data.get("job_id"):
                 raise ValueError("Job ID is required")
-            job_id = self.job_data["job_id"]
 
             # user_id in the job message is the Auth0 sub — the user PK now
             user_id = self.job_data["user_id"]
             user_result = pg_client.execute(
                 """
-                    SELECT "auth0Id" from "user" where "auth0Id" = %s
+                    SELECT auth0_id from "user" where auth0_id = %s
                 """,
                 [user_id],
             ).fetchone()

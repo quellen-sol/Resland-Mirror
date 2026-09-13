@@ -9,7 +9,7 @@ export default async function OnboardingPage() {
   if (!user) {
     redirect("/auth/login");
   }
-  if (user.hasOnboarded) {
+  if (user.has_onboarded) {
     redirect("/dashboard");
   }
   const { token: accessToken } = await auth0.getAccessToken();

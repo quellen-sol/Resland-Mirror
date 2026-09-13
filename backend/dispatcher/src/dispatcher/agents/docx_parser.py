@@ -14,6 +14,7 @@ from ..env_vars import RESUME_PARSER_MODEL
 DOCX_AGENT_PARSER_SYSTEM_PROMPT = """You extract structured profile data from a docx resume.
  
 Extract:
+- professional summary
 - basic_info: name, email, phone, location
 - experience: company, position, start_date, end_date, bullets
 - skills: grouped by category
@@ -95,6 +96,7 @@ class UserProjectEntry:
 
 @dataclass
 class UserDocxProfile:
+    summary: str
     basic_info: UserProfileBasicInfo
     experience: list[UserProfileExperienceEntry]
     skills: list[UserSkillByCategory]

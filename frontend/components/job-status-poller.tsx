@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 const POLL_INTERVAL_MS = 3000;
 const TERMINAL_STATES = new Set(["COMPLETED", "FAILED"]);
+const LOADING_TOAST_ID = "resume-processing";
 
 export default function JobStatusPoller({ jobIds }: { jobIds: string[] }) {
   const router = useRouter();
@@ -14,7 +15,14 @@ export default function JobStatusPoller({ jobIds }: { jobIds: string[] }) {
   const key = jobIds.join(",");
 
   useEffect(() => {
-    if (jobIds.length === 0) return;
+    if (jobIds.length === 0) {
+      toast.dismiss(LOADING_TOAST_ID);
+      return;
+    }
+    toast.loading("Processing your resume…", {
+      id: LOADING_TOAST_ID,
+      description: "We'll update your profile when it finishes.",
+    });
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
     if (!baseUrl) return;
 

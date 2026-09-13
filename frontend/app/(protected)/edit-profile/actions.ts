@@ -15,8 +15,8 @@ export async function saveProfileEdit(input: SaveProfileInput) {
   if (!user) redirect("/auth/login");
 
   await db.transaction(async (tx) => {
-    await tx.orm.public.User.where({ auth0Id: user.auth0Id }).update({
-      fullName: orNull(input.fullName),
+    await tx.orm.public.User.where({ auth0_id: user.auth0_id }).update({
+      full_name: orNull(input.fullName),
       email: orNull(input.email),
       phone: orNull(input.phone),
       location: orNull(input.location),
@@ -24,8 +24,8 @@ export async function saveProfileEdit(input: SaveProfileInput) {
 
     // Experiences/bullets: diff by id so row ids stay stable — downstream
     // consumers (e.g. the suggestions API) reference them.
-    const existingExps = await tx.orm.public.UserBaseJobExperience.where((e) =>
-      e.userId.eq(user.auth0Id),
+    const existingExps = await tx.orm.public.UserBaseExperience.where((e) =>
+      e.user_id.eq(user.auth0_id),
     ).all();
     const ownedExpIds = new Set(existingExps.map((e) => e.id));
     const submittedExpIds = new Set(
@@ -36,37 +36,37 @@ export async function saveProfileEdit(input: SaveProfileInput) {
       .map((e) => e.id);
 
     if (staleExpIds.length > 0) {
-      await tx.orm.public.UserBaseJobExperienceBullet.where((b) =>
-        b.userJobExperienceId.in(staleExpIds),
+      await tx.orm.public.UserBaseExperienceBullet.where((b) =>
+        b.user_experience_id.in(staleExpIds),
       ).deleteAll();
-      await tx.orm.public.UserBaseJobExperience.where((e) =>
+      await tx.orm.public.UserBaseExperience.where((e) =>
         e.id.in(staleExpIds),
       ).deleteAll();
     }
 
     for (const exp of input.experiences) {
       const fields = {
-        companyName: exp.companyName,
+        company_name: exp.companyName,
         title: exp.title,
-        startDate: exp.startDate,
-        endDate: exp.endDate,
+        start_date: exp.startDate,
+        end_date: exp.endDate,
         description: exp.description,
       };
       // Unrecognized ids can't update another user's row — treat as new.
       const expId =
         exp.id != null && ownedExpIds.has(exp.id)
-          ? (await tx.orm.public.UserBaseJobExperience.where({
+          ? (await tx.orm.public.UserBaseExperience.where({
               id: exp.id,
             }).update(fields),
             exp.id)
-          : (await tx.orm.public.UserBaseJobExperience.create({
-              userId: user.auth0Id,
+          : (await tx.orm.public.UserBaseExperience.create({
+              user_id: user.auth0_id,
               ...fields,
             })).id;
 
       const existingBullets =
-        await tx.orm.public.UserBaseJobExperienceBullet.where((b) =>
-          b.userJobExperienceId.eq(expId),
+        await tx.orm.public.UserBaseExperienceBullet.where((b) =>
+          b.user_experience_id.eq(expId),
         ).all();
       const ownedBulletIds = new Set(existingBullets.map((b) => b.id));
       const submittedBulletIds = new Set(
@@ -77,63 +77,63 @@ export async function saveProfileEdit(input: SaveProfileInput) {
         .map((b) => b.id);
 
       if (staleBulletIds.length > 0) {
-        await tx.orm.public.UserBaseJobExperienceBullet.where((b) =>
+        await tx.orm.public.UserBaseExperienceBullet.where((b) =>
           b.id.in(staleBulletIds),
         ).deleteAll();
       }
       for (const b of exp.bullets) {
         if (b.id != null && ownedBulletIds.has(b.id)) {
-          await tx.orm.public.UserBaseJobExperienceBullet.where({
+          await tx.orm.public.UserBaseExperienceBullet.where({
             id: b.id,
           }).update({ bullet: b.text });
         } else {
-          await tx.orm.public.UserBaseJobExperienceBullet.create({
-            userJobExperienceId: expId,
+          await tx.orm.public.UserBaseExperienceBullet.create({
+            user_experience_id: expId,
             bullet: b.text,
           });
         }
       }
     }
 
-    await tx.orm.public.UserBaseSkill.where((s) => s.userId.eq(user.auth0Id)).deleteAll();
-    await tx.orm.public.UserBaseEducation.where((e) => e.userId.eq(user.auth0Id))
+    await tx.orm.public.UserBaseSkill.where((s) => s.user_id.eq(user.auth0_id)).deleteAll();
+    await tx.orm.public.UserBaseEducation.where((e) => e.user_id.eq(user.auth0_id))
       .deleteAll();
-    await tx.orm.public.UserBaseProject.where((p) => p.userId.eq(user.auth0Id)).deleteAll();
-    await tx.orm.public.UserSocialLink.where((l) => l.userId.eq(user.auth0Id))
+    await tx.orm.public.UserBaseProject.where((p) => p.user_id.eq(user.auth0_id)).deleteAll();
+    await tx.orm.public.UserSocialLink.where((l) => l.user_id.eq(user.auth0_id))
       .deleteAll();
 
     for (const link of input.socialLinks) {
       await tx.orm.public.UserSocialLink.create({
-        userId: user.auth0Id,
+        user_id: user.auth0_id,
         type: link.type,
         link: link.link,
       });
     }
 
     for (const name of input.skills) {
-      await tx.orm.public.UserBaseSkill.create({ userId: user.auth0Id, name });
+      await tx.orm.public.UserBaseSkill.create({ user_id: user.auth0_id, name });
     }
 
     for (const edu of input.education) {
       await tx.orm.public.UserBaseEducation.create({
-        userId: user.auth0Id,
+        user_id: user.auth0_id,
         institution: edu.institution,
         degree: edu.degree,
-        fieldOfStudy: edu.fieldOfStudy,
-        startDate: edu.startDate,
-        endDate: edu.endDate,
+        field_of_study: edu.fieldOfStudy,
+        start_date: edu.startDate,
+        end_date: edu.endDate,
         description: edu.description,
       });
     }
 
     for (const proj of input.projects) {
       await tx.orm.public.UserBaseProject.create({
-        userId: user.auth0Id,
+        user_id: user.auth0_id,
         name: proj.name,
         link: proj.link,
         description: proj.description,
-        startDate: proj.startDate,
-        endDate: proj.endDate,
+        start_date: proj.startDate,
+        end_date: proj.endDate,
       });
     }
   });

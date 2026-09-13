@@ -29,7 +29,7 @@ export default async function Home() {
   if (session) {
     const user = await getUser();
     if (user) {
-      redirect(user.hasOnboarded ? "/dashboard" : "/onboarding");
+      redirect(user.has_onboarded ? "/dashboard" : "/onboarding");
     }
   }
 

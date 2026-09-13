@@ -3,17 +3,21 @@ from psycopg import Connection
 from ..agents.docx_parser import UserDocxProfile
 
 
+class DbOpError(Exception):
+    pass
+
+
 def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxProfile):
     with pg_client.transaction():
         pg_client.execute(
             """
-            INSERT INTO "user" ("auth0Id", "fullName", "email", "phone", "location")
+            INSERT INTO "user" (auth0_id, full_name, email, phone, location)
                 VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT ("auth0Id") DO UPDATE SET
-                    "fullName" = EXCLUDED."fullName",
-                    "email" = EXCLUDED."email",
-                    "phone" = EXCLUDED."phone",
-                    "location" = EXCLUDED."location"
+                ON CONFLICT (auth0_id) DO UPDATE SET
+                    full_name = EXCLUDED.full_name,
+                    email = EXCLUDED.email,
+                    phone = EXCLUDED.phone,
+                    location = EXCLUDED.location
             """,
             [
                 user_id,
@@ -27,8 +31,8 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
         # Bullets FK to experiences — delete children before parents.
         pg_client.execute(
             """
-            DELETE FROM user_base_experience_bullet WHERE "userJobExperienceId" IN (
-                SELECT id FROM user_base_experience WHERE "userId" = %s
+            DELETE FROM user_base_experience_bullet WHERE user_experience_id IN (
+                SELECT id FROM user_base_experience WHERE user_id = %s
             )
             """,
             [user_id],
@@ -36,7 +40,7 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
 
         pg_client.execute(
             """
-            DELETE FROM user_base_experience WHERE "userId" = %s
+            DELETE FROM user_base_experience WHERE user_id = %s
             """,
             [user_id],
         )
@@ -44,7 +48,7 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
         for experience in profile.experience:
             experience_id = pg_client.execute(
                 """
-                INSERT INTO user_base_experience ("userId", "companyName", "title", "startDate", "endDate")
+                INSERT INTO user_base_experience (user_id, company_name, title, start_date, end_date)
                 VALUES (%s, %s, %s, %s, %s) RETURNING id
                 """,
                 [
@@ -54,12 +58,15 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
                     experience.start_date,
                     experience.end_date,
                 ],
-            ).fetchone()[0]
+            ).fetchone()
+            if not experience_id:
+                raise DbOpError("Failed to insert experience")
+            experience_id = experience_id[0]
 
             for bullet in experience.bullets:
                 pg_client.execute(
                     """
-                    INSERT INTO user_base_experience_bullet ("userJobExperienceId", "bullet")
+                    INSERT INTO user_base_experience_bullet (user_experience_id, bullet)
                     VALUES (%s, %s)
                     """,
                     [experience_id, bullet.text],
@@ -67,7 +74,7 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
 
         pg_client.execute(
             """
-            DELETE FROM user_base_skill WHERE "userId" = %s
+            DELETE FROM user_base_skill WHERE user_id = %s
             """,
             [user_id],
         )
@@ -76,16 +83,16 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
             for skill in skill_category.skills:
                 pg_client.execute(
                     """
-                    INSERT INTO user_base_skill ("userId", "name", "category")
+                    INSERT INTO user_base_skill (user_id, name, category)
                     VALUES (%s, %s, %s)
-                    ON CONFLICT ("userId", "name") DO NOTHING
+                    ON CONFLICT (user_id, name) DO NOTHING
                     """,
                     [user_id, skill, skill_category.category],
                 )
 
         pg_client.execute(
             """
-            DELETE FROM user_base_education WHERE "userId" = %s
+            DELETE FROM user_base_education WHERE user_id = %s
             """,
             [user_id],
         )
@@ -93,7 +100,7 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
         for education in profile.education:
             pg_client.execute(
                 """
-                INSERT INTO user_base_education ("userId", "institution", "degree", "fieldOfStudy", "startDate", "endDate")
+                INSERT INTO user_base_education (user_id, institution, degree, field_of_study, start_date, end_date)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 [
@@ -108,7 +115,7 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
 
         pg_client.execute(
             """
-            DELETE FROM user_base_project WHERE "userId" = %s
+            DELETE FROM user_base_project WHERE user_id = %s
             """,
             [user_id],
         )
@@ -116,7 +123,7 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
         for project in profile.projects:
             pg_client.execute(
                 """
-                INSERT INTO user_base_project ("userId", "name", "link", "description", "startDate", "endDate")
+                INSERT INTO user_base_project (user_id, name, link, description, start_date, end_date)
                 VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 [

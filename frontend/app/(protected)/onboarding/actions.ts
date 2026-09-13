@@ -56,9 +56,9 @@ function orNull(value: string): string | null {
 export async function completeOnboarding() {
   const user = await getUser();
   if (!user) redirect("/auth/login");
-  if (!user.hasOnboarded) {
-    await db.orm.public.User.where({ auth0Id: user.auth0Id }).update({
-      hasOnboarded: true,
+  if (!user.has_onboarded) {
+    await db.orm.public.User.where({ auth0_id: user.auth0_id }).update({
+      has_onboarded: true,
     });
   }
 }
@@ -67,8 +67,8 @@ export async function saveManualProfile(input: SaveProfileInput) {
   const user = await getUser();
   if (!user) redirect("/auth/login");
 
-  await db.orm.public.User.where({ auth0Id: user.auth0Id }).update({
-    fullName: orNull(input.fullName),
+  await db.orm.public.User.where({ auth0_id: user.auth0_id }).update({
+    full_name: orNull(input.fullName),
     email: orNull(input.email),
     phone: orNull(input.phone),
     location: orNull(input.location),
@@ -76,28 +76,28 @@ export async function saveManualProfile(input: SaveProfileInput) {
 
   for (const link of input.socialLinks) {
     await db.orm.public.UserSocialLink.create({
-      userId: user.auth0Id,
+      user_id: user.auth0_id,
       type: link.type,
       link: link.link,
     });
   }
 
   for (const name of input.skills) {
-    await db.orm.public.UserBaseSkill.create({ userId: user.auth0Id, name });
+    await db.orm.public.UserBaseSkill.create({ user_id: user.auth0_id, name });
   }
 
   for (const exp of input.experiences) {
-    const experience = await db.orm.public.UserBaseJobExperience.create({
-      userId: user.auth0Id,
-      companyName: exp.companyName,
+    const experience = await db.orm.public.UserBaseExperience.create({
+      user_id: user.auth0_id,
+      company_name: exp.companyName,
       title: exp.title,
-      startDate: exp.startDate,
-      endDate: exp.endDate,
+      start_date: exp.startDate,
+      end_date: exp.endDate,
       description: exp.description,
     });
     for (const bullet of exp.bullets) {
-      await db.orm.public.UserBaseJobExperienceBullet.create({
-        userJobExperienceId: experience.id,
+      await db.orm.public.UserBaseExperienceBullet.create({
+        user_experience_id: experience.id,
         bullet: bullet.text,
       });
     }
@@ -105,30 +105,30 @@ export async function saveManualProfile(input: SaveProfileInput) {
 
   for (const edu of input.education) {
     await db.orm.public.UserBaseEducation.create({
-      userId: user.auth0Id,
+      user_id: user.auth0_id,
       institution: edu.institution,
       degree: edu.degree,
-      fieldOfStudy: edu.fieldOfStudy,
-      startDate: edu.startDate,
-      endDate: edu.endDate,
+      field_of_study: edu.fieldOfStudy,
+      start_date: edu.startDate,
+      end_date: edu.endDate,
       description: edu.description,
     });
   }
 
   for (const proj of input.projects) {
     await db.orm.public.UserBaseProject.create({
-      userId: user.auth0Id,
+      user_id: user.auth0_id,
       name: proj.name,
       link: proj.link,
       description: proj.description,
-      startDate: proj.startDate,
-      endDate: proj.endDate,
+      start_date: proj.startDate,
+      end_date: proj.endDate,
     });
   }
 
-  if (!user.hasOnboarded) {
-    await db.orm.public.User.where({ auth0Id: user.auth0Id }).update({
-      hasOnboarded: true,
+  if (!user.has_onboarded) {
+    await db.orm.public.User.where({ auth0_id: user.auth0_id }).update({
+      has_onboarded: true,
     });
   }
 

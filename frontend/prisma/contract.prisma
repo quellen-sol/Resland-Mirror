@@ -1,17 +1,17 @@
 // use prisma-next
 
 model User {
-  auth0Id      String   @id
-  hasOnboarded Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  auth0_id      String   @id
+  has_onboarded Boolean  @default(false)
+  created_at    DateTime @default(now())
   // For resume headers
-  fullName String?
-  email String?
-  phone String?
-  location String?
+  full_name     String?
+  email         String?
+  phone         String?
+  location      String?
 
   @@map("user")
-  @@index([auth0Id])
+  @@index([auth0_id])
 }
 
 enum SocialLinkType {
@@ -21,15 +21,15 @@ enum SocialLinkType {
 }
 
 model UserSocialLink {
-  id Int @id @default(autoincrement())
-  link String
-  type SocialLinkType
-  userId String
-  user User @relation(fields: [userId], references: [auth0Id])
-  
+  id      Int            @id @default(autoincrement())
+  link    String
+  type    SocialLinkType
+  user_id String
+  user    User           @relation(fields: [user_id], references: [auth0_id])
+
   @@map("user_social_link")
-  @@unique([userId, type])
-  @@index([userId])
+  @@unique([user_id, type])
+  @@index([user_id])
 }
 
 enum JobStatus {
@@ -40,85 +40,110 @@ enum JobStatus {
 }
 
 model UserUploadJob {
-  id        String    @id
-  userId    String
-  user      User      @relation(fields: [userId], references: [auth0Id])
-  status    JobStatus @default(PENDING)
-  s3Key     String
-  createdAt DateTime  @default(now())
+  id         String    @id
+  user_id    String
+  user       User      @relation(fields: [user_id], references: [auth0_id])
+  status     JobStatus @default(PENDING)
+  s3_key     String
+  created_at DateTime  @default(now())
 
   @@map("user_upload_job")
-  @@index([userId])
+  @@index([user_id])
 }
 
 
 // User "base" models, from resume generated data only
-model UserBaseJobExperience {
-  id          Int       @id @default(autoincrement())
-  userId      String
-  user        User      @relation(fields: [userId], references: [auth0Id])
-  companyName String
-  title       String
-  startDate   String
-  endDate     String?
-  description String?
-  createdAt   DateTime  @default(now())
+model UserBaseExperience {
+  id           Int       @id @default(autoincrement())
+  user_id      String
+  user         User      @relation(fields: [user_id], references: [auth0_id])
+  company_name String
+  title        String
+  start_date   String
+  end_date     String?
+  description  String?
+  created_at   DateTime  @default(now())
 
   @@map("user_base_experience")
-  @@index([userId])
+  @@index([user_id])
 }
 
-model UserBaseJobExperienceBullet {
-  id                   Int                   @id @default(autoincrement())
-  userJobExperienceId  Int
-  userJobExperience    UserBaseJobExperience @relation(fields: [userJobExperienceId], references: [id])
-  bullet               String
-  createdAt            DateTime              @default(now())
-  
+model UserBaseExperienceBullet {
+  id                 Int                @id @default(autoincrement())
+  user_experience_id Int
+  user_experience    UserBaseExperience @relation(fields: [user_experience_id], references: [id])
+  bullet             String
+  created_at         DateTime           @default(now())
+
   @@map("user_base_experience_bullet")
-  @@index([userJobExperienceId])
+  @@index([user_experience_id])
 }
 
 model UserBaseSkill {
-  id          Int       @id @default(autoincrement())
-  userId      String
-  user        User      @relation(fields: [userId], references: [auth0Id])
-  name        String
-  category    String?
-  
+  id       Int     @id @default(autoincrement())
+  user_id  String
+  user     User    @relation(fields: [user_id], references: [auth0_id])
+  name     String
+  category String?
+
   @@map("user_base_skill")
-  @@unique([userId, name])
-  @@index([userId])
+  @@unique([user_id, name])
+  @@index([user_id])
 }
 
 model UserBaseEducation {
-  id Int @id @default(autoincrement())
-  userId String  
-  user User @relation(fields: [userId], references: [auth0Id])
-  institution String
-  degree String
-  fieldOfStudy String
-  startDate String
-  endDate String?
-  description String?
-  
+  id            Int     @id @default(autoincrement())
+  user_id       String
+  user          User    @relation(fields: [user_id], references: [auth0_id])
+  institution   String
+  degree        String
+  field_of_study String
+  start_date    String
+  end_date      String?
+  description   String?
+
   @@map("user_base_education")
-  @@unique([userId, institution, degree, fieldOfStudy, startDate])
-  @@index([userId])
+  @@unique([user_id, institution, degree, field_of_study, start_date])
+  @@index([user_id])
 }
 
 model UserBaseProject {
-  id Int @id @default(autoincrement())
-  userId String  
-  user User @relation(fields: [userId], references: [auth0Id])
-  name String
-  link String?
+  id          Int     @id @default(autoincrement())
+  user_id     String
+  user        User    @relation(fields: [user_id], references: [auth0_id])
+  name        String
+  link        String?
   description String?
-  startDate String
-  endDate String?
-  
+  start_date  String
+  end_date    String?
+
   @@map("user_base_project")
-  @@unique([userId, name, startDate])
-  @@unique([userId, link])
-  @@index([userId])
+  @@unique([user_id, name, start_date])
+  @@unique([user_id, link])
+  @@index([user_id])
+}
+
+enum SuggestionStatus {
+  PROCESSING
+  WAITING_FOR_INPUT
+  COMPLETED
+}
+
+model UserSuggestion {
+  id               String                      @id
+  user_id          String
+  user             User                        @relation(fields: [user_id], references: [auth0_id])
+  experience_id    Int
+  experience       UserBaseExperience          @relation(fields: [experience_id], references: [id])
+  bullet_id        Int?
+  bullet           UserBaseExperienceBullet?   @relation(fields: [bullet_id], references: [id])
+  pending_question String?
+  result           String?
+  status           SuggestionStatus            @default(PROCESSING)
+  created_at       DateTime                    @default(now())
+
+  @@map("user_suggestion")
+
+  @@index([user_id])
+  @@unique([user_id, experience_id, bullet_id])
 }

@@ -20,6 +20,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
 import JobStatusPoller from "@/components/job-status-poller";
+import SuggestionDialog from "@/components/suggestion-dialog";
 import UploadResumeDialog from "./upload-resume-dialog";
 
 function fmtDate(date: string | null) {
@@ -55,14 +56,14 @@ export default async function DashboardPage() {
     education,
     projects,
     socialLinks,
-  } = await getUserProfileData(user.auth0Id);
+  } = await getUserProfileData(user.auth0_id);
 
   const activeJobIds = uploadJobs
     .filter((j) => j.status === "PENDING" || j.status === "PROCESSING")
     .map((j) => j.id);
 
   const bulletsFor = (expId: number) =>
-    bullets.filter((b) => b.userJobExperienceId === expId);
+    bullets.filter((b) => b.user_experience_id === expId);
 
   return (
     <div className="relative flex flex-1 overflow-hidden bg-zinc-950 font-sans">
@@ -77,7 +78,7 @@ export default async function DashboardPage() {
               Dashboard
             </h1>
             <p className="mt-1 text-sm text-zinc-400">
-              {user.fullName ?? session?.user.name ?? session?.user.email}
+              {user.full_name ?? session?.user.name ?? session?.user.email}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -109,7 +110,7 @@ export default async function DashboardPage() {
             <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
               {(
                 [
-                  ["Name", user.fullName],
+                  ["Name", user.full_name],
                   ["Email", user.email],
                   ["Phone", user.phone],
                   ["Location", user.location],
@@ -190,10 +191,14 @@ export default async function DashboardPage() {
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="font-medium text-zinc-100">
                     {exp.title}
-                    <span className="text-zinc-400"> · {exp.companyName}</span>
+                    <span className="text-zinc-400"> · {exp.company_name}</span>
                   </span>
-                  <span className="shrink-0 text-xs text-zinc-500">
-                    {fmtDate(exp.startDate)} — {fmtDate(exp.endDate)}
+                  <span className="flex shrink-0 items-center gap-2 text-xs text-zinc-500">
+                    {fmtDate(exp.start_date)} — {fmtDate(exp.end_date)}
+                    <SuggestionDialog
+                      accessToken={accessToken}
+                      experienceId={exp.id}
+                    />
                   </span>
                 </div>
                 {exp.description && (
@@ -202,7 +207,16 @@ export default async function DashboardPage() {
                 {bulletsFor(exp.id).length > 0 && (
                   <ul className="list-inside list-disc text-sm text-zinc-400">
                     {bulletsFor(exp.id).map((b) => (
-                      <li key={b.id}>{b.bullet}</li>
+                      <li key={b.id}>
+                        {b.bullet}
+                        <SuggestionDialog
+                          accessToken={accessToken}
+                          experienceId={exp.id}
+                          bulletId={b.id}
+                          targetText={b.bullet}
+                          variant="icon"
+                        />
+                      </li>
                     ))}
                   </ul>
                 )}
@@ -230,10 +244,10 @@ export default async function DashboardPage() {
                     <span className="text-zinc-400"> · {edu.institution}</span>
                   </span>
                   <span className="shrink-0 text-xs text-zinc-500">
-                    {fmtDate(edu.startDate)} — {fmtDate(edu.endDate)}
+                    {fmtDate(edu.start_date)} — {fmtDate(edu.end_date)}
                   </span>
                 </div>
-                <p className="text-sm text-zinc-400">{edu.fieldOfStudy}</p>
+                <p className="text-sm text-zinc-400">{edu.field_of_study}</p>
                 {edu.description && (
                   <p className="text-sm text-zinc-500">{edu.description}</p>
                 )}
@@ -271,7 +285,7 @@ export default async function DashboardPage() {
                     )}
                   </span>
                   <span className="shrink-0 text-xs text-zinc-500">
-                    {fmtDate(proj.startDate)} — {fmtDate(proj.endDate)}
+                    {fmtDate(proj.start_date)} — {fmtDate(proj.end_date)}
                   </span>
                 </div>
                 {proj.description && (
