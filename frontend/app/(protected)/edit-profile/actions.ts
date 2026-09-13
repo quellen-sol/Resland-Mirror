@@ -22,21 +22,79 @@ export async function saveProfileEdit(input: SaveProfileInput) {
       location: orNull(input.location),
     });
 
-    // Delete existing profile rows (bullets first — they FK to experiences).
-    const expIds = (
-      await tx.orm.public.UserBaseJobExperience.where((e) =>
-        e.userId.eq(user.auth0Id),
-      ).all()
-    ).map((e) => e.id);
+    // Experiences/bullets: diff by id so row ids stay stable — downstream
+    // consumers (e.g. the suggestions API) reference them.
+    const existingExps = await tx.orm.public.UserBaseJobExperience.where((e) =>
+      e.userId.eq(user.auth0Id),
+    ).all();
+    const ownedExpIds = new Set(existingExps.map((e) => e.id));
+    const submittedExpIds = new Set(
+      input.experiences.flatMap((e) => (e.id != null ? [e.id] : [])),
+    );
+    const staleExpIds = existingExps
+      .filter((e) => !submittedExpIds.has(e.id))
+      .map((e) => e.id);
 
-    if (expIds.length > 0) {
+    if (staleExpIds.length > 0) {
       await tx.orm.public.UserBaseJobExperienceBullet.where((b) =>
-        b.userJobExperienceId.in(expIds),
+        b.userJobExperienceId.in(staleExpIds),
+      ).deleteAll();
+      await tx.orm.public.UserBaseJobExperience.where((e) =>
+        e.id.in(staleExpIds),
       ).deleteAll();
     }
-    await tx.orm.public.UserBaseJobExperience.where((e) =>
-      e.userId.eq(user.auth0Id),
-    ).deleteAll();
+
+    for (const exp of input.experiences) {
+      const fields = {
+        companyName: exp.companyName,
+        title: exp.title,
+        startDate: exp.startDate,
+        endDate: exp.endDate,
+        description: exp.description,
+      };
+      // Unrecognized ids can't update another user's row — treat as new.
+      const expId =
+        exp.id != null && ownedExpIds.has(exp.id)
+          ? (await tx.orm.public.UserBaseJobExperience.where({
+              id: exp.id,
+            }).update(fields),
+            exp.id)
+          : (await tx.orm.public.UserBaseJobExperience.create({
+              userId: user.auth0Id,
+              ...fields,
+            })).id;
+
+      const existingBullets =
+        await tx.orm.public.UserBaseJobExperienceBullet.where((b) =>
+          b.userJobExperienceId.eq(expId),
+        ).all();
+      const ownedBulletIds = new Set(existingBullets.map((b) => b.id));
+      const submittedBulletIds = new Set(
+        exp.bullets.flatMap((b) => (b.id != null ? [b.id] : [])),
+      );
+      const staleBulletIds = existingBullets
+        .filter((b) => !submittedBulletIds.has(b.id))
+        .map((b) => b.id);
+
+      if (staleBulletIds.length > 0) {
+        await tx.orm.public.UserBaseJobExperienceBullet.where((b) =>
+          b.id.in(staleBulletIds),
+        ).deleteAll();
+      }
+      for (const b of exp.bullets) {
+        if (b.id != null && ownedBulletIds.has(b.id)) {
+          await tx.orm.public.UserBaseJobExperienceBullet.where({
+            id: b.id,
+          }).update({ bullet: b.text });
+        } else {
+          await tx.orm.public.UserBaseJobExperienceBullet.create({
+            userJobExperienceId: expId,
+            bullet: b.text,
+          });
+        }
+      }
+    }
+
     await tx.orm.public.UserBaseSkill.where((s) => s.userId.eq(user.auth0Id)).deleteAll();
     await tx.orm.public.UserBaseEducation.where((e) => e.userId.eq(user.auth0Id))
       .deleteAll();
@@ -54,23 +112,6 @@ export async function saveProfileEdit(input: SaveProfileInput) {
 
     for (const name of input.skills) {
       await tx.orm.public.UserBaseSkill.create({ userId: user.auth0Id, name });
-    }
-
-    for (const exp of input.experiences) {
-      const experience = await tx.orm.public.UserBaseJobExperience.create({
-        userId: user.auth0Id,
-        companyName: exp.companyName,
-        title: exp.title,
-        startDate: exp.startDate,
-        endDate: exp.endDate,
-        description: exp.description,
-      });
-      for (const bullet of exp.bullets) {
-        await tx.orm.public.UserBaseJobExperienceBullet.create({
-          userJobExperienceId: experience.id,
-          bullet,
-        });
-      }
     }
 
     for (const edu of input.education) {

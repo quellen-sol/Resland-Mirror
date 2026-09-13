@@ -22,15 +22,15 @@ export default async function EditProfilePage() {
     socialLinks: socialLinks.map((l) => ({ type: l.type, link: l.link })),
     skills: skills.map((s) => s.name),
     experiences: experiences.map((e) => ({
+      id: e.id,
       companyName: e.companyName,
       title: e.title,
       startDate: toDateString(e.startDate),
       endDate: toDateString(e.endDate),
       description: e.description ?? "",
-      bulletsText: bullets
+      bullets: bullets
         .filter((b) => b.userJobExperienceId === e.id)
-        .map((b) => b.bullet)
-        .join("\n"),
+        .map((b) => ({ id: b.id, text: b.bullet })),
     })),
     education: education.map((e) => ({
       institution: e.institution,
@@ -57,7 +57,7 @@ export default async function EditProfilePage() {
         startDate: "",
         endDate: "",
         description: "",
-        bulletsText: "",
+        bullets: [],
       },
     ];
   }

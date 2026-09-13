@@ -12,15 +12,15 @@ export function toProfileInput(values: ProfileFormValues): SaveProfileInput {
     experiences: values.experiences
       .filter((e) => e.companyName && e.title && e.startDate)
       .map((e) => ({
+        id: e.id,
         companyName: e.companyName,
         title: e.title,
         startDate: e.startDate,
         endDate: e.endDate || null,
         description: e.description || null,
-        bullets: e.bulletsText
-          .split("\n")
-          .map((b) => b.trim())
-          .filter(Boolean),
+        bullets: e.bullets
+          .map((b) => ({ id: b.id, text: b.text.trim() }))
+          .filter((b) => b.text !== ""),
       })),
     education: values.education
       .filter((e) => e.institution && e.degree && e.fieldOfStudy && e.startDate)

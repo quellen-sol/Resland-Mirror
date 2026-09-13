@@ -4,13 +4,19 @@ import { redirect } from "next/navigation";
 import { getUser } from "@/lib/db";
 import { db } from "@/prisma/db";
 
+export interface BulletInput {
+  id?: number;
+  text: string;
+}
+
 export interface ExperienceInput {
+  id?: number;
   companyName: string;
   title: string;
   startDate: string;
   endDate: string | null;
   description: string | null;
-  bullets: string[];
+  bullets: BulletInput[];
 }
 
 export interface EducationInput {
@@ -92,7 +98,7 @@ export async function saveManualProfile(input: SaveProfileInput) {
     for (const bullet of exp.bullets) {
       await db.orm.public.UserBaseJobExperienceBullet.create({
         userJobExperienceId: experience.id,
-        bullet,
+        bullet: bullet.text,
       });
     }
   }

@@ -11,7 +11,7 @@ from langchain.tools import tool
 
 from ..env_vars import RESUME_PARSER_MODEL
 
-DOCX_AGENT_PARSER_SYSTEM_PROMPT="""You extract structured profile data from a docx resume.
+DOCX_AGENT_PARSER_SYSTEM_PROMPT = """You extract structured profile data from a docx resume.
  
 Extract:
 - basic_info: name, email, phone, location
@@ -45,6 +45,7 @@ When done, call submit_user_profile exactly once. Be concise — runs are
 logged and reviewed constantly, especially when output is malformed.
 """
 
+
 @dataclass
 class UserProfileBasicInfo:
     name: str
@@ -52,9 +53,11 @@ class UserProfileBasicInfo:
     phone: str
     location: str
 
+
 @dataclass
 class UserExperienceBullet:
     text: str
+
 
 @dataclass
 class UserProfileExperienceEntry:
@@ -64,10 +67,12 @@ class UserProfileExperienceEntry:
     end_date: str
     bullets: list[UserExperienceBullet]
 
-@dataclass  
+
+@dataclass
 class UserSkillByCategory:
     category: str
     skills: list[str]
+
 
 @dataclass
 class UserEducationEntry:
@@ -78,6 +83,7 @@ class UserEducationEntry:
     end_date: str
     description: str
 
+
 @dataclass
 class UserProjectEntry:
     name: str
@@ -85,6 +91,7 @@ class UserProjectEntry:
     description: str
     start_date: str
     end_date: str
+
 
 @dataclass
 class UserDocxProfile:
@@ -94,6 +101,7 @@ class UserDocxProfile:
     education: list[UserEducationEntry]
     projects: list[UserProjectEntry]
 
+
 class BuildAgentOutput:
     agent: Any
     profile_queue: queue.Queue[UserDocxProfile]
@@ -102,12 +110,16 @@ class BuildAgentOutput:
         self.agent = agent
         self.profile_queue = profile_queue
 
+
 def agent_parse_docx(doc: Document):
     agent_output = build_agent(doc)
     print("Starting agent...")
-    agent_output.agent.invoke({"messages": [{"role": "user", "content": "Parse this document"}]})
+    agent_output.agent.invoke(
+        {"messages": [{"role": "user", "content": "Parse this document"}]}
+    )
     print("Agent finished")
     return agent_output.profile_queue
+
 
 def build_agent(doc: Document):
     profile_queue = queue.Queue[UserDocxProfile]()
@@ -133,24 +145,25 @@ def build_agent(doc: Document):
             if child.tag == qn("w:p"):
                 para = Paragraph(child, doc)
                 pPr = child.find(qn("w:pPr"))
-                ends_section = (
-                    pPr is not None and pPr.find(qn("w:sectPr")) is not None
+                ends_section = pPr is not None and pPr.find(qn("w:sectPr")) is not None
+                blocks.append(
+                    {
+                        "type": "paragraph",
+                        "text": para.text,
+                        "style": para.style.name if para.style else None,
+                        "ends_section": ends_section,
+                    }
                 )
-                blocks.append({
-                    "type": "paragraph",
-                    "text": para.text,
-                    "style": para.style.name if para.style else None,
-                    "ends_section": ends_section,
-                })
             elif child.tag == qn("w:tbl"):
                 table = Table(child, doc)
-                blocks.append({
-                    "type": "table",
-                    "rows": [
-                        [cell.text for cell in row.cells]
-                        for row in table.rows
-                    ],
-                })
+                blocks.append(
+                    {
+                        "type": "table",
+                        "rows": [
+                            [cell.text for cell in row.cells] for row in table.rows
+                        ],
+                    }
+                )
             elif child.tag == qn("w:sectPr"):
                 blocks.append({"type": "section_break"})
         return blocks
@@ -162,6 +175,7 @@ def build_agent(doc: Document):
         before/after in points. Blank paragraphs and large spacing mark the
         visual boundaries between resume sections.
         """
+
         def _pt(value) -> float:
             return round(value.pt, 1) if value is not None else 0.0
 
@@ -207,7 +221,7 @@ def build_agent(doc: Document):
             get_columns,
             submit_user_profile,
         ],
-        system_prompt=DOCX_AGENT_PARSER_SYSTEM_PROMPT
+        system_prompt=DOCX_AGENT_PARSER_SYSTEM_PROMPT,
     )
 
     return BuildAgentOutput(agent=agent, profile_queue=profile_queue)

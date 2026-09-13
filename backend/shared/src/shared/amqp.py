@@ -15,10 +15,16 @@ from rabbitmq_amqp_python_client import (
     Message,
 )
 
-RESUME_QUEUE_NAME = "test-queue"
-RESUME_EXCHANGE_NAME = "test-exchange"
-RESUME_DLQ_NAME = "test-dlq"
-RESUME_DLX_NAME = "test-dlx"
+RESUME_QUEUE_NAME = "resume-parser-queue"
+RESUME_EXCHANGE_NAME = "resume-parser-exchange"
+RESUME_DLQ_NAME = "resume-parser-dlq"
+RESUME_DLX_NAME = "resume-parser-dlx"
+
+BULLET_SUGG_EXCHANGE_NAME = "bullet-sugg-exchange"
+BULLET_SUGG_QUEUE_NAME = "bullet-sugg-queue"
+BULLET_SUGG_DLQ_NAME = "bullet-sugg-dlq"
+BULLET_SUGG_DLX_NAME = "bullet-sugg-dlx"
+
 
 @dataclass
 class AMQPJob:
@@ -94,7 +100,9 @@ class AMQPClient:
         if not self.amqp_connection:
             raise AMQPClientException("AMQPClient not connected")
         queue_addr = AddressHelper.queue_address(queue_name)
-        return await self.amqp_connection.consumer(destination=queue_addr, message_handler=handler)
+        return await self.amqp_connection.consumer(
+            destination=queue_addr, message_handler=handler
+        )
 
     async def get_manager(self):
         if not self.amqp_connection:
@@ -146,6 +154,48 @@ class AMQPClient:
             ExchangeToQueueBindingSpecification(
                 source_exchange=RESUME_EXCHANGE_NAME,
                 destination_queue=RESUME_QUEUE_NAME,
+                binding_key="#",
+            )
+        )
+
+        # Bullet Sugg
+        await manager.declare_exchange(
+            ExchangeSpecification(
+                name=BULLET_SUGG_EXCHANGE_NAME,
+                exchange_type=ExchangeType.topic,
+                is_auto_delete=True,
+                is_durable=False,
+            )
+        )
+        await manager.declare_queue(
+            ClassicQueueSpecification(
+                name=BULLET_SUGG_QUEUE_NAME,
+                is_durable=True,
+                dead_letter_exchange=BULLET_SUGG_DLX_NAME,
+            )
+        )
+        await manager.bind(
+            ExchangeToQueueBindingSpecification(
+                source_exchange=BULLET_SUGG_EXCHANGE_NAME,
+                destination_queue=BULLET_SUGG_QUEUE_NAME,
+                binding_key="#",
+            )
+        )
+        await manager.declare_exchange(
+            ExchangeSpecification(
+                name=BULLET_SUGG_DLX_NAME,
+                exchange_type=ExchangeType.topic,
+                is_auto_delete=True,
+                is_durable=False,
+            )
+        )
+        await manager.declare_queue(
+            ClassicQueueSpecification(name=BULLET_SUGG_DLQ_NAME, is_durable=True)
+        )
+        await manager.bind(
+            ExchangeToQueueBindingSpecification(
+                source_exchange=BULLET_SUGG_DLX_NAME,
+                destination_queue=BULLET_SUGG_DLQ_NAME,
                 binding_key="#",
             )
         )

@@ -20,13 +20,19 @@ export interface SocialLinkForm {
   link: string;
 }
 
+export interface BulletForm {
+  id?: number;
+  text: string;
+}
+
 export interface ExperienceForm {
+  id?: number;
   companyName: string;
   title: string;
   startDate: string;
   endDate: string;
   description: string;
-  bulletsText: string;
+  bullets: BulletForm[];
 }
 
 export interface EducationForm {
@@ -72,7 +78,7 @@ export const emptyProfileValues: ProfileFormValues = {
       startDate: "",
       endDate: "",
       description: "",
-      bulletsText: "",
+      bullets: [],
     },
   ],
   education: [],
@@ -166,7 +172,7 @@ const emptyExperience: ExperienceForm = {
   startDate: "",
   endDate: "",
   description: "",
-  bulletsText: "",
+  bullets: [],
 };
 
 const emptyEducation: EducationForm = {
@@ -444,17 +450,46 @@ export default function ProfileForm({
                   className={inputCls}
                 />
               </Field>
-              <Field label="Highlights (one per line)">
-                <Textarea
-                  value={exp.bulletsText}
-                  onChange={(e) =>
-                    updateAt<ExperienceForm>("experiences", i, {
-                      bulletsText: e.target.value,
-                    })
-                  }
-                  placeholder={"Led a team of 5\nShipped feature X"}
-                  className={inputCls}
-                />
+              <Field label="Highlights">
+                <div className="flex flex-col gap-2">
+                  {exp.bullets.map((bullet, j) => (
+                    <div key={j} className="flex items-center gap-2">
+                      <Input
+                        value={bullet.text}
+                        onChange={(e) =>
+                          updateAt<ExperienceForm>("experiences", i, {
+                            bullets: exp.bullets.map((b, k) =>
+                              k === j ? { ...b, text: e.target.value } : b,
+                            ),
+                          })
+                        }
+                        placeholder="Led a team of 5"
+                        className={inputCls}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateAt<ExperienceForm>("experiences", i, {
+                            bullets: exp.bullets.filter((_, k) => k !== j),
+                          })
+                        }
+                        className="text-zinc-500 hover:text-red-400"
+                        aria-label="Remove bullet"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
+                  ))}
+                  <AddButton
+                    onClick={() =>
+                      updateAt<ExperienceForm>("experiences", i, {
+                        bullets: [...exp.bullets, { text: "" }],
+                      })
+                    }
+                  >
+                    Add bullet
+                  </AddButton>
+                </div>
               </Field>
               {values.experiences.length > 1 && (
                 <RemoveButton

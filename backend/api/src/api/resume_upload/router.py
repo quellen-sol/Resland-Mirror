@@ -1,3 +1,4 @@
+import asyncio
 import io
 import os
 import uuid
@@ -17,6 +18,10 @@ from ..env_vars import (
     S3_RESUME_BUCKET,
 )
 
+amqp_client = AMQPClient(AMQP_URL)
+asyncio.run(amqp_client.setup())
+amqp_publisher = asyncio.run(amqp_client.get_publisher(RESUME_EXCHANGE_NAME, "#"))
+
 router = APIRouter()
 
 
@@ -27,7 +32,7 @@ async def upload_initial_resume(file: UploadFile, user_id: Auth0UserId):
 
     # Quick check on filesize without dumping it all into memory.
     # This can be handled by an ALB or similar fronting service, of course.
-    file.file.seek(0, os.SEEK_END)  
+    file.file.seek(0, os.SEEK_END)
     size = file.file.tell()
     file.file.seek(0)
     if size > 100000000:  # 100MB
@@ -39,14 +44,10 @@ async def upload_initial_resume(file: UploadFile, user_id: Auth0UserId):
     try:
         file_type = puremagic.from_string(file_content)
         if not file_type:
-            raise HTTPException(
-                status_code=400, detail="Failed to determine file type"
-            )
-        
+            raise HTTPException(status_code=400, detail="Failed to determine file type")
+
         if file_type not in [".docx"]:
-            raise HTTPException(
-                status_code=400, detail="Unsupported file type"
-            )
+            raise HTTPException(status_code=400, detail="Unsupported file type")
     except Exception as e:
         raise HTTPException(
             status_code=400, detail=f"Failed to determine file type: {e}"
@@ -63,7 +64,7 @@ async def upload_initial_resume(file: UploadFile, user_id: Auth0UserId):
     try:
         s3_client = get_s3_client(
             aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
         )
         s3_client.upload_fileobj(io.BytesIO(file_content), bucket, obj_key)
     except Exception as e:
@@ -73,7 +74,7 @@ async def upload_initial_resume(file: UploadFile, user_id: Auth0UserId):
 
     pg_client = get_pg_client(PG_URL)
     in_flight = pg_client.execute(
-        'SELECT 1 FROM user_upload_job WHERE "userId" = %s AND status IN (\'PENDING\', \'PROCESSING\') LIMIT 1',
+        "SELECT 1 FROM user_upload_job WHERE \"userId\" = %s AND status IN ('PENDING', 'PROCESSING') LIMIT 1",
         (user_id,),
     ).fetchone()
     if in_flight:
@@ -83,9 +84,6 @@ async def upload_initial_resume(file: UploadFile, user_id: Auth0UserId):
             detail="A resume is already being processed for this user",
         )
 
-    amqp_client = AMQPClient(AMQP_URL)
-    await amqp_client.connect()
-    amqp_publisher = await amqp_client.get_publisher(RESUME_EXCHANGE_NAME, "#")
     job = AMQPJob(s3_key=obj_key, job_id=str(job_id), user_id=user_id)
     await amqp_publisher.publish(job.as_message())
 
@@ -97,12 +95,12 @@ async def upload_initial_resume(file: UploadFile, user_id: Auth0UserId):
 
     return {"job_id": str(job_id)}
 
+
 @router.get("/check-job-status/{job_id}", status_code=200)
 async def check_job_status(job_id: str):
     pg_client = get_pg_client(PG_URL)
     row = pg_client.execute(
-        'SELECT status FROM user_upload_job WHERE id = %s',
-        (job_id,)
+        "SELECT status FROM user_upload_job WHERE id = %s", (job_id,)
     ).fetchone()
     pg_client.close()
     if not row:

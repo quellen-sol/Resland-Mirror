@@ -13,7 +13,6 @@ async def async_main() -> None:
     # topology, so consumers never race a missing queue.
     await amqp_client.setup()
 
-
     consumer = await amqp_client.get_consumer(
         queue_name=RESUME_QUEUE_NAME, handler=DispatcherHandler()
     )
