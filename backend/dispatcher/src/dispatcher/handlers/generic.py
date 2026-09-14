@@ -1,16 +1,27 @@
 import json
 import threading
 import time
+from dataclasses import dataclass
 
 from rabbitmq_amqp_python_client import AMQPMessagingHandler, Event
 from shared.pg import get_pg_client
 
-from .env_vars import PG_URL
-from .runners.generic import JobHandle
-from .runners.local_threaded import LocalThreadJobRunner
+from ..env_vars import PG_URL
+from ..runners.generic import JobHandle, JobRunner
 
 
-class DispatcherHandler(AMQPMessagingHandler):
+class HandlerError(Exception):
+    pass
+
+
+@dataclass
+class DispatchJobParams:
+    job_id: str
+    runner: JobRunner
+    event: Event
+
+
+class GenericHandlerWithCleanup(AMQPMessagingHandler):
     running_jobs: dict[str, tuple[JobHandle, Event]]
     cleanup_thread: threading.Thread
 
@@ -46,28 +57,15 @@ class DispatcherHandler(AMQPMessagingHandler):
                         print(f"Job {job_id} failed")
                         self.delivery_context.discard(event)
 
-    def on_amqp_message(self, event: Event):
-        print("Got message!")
-        try:
-            if not event.message.body:
-                print("Received message with no body")
-                self.delivery_context.discard(event)
-                return
+    def parse_event(self, event: Event) -> dict:
+        if not event.message:
+            raise HandlerError("Could not find `message` in Event")
 
-            data: dict = json.loads(str(event.message.body, "utf-8"))
+        if not event.message.body:
+            raise HandlerError("Could not find `body` in `message`")
 
-            # Try to dispatch job
-            job_id = data.get("job_id")
-            if not job_id:
-                print("Received message with no job_id")
-                self.delivery_context.discard(event)
-                return
+        return json.loads(str(event.message.body, "utf-8"))
 
-            print(f"Dispatching job {job_id}")
-            runner = LocalThreadJobRunner(data)
-            handle = runner.run()
-            print(f"Job {job_id} started")
-            self.running_jobs[job_id] = (handle, event)
-        except Exception as e:
-            print(f"Error processing message: {e}")
-            # TODO: Handle error
+    def dispatch_job(self, params: DispatchJobParams):
+        handle = params.runner.run()
+        self.running_jobs[params.job_id] = (handle, params.event)

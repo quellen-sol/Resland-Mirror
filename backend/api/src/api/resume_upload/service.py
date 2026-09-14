@@ -65,7 +65,7 @@ async def upload_resume(
 
     async with pg_conn.cursor() as conn:
         await conn.execute(
-            'INSERT INTO user_upload_job (id, user_id, s3_key, status) VALUES (%s, %s, %s, %s)',
+            "INSERT INTO user_upload_job (id, user_id, s3_key, status) VALUES (%s, %s, %s, %s)",
             (str(job_id), user_id, obj_key, "PENDING"),
         )
 

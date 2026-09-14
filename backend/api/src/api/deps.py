@@ -12,7 +12,7 @@ amqp_client: AmqpClient | None = None
 pg_pool: AsyncConnectionPool | None = None
 
 
-async def get_pg_conn() -> AsyncConnection:
+async def get_pg_conn():
     if pg_pool is None:
         raise RuntimeError("PostgreSQL pool not initialized — lifespan not running?")
     async with pg_pool.connection() as conn:

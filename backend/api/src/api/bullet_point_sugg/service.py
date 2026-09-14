@@ -1,41 +1,22 @@
 import uuid
 
 from fastapi import HTTPException
-from shared.pg import get_pg_client
+from shared.amqp import BULLET_SUGG_EXCHANGE_NAME, AmqpSuggestionJob
 
-from ..deps import PgConnection
-from ..env_vars import PG_URL
-from . import model
-from .db import (
-    create_sugg_session,
-    delete_sugg_session,
-    get_sugg_session,
-    update_sugg_session,
-)
-
-# --- Stub state -------------------------------------------------------------
-# Ephemeral lifecycle counters so the frontend exercises a realistic flow
-# (PROCESSING -> WAITING_FOR_INPUT -> COMPLETED) until the dispatcher agent
-# writes real status transitions. AMQP publish points are marked TODO.
-_polls: dict[str, int] = {}
-_answered: set[str] = set()
-
-_STUB_QUESTION = (
-    "What measurable impact did this work have (e.g. latency %, users, revenue)?"
-)
-_STUB_RESULT = (
-    "Led migration of the billing service to event-driven "
-    "processing, cutting p95 latency 40% for 2M monthly users."
-)
+from ..deps import AmqpClientDep, PgConnection
+from . import db, model
 
 
 async def start_suggestion(
-    req: model.StartSuggestionRequest, user_id: str, pg_conn: PgConnection
+    pg_conn: PgConnection,
+    amqp_client: AmqpClientDep,
+    req: model.StartSuggestionRequest,
+    user_id: str,
 ) -> model.StartSuggestionResponse:
     async with pg_conn.cursor() as cursor:
         # Verify that an experience with this id exists for the user
         exp = await cursor.execute(
-            'SELECT 1 FROM user_base_experience WHERE user_id = %s AND id = %s',
+            "SELECT 1 FROM user_base_experience WHERE user_id = %s AND id = %s",
             (user_id, req.experience_id),
         )
         exp = await exp.fetchone()
@@ -75,61 +56,88 @@ async def start_suggestion(
 
     # If all good, make the suggestion, then frontend will poll for status updates
     session_id = str(uuid.uuid4())
-    await create_sugg_session(
+    await db.create_sugg_session(
         pg_conn,
         session_id=session_id,
         user_id=user_id,
         experience_id=req.experience_id,
         bullet_id=req.bullet_id,
     )
-    return model.StartSuggestionResponse(id=session_id)
+    # The pooled connection only commits on dependency teardown (after the
+    # response) — commit now so the dispatcher sees the row when it consumes
+    # the job below.
+    await pg_conn.commit()
+
+    job = AmqpSuggestionJob(session_id=session_id)
+    publisher = await amqp_client.get_publisher(BULLET_SUGG_EXCHANGE_NAME, "#")
+    await publisher.publish(job.to_message())
+    # Dispatch a job for the agent to begin parsing
+    return model.StartSuggestionResponse(session_id=session_id)
 
 
-def get_suggestion(pg_conn: PgConnection, user_id: str, session_id: str) -> model.SuggestionStatusResponse:
-    pass
+async def get_suggestion_status(
+    pg_conn: PgConnection, user_id: str, session_id: str
+) -> model.SuggestionStatusResponse:
+    res = await db.get_sugg_session(
+        pg_conn=pg_conn, user_id=user_id, session_id=session_id
+    )
+    if not res:
+        raise HTTPException(status_code=404, detail="Suggestion session not found")
+
+    return model.SuggestionStatusResponse(
+        status=res.status,
+        pending_question=res.pending_question,
+        result=res.result,
+    )
 
 
 async def answer_suggestion(
-    user_id: str, req: model.AnswerRequest, pg_conn: PgConnection
+    user_id: str, session_id: str, req: model.AnswerRequest, pg_conn: PgConnection
 ) -> dict:
-    session_id = req.session_id
-    async with pg_conn.cursor() as cursor:
-        session = get_sugg_session(cursor, session_id, user_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Suggestion session not found")
-        if session.status != "WAITING_FOR_INPUT":
-            raise HTTPException(status_code=409, detail="Session is not awaiting input")
+    session = await db.get_sugg_session(
+        conn=pg_conn, session_id=session_id, user_id=user_id
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Suggestion session not found")
+    if session.status != "WAITING_FOR_INPUT":
+        raise HTTPException(status_code=409, detail="Session is not awaiting input")
 
-        # TODO: publish AmqpSuggestionJob(session_id=..., type="answer",
-        # text=req.text) to resume the agent's checkpoint.
-        _answered.add(session_id)
-        _polls[session_id] = 0
-        update_sugg_session(cursor, session_id, status="PROCESSING", pending_question=None)
-        return {"ok": True}
-
-
-def accept_suggestion(user_id: str, session_id: str) -> dict:
-    pg_client = get_pg_client(PG_URL)
-    try:
-        session = get_sugg_session(pg_client, session_id, user_id)
-        if not session:
-            raise HTTPException(status_code=404, detail="Suggestion session not found")
-        # TODO: apply session.result — update user_base_experience_bullet.bullet
-        # for BULLET targets; each {bulletId, text} for EXPERIENCE targets.
-        delete_sugg_session(pg_client, session_id, user_id)
-        _polls.pop(session_id, None)
-        _answered.discard(session_id)
-        return {"ok": True}
-    finally:
-        pg_client.close()
+    await db.update_sugg_session(
+        pg_conn, session_id, status="PROCESSING", pending_question=None, result=None
+    )
+    # TODO: publish an answer job carrying req.text so the agent's checkpoint
+    # resumes with the user's reply.
+    return {"ok": True}
 
 
-def dismiss_suggestion(user_id: str, session_id: str) -> dict:
-    pg_client = get_pg_client(PG_URL)
-    try:
-        delete_sugg_session(pg_client, session_id, user_id)
-        _polls.pop(session_id, None)
-        _answered.discard(session_id)
-        return {"ok": True}
-    finally:
-        pg_client.close()
+async def accept_suggestion(
+    user_id: str, session_id: str, pg_conn: PgConnection
+) -> dict:
+    session = await db.get_sugg_session(
+        conn=pg_conn, session_id=session_id, user_id=user_id
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Suggestion session not found")
+
+    # Single-bullet target: apply the suggested text directly. Experience-level
+    # results are JSON {bullet_id, text}[] — apply once that shape lands.
+    if session.bullet_id is not None and session.result:
+        async with pg_conn.cursor() as cursor:
+            await cursor.execute(
+                """
+                UPDATE user_base_experience_bullet
+                SET bullet = %s
+                WHERE id = %s AND user_experience_id = %s
+                """,
+                (session.result, session.bullet_id, session.experience_id),
+            )
+
+    await db.delete_sugg_session(pg_conn, session_id, user_id)
+    return {"ok": True}
+
+
+async def dismiss_suggestion(
+    user_id: str, session_id: str, pg_conn: PgConnection
+) -> dict:
+    await db.delete_sugg_session(pg_conn, session_id, user_id)
+    return {"ok": True}

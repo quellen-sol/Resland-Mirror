@@ -18,25 +18,6 @@ class UserSuggestionRow:
     created_at: datetime
 
 
-# class_row maps column names to dataclass fields — the table's camelCase
-# columns need explicit aliases to match the snake_case fields.
-_SELECT = """
-    SELECT id, user_id, experience_id,
-           bullet_id, pending_question,
-           result, status, created_at
-    FROM user_suggestion
-"""
-
-async def get_sugg_session(
-    conn: PgConnection, session_id: str, user_id: str
-) -> UserSuggestionRow | None:
-    async with conn.cursor(row_factory=class_row(UserSuggestionRow)) as cur:
-        return cur.execute(
-            f'{_SELECT} WHERE id = %s AND user_id = %s',
-            (session_id, user_id),
-        ).fetchone()
-
-
 async def create_sugg_session(
     conn: PgConnection,
     session_id: str,
@@ -53,6 +34,22 @@ async def create_sugg_session(
             (session_id, user_id, experience_id, bullet_id),
         )
     return session_id
+
+
+async def get_sugg_session(
+    pg_conn: PgConnection, user_id: str, session_id: str
+) -> UserSuggestionRow | None:
+    async with pg_conn.cursor(row_factory=class_row(UserSuggestionRow)) as cursor:
+        res = await cursor.execute(
+            """
+            SELECT * FROM user_suggestion WHERE id = %s AND user_id = %s
+            """,
+            (session_id, user_id),
+        )
+
+        row = await res.fetchone()
+
+    return row
 
 
 async def update_sugg_session(
@@ -74,9 +71,11 @@ async def update_sugg_session(
         )
 
 
-async def delete_sugg_session(conn: PgConnection, session_id: str, user_id: str) -> None:
+async def delete_sugg_session(
+    conn: PgConnection, session_id: str, user_id: str
+) -> None:
     async with conn.cursor() as cursor:
         await cursor.execute(
-            'DELETE FROM user_suggestion WHERE id = %s AND user_id = %s',
+            "DELETE FROM user_suggestion WHERE id = %s AND user_id = %s",
             (session_id, user_id),
         )

@@ -17,18 +17,20 @@ import {
 import { cn } from "cn";
 
 const POLL_INTERVAL_MS = 3000;
+const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
 
 type SuggestionStatus =
   | "PENDING"
   | "PROCESSING"
   | "WAITING_FOR_INPUT"
   | "COMPLETED"
-  | "FAILED";
+  | "FAILED"
+  | "TIMED_OUT";
 
 interface SuggestionSession {
-  id: string;
+  session_id: string;
   status: SuggestionStatus;
-  pendingQuestion?: string | null;
+  pending_question?: string | null;
   result?: string | null;
 }
 
@@ -54,6 +56,7 @@ export default function SuggestionDialog({
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const finishedRef = useRef(false);
+  const startedAtRef = useRef<number>(0);
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -73,14 +76,15 @@ export default function SuggestionDialog({
   async function start() {
     if (session || !apiBaseUrl) return;
     try {
-      const { id } = await apiFetch("/suggestions", {
+      startedAtRef.current = Date.now();
+      const { session_id } = await apiFetch("/suggestions", {
         method: "POST",
         body: JSON.stringify({
           experience_id: experienceId,
           bullet_id: bulletId ?? null,
         }),
       });
-      setSession({ id, status: "PROCESSING" });
+      setSession({ session_id, status: "PROCESSING" });
     } catch (error) {
       toast.error("Couldn't start suggestion", {
         description: error instanceof Error ? error.message : String(error),
@@ -96,10 +100,18 @@ export default function SuggestionDialog({
 
     let cancelled = false;
     const interval = setInterval(async () => {
+      if (Date.now() - startedAtRef.current > SESSION_TIMEOUT_MS) {
+        clearInterval(interval);
+        setSession((s) => (s ? { ...s, status: "TIMED_OUT" } : s));
+        void apiFetch(`/suggestions/${session.session_id}/dismiss`, {
+          method: "POST",
+        }).catch(() => {});
+        return;
+      }
       try {
-        const data = (await apiFetch(`/suggestions/${session.id}`)) as Omit<
+        const data = (await apiFetch(`/suggestions/${session.session_id}`)) as Omit<
           SuggestionSession,
-          "id"
+          "session_id"
         >;
         if (cancelled) return;
         setSession((s) => (s ? { ...s, ...data } : s));
@@ -113,14 +125,14 @@ export default function SuggestionDialog({
       clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, session?.id, session?.status]);
+  }, [open, session?.session_id, session?.status]);
 
   async function sendAnswer() {
     const text = answer.trim();
     if (!text || !session) return;
     setBusy(true);
     try {
-      await apiFetch(`/suggestions/${session.id}/answer`, {
+      await apiFetch(`/suggestions/${session.session_id}/answer`, {
         method: "POST",
         body: JSON.stringify({ text }),
       });
@@ -140,7 +152,7 @@ export default function SuggestionDialog({
     setBusy(true);
     finishedRef.current = true;
     try {
-      await apiFetch(`/suggestions/${session.id}/accept`, { method: "POST" });
+      await apiFetch(`/suggestions/${session.session_id}/accept`, { method: "POST" });
       toast.success("Suggestion applied");
       setOpen(false);
       router.refresh();
@@ -157,7 +169,7 @@ export default function SuggestionDialog({
     finishedRef.current = true;
     try {
       if (session) {
-        await apiFetch(`/suggestions/${session.id}/dismiss`, { method: "POST" });
+        await apiFetch(`/suggestions/${session.session_id}/dismiss`, { method: "POST" });
       }
     } catch {
       // Dismiss is best-effort — close regardless.
@@ -168,11 +180,15 @@ export default function SuggestionDialog({
   const waiting = session?.status === "WAITING_FOR_INPUT";
   const done = session?.status === "COMPLETED";
   const failed = session?.status === "FAILED";
+  const timedOut = session?.status === "TIMED_OUT";
 
   return (
     <Dialog
       open={open}
-      onOpenChange={(v) => {
+      onOpenChange={(v, details) => {
+        // Keep open on backdrop clicks — the session is in-flight work;
+        // Escape and the X button still close it.
+        if (!v && details.reason === "outside-press") return;
         setOpen(v);
         if (v) void start();
       }}
@@ -226,7 +242,7 @@ export default function SuggestionDialog({
           {waiting && (
             <div className="flex flex-col gap-3">
               <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-sm text-purple-200">
-                {session.pendingQuestion}
+                {session.pending_question}
               </div>
               <div className="flex gap-2">
                 <Input
@@ -285,6 +301,13 @@ export default function SuggestionDialog({
           {failed && (
             <p className="text-sm text-red-400">
               Something went wrong — close this and try again.
+            </p>
+          )}
+
+          {timedOut && (
+            <p className="text-sm text-amber-400">
+              This is taking too long — we couldn&apos;t finish the request.
+              Close this and try again.
             </p>
           )}
         </div>

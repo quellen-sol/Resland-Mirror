@@ -2,7 +2,11 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class JobHandle:
+class RunnerError(Exception):
+    pass
+
+
+class JobHandle(ABC):
     job_data: Any
 
     @abstractmethod

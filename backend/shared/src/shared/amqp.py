@@ -26,7 +26,6 @@ BULLET_SUGG_DLQ_NAME = "bullet-sugg-dlq"
 BULLET_SUGG_DLX_NAME = "bullet-sugg-dlx"
 
 
-@dataclass
 class BaseAmqpJob:
     def to_bytes(self) -> bytes:
         as_json = json.dumps(self.__dict__)
@@ -41,11 +40,13 @@ class AmqpResumeJob(BaseAmqpJob):
     s3_key: str
     job_id: str
     user_id: str
+    job_type: str = "resume"
 
 
 @dataclass
 class AmqpSuggestionJob(BaseAmqpJob):
     session_id: str
+    job_type: str = "suggestion"
 
 
 class AmqpClientException(Exception):
@@ -79,7 +80,7 @@ class AmqpClient:
             await self.amqp_connection.close()
             self.amqp_connection = None
 
-    async def get_publisher(self, exchange_name: str, routing_key: str):
+    async def get_publisher(self, exchange_name: str, routing_key: str = "#"):
         if not self.amqp_connection:
             raise AmqpClientException("AMQPClient not connected")
         exchange_addr = AddressHelper.exchange_address(exchange_name, routing_key)

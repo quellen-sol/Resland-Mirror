@@ -1,20 +1,8 @@
 import queue
 import threading
+from abc import abstractmethod
 from typing import Any
 
-import puremagic
-from shared.pg import get_pg_client
-from shared.s3 import get_s3_client
-
-from ..agents.docx_parser import agent_parse_docx
-from ..doc_parsers.docx import parse_docx
-from ..env_vars import (
-    AWS_ACCESS_KEY_ID,
-    AWS_SECRET_ACCESS_KEY,
-    PG_URL,
-    S3_RESUME_BUCKET,
-)
-from .db_ops import upsert_user_profile
 from .generic import JobHandle, JobRunner
 
 
@@ -37,8 +25,6 @@ class LocalThreadedJobHandle(JobHandle):
         else:
             return "FAILED"
 
-        # If not, see if thread is alive, and if so return PROCESSING
-        # If not, then COMPLETED
         if self.thread.is_alive():
             return "PROCESSING"
         else:
@@ -55,70 +41,6 @@ class LocalThreadJobRunner(JobRunner):
         t.start()
         return LocalThreadedJobHandle(self.job_data, t, q)
 
+    @abstractmethod
     def task(self, queue: queue.Queue):
-        try:
-            if not self.job_data:
-                raise ValueError("Job data is required")
-
-            if not isinstance(self.job_data, dict):
-                raise TypeError("Job data must be a dictionary")
-
-            print("Creating S3 Client")
-            s3_client = get_s3_client(
-                aws_access_key_id=AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-            )
-            pg_client = get_pg_client(PG_URL)
-
-            if not self.job_data.get("job_id"):
-                raise ValueError("Job ID is required")
-
-            # user_id in the job message is the Auth0 sub — the user PK now
-            user_id = self.job_data["user_id"]
-            user_result = pg_client.execute(
-                """
-                    SELECT auth0_id from "user" where auth0_id = %s
-                """,
-                [user_id],
-            ).fetchone()
-            if not user_result:
-                raise ValueError("User not found")
-
-            # Pull document from s3
-            if not self.job_data.get("s3_key"):
-                raise ValueError("S3 key is required")
-            s3_key = self.job_data["s3_key"]
-            print(f"Pulling document from S3: {s3_key}")
-            s3_response = s3_client.get_object(Bucket=S3_RESUME_BUCKET, Key=s3_key)
-            if not s3_response:
-                raise ValueError("No response from S3")
-            print(f"S3 response: {s3_response}")
-            # Parse based on filetype with puremagic
-            body = s3_response["Body"]
-            if not body:
-                raise ValueError("No body found in S3 response")
-            print("Reading body from S3 response...")
-            body_data = body.read()
-            file_type = puremagic.from_string(body_data)
-            print(f"File type: {file_type}")
-            profile_queue = None
-
-            # Parse document based on file type
-            match file_type:
-                case ".docx":
-                    parsed_text = parse_docx(body_data)
-                    profile_queue = agent_parse_docx(parsed_text)
-                case _:
-                    raise TypeError("Unsupported file type")
-
-            # Agent will have sent results here, then we write to pg
-            if profile_queue.empty():
-                raise ValueError("No profile found in queue")
-            profile = profile_queue.get()
-            # Upsert all relevant info to pg
-            upsert_user_profile(pg_client, user_id, profile)
-
-        except Exception as e:
-            print(f"Error in job runner: {e}")
-            queue.put((threading.current_thread().name, e))
-            return
+        pass

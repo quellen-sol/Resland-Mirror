@@ -7,20 +7,15 @@ class StartSuggestionRequest(BaseModel):
     prompt: str | None = None
 
 
-class GetSuggestionRequest(BaseModel):
-    session_id: str
-
-
 class AnswerRequest(BaseModel):
     text: str
-    session_id: str
 
 
 class StartSuggestionResponse(BaseModel):
-    id: str
+    session_id: str
 
 
 class SuggestionStatusResponse(BaseModel):
     status: str
-    pendingQuestion: str | None = None
+    pending_question: str | None = None
     result: str | None = None

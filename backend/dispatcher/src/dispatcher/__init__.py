@@ -1,34 +1,39 @@
 import asyncio
-import signal
 
-from shared.amqp import RESUME_QUEUE_NAME, AmqpClient
+from rabbitmq_amqp_python_client import AsyncEnvironment
+from shared.amqp import (
+    BULLET_SUGG_QUEUE_NAME,
+    RESUME_QUEUE_NAME,
+    AddressHelper,
+)
 
-from .amqp_handler import DispatcherHandler
 from .env_vars import AMQP_URL
+from .handlers.resume_handler import ResumeHandler
+from .handlers.suggestion_handler import SuggestionHandler
 
 
 async def async_main() -> None:
-    amqp_client = AmqpClient(AMQP_URL)
-    # Declarations are idempotent — whichever service starts first creates the
-    # topology, so consumers never race a missing queue.
-    await amqp_client.setup()
+    amqp_env = AsyncEnvironment(uri=AMQP_URL)
 
-    consumer = await amqp_client.get_consumer(
-        queue_name=RESUME_QUEUE_NAME, handler=DispatcherHandler()
+    # Resume handler and consumer
+    resume_conn = await amqp_env.connection()
+    await resume_conn.dial()
+    resume_queue_addr = AddressHelper.queue_address(RESUME_QUEUE_NAME)
+    resume_consumer = await resume_conn.consumer(
+        destination=resume_queue_addr, message_handler=ResumeHandler()
     )
-    print("Dispatcher connected, starting consumer...")
-    await consumer.run()
 
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, stop.set)
+    # Suggestions handler and consumer
+    sugg_conn = await amqp_env.connection()
+    await sugg_conn.dial()
+    sugg_queue_addr = AddressHelper.queue_address(BULLET_SUGG_QUEUE_NAME)
+    sugg_consumer = await sugg_conn.consumer(
+        destination=sugg_queue_addr, message_handler=SuggestionHandler()
+    )
 
-    try:
-        await stop.wait()
-    finally:
-        await consumer.stop()
-        await amqp_client.close()
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(resume_consumer.run())
+        tg.create_task(sugg_consumer.run())
 
 
 def main() -> None:
