@@ -104,7 +104,7 @@ class UserDocxProfile:
     projects: list[UserProjectEntry]
 
 
-class BuildAgentOutput:
+class ResumeAgentOutput:
     agent: Any
     profile_queue: queue.Queue[UserDocxProfile]
 
@@ -114,7 +114,7 @@ class BuildAgentOutput:
 
 
 def agent_parse_docx(doc: Document):
-    agent_output = build_agent(doc)
+    agent_output = build_resume_agent(doc)
     print("Starting agent...")
     agent_output.agent.invoke(
         {"messages": [{"role": "user", "content": "Parse this document"}]}
@@ -123,7 +123,7 @@ def agent_parse_docx(doc: Document):
     return agent_output.profile_queue
 
 
-def build_agent(doc: Document):
+def build_resume_agent(doc: Document):
     profile_queue = queue.Queue[UserDocxProfile]()
 
     @tool
@@ -226,4 +226,4 @@ def build_agent(doc: Document):
         system_prompt=DOCX_AGENT_PARSER_SYSTEM_PROMPT,
     )
 
-    return BuildAgentOutput(agent=agent, profile_queue=profile_queue)
+    return ResumeAgentOutput(agent=agent, profile_queue=profile_queue)

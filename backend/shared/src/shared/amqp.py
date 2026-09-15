@@ -46,6 +46,7 @@ class AmqpResumeJob(BaseAmqpJob):
 @dataclass
 class AmqpSuggestionJob(BaseAmqpJob):
     session_id: str
+    answer: str | None = None
     job_type: str = "suggestion"
 
 

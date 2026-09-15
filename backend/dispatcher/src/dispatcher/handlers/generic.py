@@ -32,7 +32,11 @@ class GenericHandlerWithCleanup(AMQPMessagingHandler):
         self.cleanup_thread = threading.Thread(
             target=self._cleanup_finished_jobs, daemon=True
         )
+
         self.cleanup_thread.start()
+
+    def update_db_status(self, job_id: str, status: str):
+        pass
 
     def _cleanup_finished_jobs(self):
         while True:
@@ -41,11 +45,7 @@ class GenericHandlerWithCleanup(AMQPMessagingHandler):
             for job_id, (handle, event) in list(self.running_jobs.items()):
                 poll_result = handle.poll()
                 # Update job in db
-                print(f"Updating job {job_id} with status {poll_result}")
-                self.pg_client.execute(
-                    "UPDATE user_upload_job SET status = %s WHERE id = %s",
-                    (poll_result, job_id),
-                )
+                self.update_db_status(job_id, poll_result)
 
                 match poll_result:
                     case "COMPLETED":

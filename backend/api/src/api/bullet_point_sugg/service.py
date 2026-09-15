@@ -1,3 +1,4 @@
+import json
 import uuid
 
 from fastapi import HTTPException
@@ -92,10 +93,14 @@ async def get_suggestion_status(
 
 
 async def answer_suggestion(
-    user_id: str, session_id: str, req: model.AnswerRequest, pg_conn: PgConnection
+    user_id: str,
+    session_id: str,
+    req: model.AnswerRequest,
+    pg_conn: PgConnection,
+    amqp_client: AmqpClientDep,
 ) -> dict:
     session = await db.get_sugg_session(
-        conn=pg_conn, session_id=session_id, user_id=user_id
+        pg_conn=pg_conn, session_id=session_id, user_id=user_id
     )
     if not session:
         raise HTTPException(status_code=404, detail="Suggestion session not found")
@@ -105,8 +110,14 @@ async def answer_suggestion(
     await db.update_sugg_session(
         pg_conn, session_id, status="PROCESSING", pending_question=None, result=None
     )
-    # TODO: publish an answer job carrying req.text so the agent's checkpoint
-    # resumes with the user's reply.
+    # Commit before publishing — the pooled connection otherwise commits at
+    # teardown and could overwrite the dispatcher's result write.
+    await pg_conn.commit()
+
+    job = AmqpSuggestionJob(session_id=session_id, answer=req.text)
+    publisher = await amqp_client.get_publisher(BULLET_SUGG_EXCHANGE_NAME, "#")
+    await publisher.publish(job.to_message())
+
     return {"ok": True}
 
 
@@ -114,22 +125,27 @@ async def accept_suggestion(
     user_id: str, session_id: str, pg_conn: PgConnection
 ) -> dict:
     session = await db.get_sugg_session(
-        conn=pg_conn, session_id=session_id, user_id=user_id
+        pg_conn=pg_conn, session_id=session_id, user_id=user_id
     )
     if not session:
         raise HTTPException(status_code=404, detail="Suggestion session not found")
 
-    # Single-bullet target: apply the suggested text directly. Experience-level
-    # results are JSON {bullet_id, text}[] — apply once that shape lands.
-    if session.bullet_id is not None and session.result:
-        async with pg_conn.cursor() as cursor:
+    result = session.result
+    if not result or not isinstance(result, str) or result == "":
+        raise HTTPException(status_code=500, detail="No result to accept")
+
+    # Results are stored as a JSON array of {bullet_id, suggestion}.
+    result_parsed: list[dict] = json.loads(result)
+
+    async with pg_conn.transaction(), pg_conn.cursor() as cursor:
+        for sugg in result_parsed:
             await cursor.execute(
                 """
-                UPDATE user_base_experience_bullet
-                SET bullet = %s
-                WHERE id = %s AND user_experience_id = %s
-                """,
-                (session.result, session.bullet_id, session.experience_id),
+                    UPDATE user_base_experience_bullet
+                    SET bullet = %s
+                    WHERE id = %s AND user_experience_id = %s
+                    """,
+                (sugg["suggestion"], sugg["bullet_id"], session.experience_id),
             )
 
     await db.delete_sugg_session(pg_conn, session_id, user_id)

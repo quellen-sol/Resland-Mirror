@@ -79,3 +79,10 @@ async def delete_sugg_session(
             "DELETE FROM user_suggestion WHERE id = %s AND user_id = %s",
             (session_id, user_id),
         )
+        # The dispatcher's langgraph checkpointer keys conversation state on
+        # thread_id = session_id — drop it with the session.
+        for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+            await cursor.execute(
+                f"DELETE FROM {table} WHERE thread_id = %s",
+                (session_id,),
+            )

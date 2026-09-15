@@ -1,10 +1,71 @@
+import json
+from dataclasses import asdict
+
 from psycopg import Connection
+from psycopg.rows import class_row
 
 from ..agents.docx_parser import UserDocxProfile
+from ..agents.suggestions import FetchSuggestionRow, SuggestionsResult
 
 
 class DbOpError(Exception):
     pass
+
+
+def fetch_suggestion_rows(
+    pg_client: Connection, session_id: str
+) -> list[FetchSuggestionRow]:
+    with pg_client.cursor(row_factory=class_row(FetchSuggestionRow)) as cursor:
+        return cursor.execute(
+            """
+            SELECT
+                us.pending_question,
+                us.status,
+                us.result,
+                ue.company_name,
+                ue.description,
+                ue.start_date,
+                ue.end_date,
+                ue.title,
+                ub.id as bullet_id,
+                ub.bullet
+            FROM user_suggestion us
+            JOIN user_base_experience ue ON ue.id = us.experience_id
+            join user_base_experience_bullet ub on ub.user_experience_id = ue.id
+            WHERE us.id = %s
+            and (us.bullet_id is null or ub.id = us.bullet_id)
+            """,
+            [session_id],
+        ).fetchall()
+
+
+def set_suggestion_question(
+    pg_client: Connection, session_id: str, question: str | None
+):
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            UPDATE user_suggestion
+            SET pending_question = %s, status = 'WAITING_FOR_INPUT'
+            WHERE id = %s
+            """,
+            (question, session_id),
+        )
+
+
+def set_suggestion_result(
+    pg_client: Connection, session_id: str, result: SuggestionsResult
+):
+    payload = json.dumps([asdict(s) for s in result.suggestions])
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            UPDATE user_suggestion
+            SET result = %s, status = 'COMPLETED', pending_question = NULL
+            WHERE id = %s
+            """,
+            (payload, session_id),
+        )
 
 
 def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxProfile):
@@ -29,6 +90,16 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
         )
 
         # Bullets FK to experiences — delete children before parents.
+        # Also from suggestions
+        pg_client.execute(
+            """
+            DELETE FROM user_suggestion WHERE experience_id IN (
+                SELECT id FROM user_base_experience WHERE user_id = %s
+            )
+            """,
+            [user_id],
+        )
+
         pg_client.execute(
             """
             DELETE FROM user_base_experience_bullet WHERE user_experience_id IN (

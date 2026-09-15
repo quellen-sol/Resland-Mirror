@@ -1,4 +1,6 @@
+from collections.abc import Generator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import psycopg_pool
 from fastapi import FastAPI
@@ -12,7 +14,7 @@ from .resume_upload.router import router as resume_upload_router
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> Generator[None, Any, None]:
     # One shared client for the process — setup declares topology idempotently.
     deps.amqp_client = AmqpClient(AMQP_URL)
     await deps.amqp_client.setup()

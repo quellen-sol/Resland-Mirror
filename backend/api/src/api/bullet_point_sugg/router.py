@@ -32,9 +32,14 @@ async def answer_suggestion(
     session_id: str,
     req: model.AnswerRequest,
     pg_conn: PgConnection,
+    amqp_client: AmqpClientDep,
 ):
     return await service.answer_suggestion(
-        user_id=user_id, session_id=session_id, req=req, pg_conn=pg_conn
+        user_id=user_id,
+        session_id=session_id,
+        req=req,
+        pg_conn=pg_conn,
+        amqp_client=amqp_client,
     )
 
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -177,6 +177,19 @@ export default function SuggestionDialog({
     setOpen(false);
   }
 
+  // Result is a JSON array of {bullet_id, suggestion} produced by the agent.
+  const suggestions = useMemo(() => {
+    if (!session?.result) return [];
+    try {
+      const parsed = JSON.parse(session.result);
+      return Array.isArray(parsed)
+        ? (parsed as { bullet_id: number; suggestion: string }[])
+        : [];
+    } catch {
+      return [];
+    }
+  }, [session?.result]);
+
   const waiting = session?.status === "WAITING_FOR_INPUT";
   const done = session?.status === "COMPLETED";
   const failed = session?.status === "FAILED";
@@ -274,9 +287,11 @@ export default function SuggestionDialog({
                 <p className="text-xs font-medium tracking-wide text-emerald-400 uppercase">
                   Suggested
                 </p>
-                <p className="mt-1 text-sm whitespace-pre-wrap text-emerald-100">
-                  {session.result}
-                </p>
+                <ul className="mt-1 list-disc space-y-1 pl-4 text-sm whitespace-pre-wrap text-emerald-100">
+                  {suggestions.map((s) => (
+                    <li key={s.bullet_id}>{s.suggestion}</li>
+                  ))}
+                </ul>
               </div>
               <div className="flex justify-end gap-2">
                 <Button
