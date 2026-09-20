@@ -48,6 +48,19 @@ services:
     networks:
       - resland_network
 
+  postgres:
+    image: postgres:18
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: "resland"
+      POSTGRES_PASSWORD: "resland"
+    volumes:
+      - db-data:/var/lib/postgresql/18/docker
+
 networks:
   resland_network:
     driver: bridge
+
+volumes:
+  db-data:
