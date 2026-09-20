@@ -6,6 +6,17 @@ from psycopg.rows import class_row
 
 from ..agents.docx_parser import UserDocxProfile
 from ..agents.suggestions import FetchSuggestionRow, SuggestionsResult
+from ..agents.tailor import (
+    FetchTailorRunRow,
+    TailoredResume,
+    TailorEducationRow,
+    TailorExperienceRow,
+    TailorHeaderRow,
+    TailorProfile,
+    TailorProjectRow,
+    TailorSkillRow,
+    TailorSocialLinkRow,
+)
 
 
 class DbOpError(Exception):
@@ -66,6 +77,133 @@ def set_suggestion_result(
             WHERE id = %s
             """,
             (payload, session_id),
+        )
+
+
+def fetch_tailor_run(
+    pg_client: Connection, run_id: str
+) -> FetchTailorRunRow | None:
+    with pg_client.cursor(row_factory=class_row(FetchTailorRunRow)) as cursor:
+        return cursor.execute(
+            """
+            SELECT id, user_id, job_description, status
+            FROM user_tailor_run WHERE id = %s
+            """,
+            [run_id],
+        ).fetchone()
+
+
+def fetch_tailor_profile(pg_client: Connection, user_id: str) -> TailorProfile:
+    with pg_client.cursor(row_factory=class_row(TailorHeaderRow)) as cursor:
+        header = cursor.execute(
+            """
+            SELECT full_name, email, phone, location
+            FROM "user" WHERE auth0_id = %s
+            """,
+            [user_id],
+        ).fetchone()
+
+    with pg_client.cursor(row_factory=class_row(TailorSocialLinkRow)) as cursor:
+        social_links = cursor.execute(
+            """
+            SELECT link, type FROM user_social_link WHERE user_id = %s
+            """,
+            [user_id],
+        ).fetchall()
+
+    with pg_client.cursor(row_factory=class_row(TailorExperienceRow)) as cursor:
+        experiences = cursor.execute(
+            """
+            SELECT
+                e.id AS experience_id,
+                e.company_name,
+                e.title,
+                e.start_date,
+                e.end_date,
+                e.description,
+                b.id AS bullet_id,
+                b.bullet,
+                b.bullet_order
+            FROM user_base_experience e
+            LEFT JOIN user_base_experience_bullet b
+                ON b.user_experience_id = e.id
+            WHERE e.user_id = %s
+            ORDER BY e.created_at DESC, b.bullet_order ASC
+            """,
+            [user_id],
+        ).fetchall()
+
+    with pg_client.cursor(row_factory=class_row(TailorSkillRow)) as cursor:
+        skills = cursor.execute(
+            """
+            SELECT name, category FROM user_base_skill WHERE user_id = %s
+            """,
+            [user_id],
+        ).fetchall()
+
+    with pg_client.cursor(row_factory=class_row(TailorEducationRow)) as cursor:
+        education = cursor.execute(
+            """
+            SELECT institution, degree, field_of_study, start_date, end_date,
+                   description
+            FROM user_base_education WHERE user_id = %s
+            """,
+            [user_id],
+        ).fetchall()
+
+    with pg_client.cursor(row_factory=class_row(TailorProjectRow)) as cursor:
+        projects = cursor.execute(
+            """
+            SELECT name, link, description, start_date, end_date
+            FROM user_base_project WHERE user_id = %s
+            """,
+            [user_id],
+        ).fetchall()
+
+    return TailorProfile(
+        header=header,
+        social_links=social_links,
+        experiences=experiences,
+        skills=skills,
+        education=education,
+        projects=projects,
+    )
+
+
+def set_tailor_question(pg_client: Connection, run_id: str, question: str | None):
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            UPDATE user_tailor_run
+            SET pending_question = %s, status = 'WAITING_FOR_INPUT'
+            WHERE id = %s
+            """,
+            (question, run_id),
+        )
+
+
+def set_tailor_result(pg_client: Connection, run_id: str, result: TailoredResume):
+    payload = result.model_dump_json()
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            UPDATE user_tailor_run
+            SET result = %s, status = 'COMPLETED', pending_question = NULL
+            WHERE id = %s
+            """,
+            (payload, run_id),
+        )
+
+
+def set_tailor_failed(pg_client: Connection, run_id: str):
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            UPDATE user_tailor_run
+            SET status = 'FAILED'
+            WHERE id = %s AND status NOT IN ('COMPLETED')
+            """,
+            (run_id,),
         )
 
 

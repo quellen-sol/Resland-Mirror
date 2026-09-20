@@ -36,6 +36,10 @@
       "model": "UserSuggestion",
       "namespace": "public"
     },
+    "user_tailor_run": {
+      "model": "UserTailorRun",
+      "namespace": "public"
+    },
     "user_upload_job": {
       "model": "UserUploadJob",
       "namespace": "public"
@@ -97,6 +101,27 @@
               {
                 "name": "COMPLETED",
                 "value": "COMPLETED"
+              }
+            ]
+          },
+          "TailorStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "PROCESSING",
+                "value": "PROCESSING"
+              },
+              {
+                "name": "WAITING_FOR_INPUT",
+                "value": "WAITING_FOR_INPUT"
+              },
+              {
+                "name": "COMPLETED",
+                "value": "COMPLETED"
+              },
+              {
+                "name": "FAILED",
+                "value": "FAILED"
               }
             ]
           }
@@ -852,6 +877,109 @@
               },
               "namespaceId": "public",
               "table": "user_suggestion"
+            }
+          },
+          "UserTailorRun": {
+            "fields": {
+              "created_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "job_description": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "pending_question": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "result": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "TailorStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "user_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "user_id"
+                  ],
+                  "targetFields": [
+                    "auth0_id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "created_at": {
+                  "column": "created_at"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "job_description": {
+                  "column": "job_description"
+                },
+                "pending_question": {
+                  "column": "pending_question"
+                },
+                "result": {
+                  "column": "result"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "user_id": {
+                  "column": "user_id"
+                }
+              },
+              "namespaceId": "public",
+              "table": "user_tailor_run"
             }
           },
           "UserUploadJob": {
@@ -1664,6 +1792,100 @@
                 }
               ]
             },
+            "user_tailor_run": {
+              "checks": [
+                {
+                  "expression": "\"status\" IN ('PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED', 'FAILED')",
+                  "name": "user_tailor_run_status_check_fa868dec",
+                  "prefix": "user_tailor_run_status_check"
+                }
+              ],
+              "columns": {
+                "created_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "job_description": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "pending_question": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "result": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "PROCESSING"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "TailorStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "user_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "user_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_tailor_run"
+                  },
+                  "target": {
+                    "columns": [
+                      "auth0_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "user_id"
+                  ],
+                  "name": "user_tailor_run_user_id_idx_6c952402",
+                  "prefix": "user_tailor_run_user_id_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "user_upload_job": {
               "checks": [
                 {
@@ -1774,6 +1996,15 @@
                 "WAITING_FOR_INPUT",
                 "COMPLETED"
               ]
+            },
+            "TailorStatus": {
+              "kind": "valueSet",
+              "values": [
+                "PROCESSING",
+                "WAITING_FOR_INPUT",
+                "COMPLETED",
+                "FAILED"
+              ]
             }
           }
         },
@@ -1781,7 +2012,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "c922ffdeabd27a01d3cd2f3cabddfef92dd43eaf63acabacad4c2f2df8d84ecb"
+    "storageHash": "4cfa9de85dda60dd8eabf3b7d38fdfb73de17bf860102235b1e9c846e345aa23"
   },
   "capabilities": {
     "postgres": {

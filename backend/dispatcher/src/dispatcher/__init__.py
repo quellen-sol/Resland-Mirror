@@ -4,12 +4,14 @@ from rabbitmq_amqp_python_client import AsyncEnvironment
 from shared.amqp import (
     BULLET_SUGG_QUEUE_NAME,
     RESUME_QUEUE_NAME,
+    TAILOR_QUEUE_NAME,
     AddressHelper,
 )
 
 from .env_vars import AMQP_URL
 from .handlers.resume_handler import ResumeHandler
 from .handlers.suggestion_handler import SuggestionHandler
+from .handlers.tailor_handler import TailorHandler
 
 
 async def async_main() -> None:
@@ -31,9 +33,18 @@ async def async_main() -> None:
         destination=sugg_queue_addr, message_handler=SuggestionHandler()
     )
 
+    # Tailor handler and consumer
+    tailor_conn = await amqp_env.connection()
+    await tailor_conn.dial()
+    tailor_queue_addr = AddressHelper.queue_address(TAILOR_QUEUE_NAME)
+    tailor_consumer = await tailor_conn.consumer(
+        destination=tailor_queue_addr, message_handler=TailorHandler()
+    )
+
     async with asyncio.TaskGroup() as tg:
         tg.create_task(resume_consumer.run())
         tg.create_task(sugg_consumer.run())
+        tg.create_task(tailor_consumer.run())
 
 
 def main() -> None:

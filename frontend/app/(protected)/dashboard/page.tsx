@@ -7,6 +7,7 @@ import {
   GraduationCap,
   Link2,
   PenLine,
+  Sparkles,
 } from "lucide-react";
 import { auth0 } from "@/lib/auth0";
 import { getUser, getUserProfileData } from "@/lib/db";
@@ -86,6 +87,15 @@ export default async function DashboardPage() {
               accessToken={accessToken}
               disabled={activeJobIds.length > 0}
             />
+            <Link
+              href="/tailor"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800/60 hover:text-zinc-100",
+              )}
+            >
+              <Sparkles /> Tailor resume
+            </Link>
             <Link
               href="/edit-profile"
               className={cn(

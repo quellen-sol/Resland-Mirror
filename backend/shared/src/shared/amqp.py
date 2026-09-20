@@ -25,6 +25,11 @@ BULLET_SUGG_QUEUE_NAME = "bullet-sugg-queue"
 BULLET_SUGG_DLQ_NAME = "bullet-sugg-dlq"
 BULLET_SUGG_DLX_NAME = "bullet-sugg-dlx"
 
+TAILOR_EXCHANGE_NAME = "tailor-exchange"
+TAILOR_QUEUE_NAME = "tailor-queue"
+TAILOR_DLQ_NAME = "tailor-dlq"
+TAILOR_DLX_NAME = "tailor-dlx"
+
 
 class BaseAmqpJob:
     def to_bytes(self) -> bytes:
@@ -48,6 +53,13 @@ class AmqpSuggestionJob(BaseAmqpJob):
     session_id: str
     answer: str | None = None
     job_type: str = "suggestion"
+
+
+@dataclass
+class AmqpTailorJob(BaseAmqpJob):
+    run_id: str
+    answer: str | None = None
+    job_type: str = "tailor"
 
 
 class AmqpClientException(Exception):
@@ -200,6 +212,48 @@ class AmqpClient:
             ExchangeToQueueBindingSpecification(
                 source_exchange=BULLET_SUGG_DLX_NAME,
                 destination_queue=BULLET_SUGG_DLQ_NAME,
+                binding_key="#",
+            )
+        )
+
+        # Tailor
+        await manager.declare_exchange(
+            ExchangeSpecification(
+                name=TAILOR_DLX_NAME,
+                exchange_type=ExchangeType.topic,
+                is_auto_delete=True,
+                is_durable=False,
+            )
+        )
+        await manager.declare_queue(
+            ClassicQueueSpecification(name=TAILOR_DLQ_NAME, is_durable=True)
+        )
+        await manager.bind(
+            ExchangeToQueueBindingSpecification(
+                source_exchange=TAILOR_DLX_NAME,
+                destination_queue=TAILOR_DLQ_NAME,
+                binding_key="#",
+            )
+        )
+        await manager.declare_exchange(
+            ExchangeSpecification(
+                name=TAILOR_EXCHANGE_NAME,
+                exchange_type=ExchangeType.topic,
+                is_auto_delete=True,
+                is_durable=False,
+            )
+        )
+        await manager.declare_queue(
+            ClassicQueueSpecification(
+                name=TAILOR_QUEUE_NAME,
+                is_durable=True,
+                dead_letter_exchange=TAILOR_DLX_NAME,
+            )
+        )
+        await manager.bind(
+            ExchangeToQueueBindingSpecification(
+                source_exchange=TAILOR_EXCHANGE_NAME,
+                destination_queue=TAILOR_QUEUE_NAME,
                 binding_key="#",
             )
         )
