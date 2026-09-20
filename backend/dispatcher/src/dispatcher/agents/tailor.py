@@ -12,12 +12,12 @@ from langchain.messages import (
 )
 from langchain.tools import tool
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.errors import EmptyInputError
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from psycopg.rows import dict_row
 from pydantic import BaseModel
 
-from ..env_vars import TAILOR_MODEL
 from ..pg import pg_pool
 
 TAILOR_SYSTEM_PROMPT = """You tailor a user's resume to a specific job description.
@@ -66,6 +66,7 @@ class FetchTailorRunRow(BaseModel):
     user_id: str
     job_description: str
     status: str
+    model: str | None
 
 
 class TailorHeaderRow(BaseModel):
@@ -151,9 +152,14 @@ class TailorRunOutcome:
 
 
 def build_and_invoke_agent(
-    run_id: str, answer: str | None, run: FetchTailorRunRow, profile: TailorProfile
+    run_id: str,
+    answer: str | None,
+    run: FetchTailorRunRow,
+    profile: TailorProfile,
+    model_spec: str,
+    usage: dict,
 ) -> TailorRunOutcome:
-    model = init_chat_model(model=TAILOR_MODEL)
+    model = init_chat_model(model=model_spec)
     result_queue: queue.Queue[TailoredResume] = queue.Queue()
 
     # Tools
@@ -227,14 +233,15 @@ def build_and_invoke_agent(
 
     # Nodes
     def llm_call(state: State):
-        return {
-            "messages": [
-                model.invoke(
-                    [SystemMessage(content=TAILOR_SYSTEM_PROMPT)]
-                    + state["messages"]
-                )
-            ]
-        }
+        msg = model.invoke(
+            [SystemMessage(content=TAILOR_SYSTEM_PROMPT)] + state["messages"]
+        )
+        usage_meta = msg.usage_metadata or {}
+        usage["input_tokens"] += usage_meta.get("input_tokens") or 0
+        usage["output_tokens"] += usage_meta.get("output_tokens") or 0
+        if gen_id := msg.response_metadata.get("id"):
+            usage["generation_ids"].append(gen_id)
+        return {"messages": [msg]}
 
     def tool_node(state: State):
         """Performs the tool call"""
@@ -279,7 +286,13 @@ def build_and_invoke_agent(
 
         config = {"configurable": {"thread_id": run_id}}
         if answer is not None:
-            invoke_param: Command | dict = Command(resume=answer)
+            try:
+                agent.invoke(input=Command(resume=answer), config=config)
+            except EmptyInputError:
+                # A crashed run has pending nodes but no pending interrupt —
+                # Command(resume) has nothing to feed. None resumes the
+                # pending nodes from the checkpoint instead.
+                agent.invoke(input=None, config=config)
         else:
             invoke_param = {
                 "messages": [
@@ -289,8 +302,7 @@ def build_and_invoke_agent(
                     )
                 ]
             }
-
-        agent.invoke(input=invoke_param, config=config)
+            agent.invoke(input=invoke_param, config=config)
         snapshot = agent.get_state(config)
 
     if snapshot.next:

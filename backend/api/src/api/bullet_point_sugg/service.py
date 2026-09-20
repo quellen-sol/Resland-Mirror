@@ -4,6 +4,7 @@ import uuid
 from fastapi import HTTPException
 from shared.amqp import BULLET_SUGG_EXCHANGE_NAME, AmqpSuggestionJob
 
+from ..balance import require_balance, validate_model_choice
 from ..deps import AmqpClientDep, PgConnection
 from . import db, model
 
@@ -14,6 +15,28 @@ async def start_suggestion(
     req: model.StartSuggestionRequest,
     user_id: str,
 ) -> model.StartSuggestionResponse:
+    async with pg_conn.cursor() as cursor:
+        # Sessions are only deleted on accept/dismiss, so a surviving row is
+        # work the user hasn't finished with — hand it back to resume instead
+        # of erroring.
+        active = await cursor.execute(
+            """
+            SELECT id FROM user_suggestion
+            WHERE user_id = %s AND experience_id = %s
+              AND bullet_id IS NOT DISTINCT FROM %s
+              AND status IN ('PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED')
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (user_id, req.experience_id, req.bullet_id),
+        )
+        active = await active.fetchone()
+        if active:
+            return model.StartSuggestionResponse(session_id=active[0])
+
+    await require_balance(pg_conn, user_id)
+    chosen_model = await validate_model_choice(pg_conn, req.model)
+
     async with pg_conn.cursor() as cursor:
         # Verify that an experience with this id exists for the user
         exp = await cursor.execute(
@@ -37,24 +60,6 @@ async def start_suggestion(
             if not bullet:
                 raise HTTPException(status_code=404, detail="Bullet not found")
 
-        # Check if there is an active suggestion for this experience/bullet
-        active = await cursor.execute(
-            """
-            SELECT 1 FROM user_suggestion
-            WHERE user_id = %s AND experience_id = %s
-              AND bullet_id IS NOT DISTINCT FROM %s
-              AND status IN ('PROCESSING', 'WAITING_FOR_INPUT')
-            LIMIT 1
-            """,
-            (user_id, req.experience_id, req.bullet_id),
-        )
-        active = await active.fetchone()
-        if active:
-            raise HTTPException(
-                status_code=409,
-                detail="A suggestion is already in progress for this target",
-            )
-
     # If all good, make the suggestion, then frontend will poll for status updates
     session_id = str(uuid.uuid4())
     await db.create_sugg_session(
@@ -63,6 +68,7 @@ async def start_suggestion(
         user_id=user_id,
         experience_id=req.experience_id,
         bullet_id=req.bullet_id,
+        model=chosen_model,
     )
     # The pooled connection only commits on dependency teardown (after the
     # response) — commit now so the dispatcher sees the row when it consumes

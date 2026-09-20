@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "cn";
+import ModelSelect from "@/components/model-select";
+import { apiFetch as apiRequest, isInsufficientBalance } from "@/lib/api";
 
 const MAX_JD_CHARS = 10_000;
 const POLL_INTERVAL_MS = 3000;
@@ -69,7 +72,9 @@ export default function TailorForm({
   experiences: ExperienceMeta[];
   hasProfile: boolean;
 }) {
+  const router = useRouter();
   const [jd, setJd] = useState("");
+  const [model, setModel] = useState("");
   const [run, setRun] = useState<TailorRun | null>(null);
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
@@ -85,16 +90,7 @@ export default function TailorForm({
   }, [experiences]);
 
   async function apiFetch(path: string, init?: RequestInit) {
-    const res = await fetch(`${apiBaseUrl}/tailor${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {}),
-      },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    return res.json();
+    return apiRequest(accessToken, `/tailor${path}`, init);
   }
 
   async function start() {
@@ -105,13 +101,23 @@ export default function TailorForm({
       startedAtRef.current = Date.now();
       const { run_id } = await apiFetch("", {
         method: "POST",
-        body: JSON.stringify({ job_description: text }),
+        body: JSON.stringify({ job_description: text, model: model || null }),
       });
       setRun({ run_id, status: "PROCESSING" });
     } catch (error) {
-      toast.error("Couldn't start tailoring", {
-        description: error instanceof Error ? error.message : String(error),
-      });
+      if (isInsufficientBalance(error)) {
+        toast.error("Insufficient balance", {
+          description: "Top up to keep going.",
+          action: {
+            label: "Top up",
+            onClick: () => router.push("/billing"),
+          },
+        });
+      } else {
+        toast.error("Couldn't start tailoring", {
+          description: error instanceof Error ? error.message : String(error),
+        });
+      }
     } finally {
       setBusy(false);
     }
@@ -261,9 +267,16 @@ export default function TailorForm({
               >
                 {jd.length.toLocaleString()} / {MAX_JD_CHARS.toLocaleString()}
               </span>
-              <Button
-                onClick={start}
-                disabled={busy || !jd.trim()}
+              <div className="flex items-center gap-2">
+                <ModelSelect
+                  accessToken={accessToken}
+                  value={model}
+                  onChange={setModel}
+                  disabled={busy}
+                />
+                <Button
+                  onClick={start}
+                  disabled={busy || !jd.trim()}
                 className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
               >
                 {busy ? (
@@ -273,7 +286,8 @@ export default function TailorForm({
                     <Sparkles /> Tailor
                   </>
                 )}
-              </Button>
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

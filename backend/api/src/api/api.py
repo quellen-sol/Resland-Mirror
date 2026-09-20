@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from shared.amqp import AmqpClient
 
 from . import deps
+from .admin.router import router as admin_router
+from .billing.router import router as billing_router
 from .bullet_point_sugg.router import router as bullet_sugg_router
 from .env_vars import AMQP_URL, PG_URL
 from .resume_upload.router import router as resume_upload_router
@@ -50,3 +52,5 @@ app.add_middleware(
 app.include_router(resume_upload_router)
 app.include_router(bullet_sugg_router)
 app.include_router(tailor_router)
+app.include_router(billing_router)
+app.include_router(admin_router)

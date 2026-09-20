@@ -15,6 +15,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "cn";
+import ModelSelect from "@/components/model-select";
+import { apiFetch as apiRequest, isInsufficientBalance } from "@/lib/api";
 
 const POLL_INTERVAL_MS = 3000;
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -52,6 +54,7 @@ export default function SuggestionDialog({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [model, setModel] = useState("");
   const [session, setSession] = useState<SuggestionSession | null>(null);
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
@@ -61,16 +64,7 @@ export default function SuggestionDialog({
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
   async function apiFetch(path: string, init?: RequestInit) {
-    const res = await fetch(`${apiBaseUrl}/bullets${path}`, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-        ...(init?.headers ?? {}),
-      },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
-    return res.json();
+    return apiRequest(accessToken, `/bullets${path}`, init);
   }
 
   async function start() {
@@ -82,13 +76,24 @@ export default function SuggestionDialog({
         body: JSON.stringify({
           experience_id: experienceId,
           bullet_id: bulletId ?? null,
+          model: model || null,
         }),
       });
       setSession({ session_id, status: "PROCESSING" });
     } catch (error) {
-      toast.error("Couldn't start suggestion", {
-        description: error instanceof Error ? error.message : String(error),
-      });
+      if (isInsufficientBalance(error)) {
+        toast.error("Insufficient balance", {
+          description: "Top up to keep going.",
+          action: {
+            label: "Top up",
+            onClick: () => router.push("/billing"),
+          },
+        });
+      } else {
+        toast.error("Couldn't start suggestion", {
+          description: error instanceof Error ? error.message : String(error),
+        });
+      }
       setOpen(false);
     }
   }
@@ -188,7 +193,7 @@ export default function SuggestionDialog({
     } catch {
       return [];
     }
-  }, [session?.result]);
+  }, [session]);
 
   const waiting = session?.status === "WAITING_FOR_INPUT";
   const done = session?.status === "COMPLETED";
@@ -203,7 +208,6 @@ export default function SuggestionDialog({
         // Escape and the X button still close it.
         if (!v && details.reason === "outside-press") return;
         setOpen(v);
-        if (v) void start();
       }}
     >
       {variant === "icon" ? (
@@ -235,6 +239,24 @@ export default function SuggestionDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
+          {!session && (
+            <div className="flex items-center justify-between gap-2">
+              <ModelSelect
+                accessToken={accessToken}
+                value={model}
+                onChange={setModel}
+                disabled={busy}
+              />
+              <Button
+                onClick={start}
+                disabled={busy || !apiBaseUrl}
+                className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
+              >
+                {busy ? <Loader2 className="animate-spin" /> : "Start"}
+              </Button>
+            </div>
+          )}
+
           {targetText && (
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
               <p className="text-xs font-medium tracking-wide text-zinc-500 uppercase">

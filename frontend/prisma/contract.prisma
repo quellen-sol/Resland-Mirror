@@ -1,14 +1,18 @@
 // use prisma-next
 
 model User {
-  auth0_id      String   @id
-  has_onboarded Boolean  @default(false)
-  created_at    DateTime @default(now())
+  auth0_id            String   @id
+  has_onboarded       Boolean  @default(false)
+  // USD cents, fractional — sub-cent charges from cheap models still count.
+  balance_cents       Decimal  @default("100")
+  site_admin          Boolean  @default(false)
+  stripe_customer_id  String?
+  created_at          DateTime @default(now())
   // For resume headers
-  full_name     String?
-  email         String?
-  phone         String?
-  location      String?
+  full_name           String?
+  email               String?
+  phone               String?
+  location            String?
 
   @@map("user")
   @@index([auth0_id])
@@ -138,6 +142,8 @@ model UserSuggestion {
   experience       UserBaseExperience          @relation(fields: [experience_id], references: [id])
   bullet_id        Int?
   bullet           UserBaseExperienceBullet?   @relation(fields: [bullet_id], references: [id])
+  // Null = system default model.
+  model            String?
   pending_question String?
   result           String?
   status           SuggestionStatus            @default(PROCESSING)
@@ -163,6 +169,8 @@ model UserTailorRun {
   user_id          String
   user             User         @relation(fields: [user_id], references: [auth0_id])
   job_description  String
+  // Null = system default model.
+  model            String?
   pending_question String?
   result           String?
   status           TailorStatus @default(PROCESSING)
@@ -170,5 +178,68 @@ model UserTailorRun {
 
   @@map("user_tailor_run")
 
+  @@index([user_id])
+}
+
+// Whitelist of selectable models, priced in cents per 1K tokens.
+// `id` is the langchain model spec, e.g. "openrouter:openai/gpt-5-mini".
+model ModelPricing {
+  id                    String  @id
+  display_name          String
+  cents_per_1k_input    Decimal
+  cents_per_1k_output   Decimal
+  enabled               Boolean @default(true)
+  is_default            Boolean @default(false)
+  sort_order            Int     @default(0)
+
+  @@map("model_pricing")
+}
+
+enum UsageJobKind {
+  SUGGESTION
+  TAILOR
+}
+
+// Ledger of billed LLM usage — one row per dispatcher task invocation.
+model TokenUsage {
+  id              Int          @id @default(autoincrement())
+  user_id         String
+  user            User         @relation(fields: [user_id], references: [auth0_id])
+  job_kind        UsageJobKind
+  job_id          String
+  model           String
+  input_tokens               Int
+  output_tokens              Int
+  amount_cents               Decimal
+  // OpenRouter generation stats: actual billed cost (pre-markup) + ids for
+  // tracing a ledger row back to individual provider calls.
+  actual_cost_cents          Decimal?
+  openrouter_generation_ids  String[]     @default([])
+  created_at                 DateTime     @default(now())
+
+  @@map("token_usage")
+  @@index([user_id])
+  @@index([created_at])
+}
+
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+// One row per Stripe Checkout session; `id` is the Stripe session id so the
+// webhook top-up is idempotent.
+model BalancePurchase {
+  id           String         @id
+  user_id      String
+  user         User           @relation(fields: [user_id], references: [auth0_id])
+  cents        Int
+  amount_cents Int
+  currency     String
+  status       PurchaseStatus @default(PENDING)
+  created_at   DateTime       @default(now())
+
+  @@map("balance_purchase")
   @@index([user_id])
 }

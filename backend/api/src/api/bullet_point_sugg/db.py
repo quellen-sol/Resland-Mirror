@@ -12,6 +12,7 @@ class UserSuggestionRow:
     user_id: str
     experience_id: int
     bullet_id: int | None
+    model: str | None
     pending_question: str | None
     result: str | None
     status: str
@@ -24,14 +25,16 @@ async def create_sugg_session(
     user_id: str,
     experience_id: int,
     bullet_id: int | None,
+    model: str | None,
 ) -> str:
     async with conn.cursor() as cursor:
         await cursor.execute(
             """
-            INSERT INTO user_suggestion (id, user_id, experience_id, bullet_id)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO user_suggestion
+              (id, user_id, experience_id, bullet_id, model)
+            VALUES (%s, %s, %s, %s, %s)
             """,
-            (session_id, user_id, experience_id, bullet_id),
+            (session_id, user_id, experience_id, bullet_id, model),
         )
     return session_id
 
