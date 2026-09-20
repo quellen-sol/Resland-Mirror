@@ -143,8 +143,7 @@ def build_and_invoke_agent(
     # Nodes
     def llm_call(state: State):
         msg = model.invoke(
-            [SystemMessage(content=SUGGESTIONS_SYSTEM_PROMPT)] + state["messages"],
-            metadata={"resland_job": session_id},
+            [SystemMessage(content=SUGGESTIONS_SYSTEM_PROMPT)] + state["messages"]
         )
         usage_meta = msg.usage_metadata or {}
         usage["input_tokens"] += usage_meta.get("input_tokens") or 0
