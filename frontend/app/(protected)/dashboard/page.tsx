@@ -12,12 +12,7 @@ import {
 import { auth0 } from "@/lib/auth0";
 import { getUser, getUserProfileData } from "@/lib/db";
 import { buttonVariants } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
 import JobStatusPoller from "@/components/job-status-poller";
@@ -98,6 +93,17 @@ export default async function DashboardPage() {
             >
               <Sparkles /> Tailor resume
             </Link>
+            {user.site_admin && (
+              <Link
+                href="/admin"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800/60 hover:text-zinc-100",
+                )}
+              >
+                Admin Dashboard
+              </Link>
+            )}
             <Link
               href="/edit-profile"
               className={cn(
@@ -245,9 +251,7 @@ export default async function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {education.length === 0 && (
-              <Empty text="No education added yet." />
-            )}
+            {education.length === 0 && <Empty text="No education added yet." />}
             {education.map((edu) => (
               <div key={edu.id} className="flex flex-col gap-1">
                 <div className="flex items-baseline justify-between gap-2">
