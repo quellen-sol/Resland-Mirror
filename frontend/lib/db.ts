@@ -48,7 +48,9 @@ export async function getUserProfileData(userId: string) {
     const bullets = experienceIds.length
         ? await db.orm.public.UserBaseExperienceBullet.where((b) =>
               b.user_experience_id.in(experienceIds),
-          ).all()
+          )
+              .orderBy((b) => b.bullet_order.asc())
+              .all()
         : [];
 
     return {

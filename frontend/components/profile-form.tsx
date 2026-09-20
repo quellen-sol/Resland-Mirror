@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -466,6 +466,44 @@ export default function ProfileForm({
                         placeholder="Led a team of 5"
                         className={inputCls}
                       />
+                      <button
+                        type="button"
+                        disabled={j === 0}
+                        onClick={() =>
+                          updateAt<ExperienceForm>("experiences", i, {
+                            bullets: exp.bullets.map((b, k) =>
+                              k === j
+                                ? exp.bullets[j - 1]
+                                : k === j - 1
+                                  ? exp.bullets[j]
+                                  : b,
+                            ),
+                          })
+                        }
+                        className="text-zinc-500 hover:text-zinc-200 disabled:cursor-default disabled:opacity-30 disabled:hover:text-zinc-500"
+                        aria-label="Move bullet up"
+                      >
+                        <ArrowUp className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={j === exp.bullets.length - 1}
+                        onClick={() =>
+                          updateAt<ExperienceForm>("experiences", i, {
+                            bullets: exp.bullets.map((b, k) =>
+                              k === j
+                                ? exp.bullets[j + 1]
+                                : k === j + 1
+                                  ? exp.bullets[j]
+                                  : b,
+                            ),
+                          })
+                        }
+                        className="text-zinc-500 hover:text-zinc-200 disabled:cursor-default disabled:opacity-30 disabled:hover:text-zinc-500"
+                        aria-label="Move bullet down"
+                      >
+                        <ArrowDown className="size-4" />
+                      </button>
                       <button
                         type="button"
                         onClick={() =>

@@ -34,6 +34,7 @@ def fetch_suggestion_rows(
             join user_base_experience_bullet ub on ub.user_experience_id = ue.id
             WHERE us.id = %s
             and (us.bullet_id is null or ub.id = us.bullet_id)
+            ORDER BY ub.bullet_order
             """,
             [session_id],
         ).fetchall()
@@ -134,13 +135,13 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
                 raise DbOpError("Failed to insert experience")
             experience_id = experience_id[0]
 
-            for bullet in experience.bullets:
+            for i, bullet in enumerate(experience.bullets):
                 pg_client.execute(
                     """
-                    INSERT INTO user_base_experience_bullet (user_experience_id, bullet)
-                    VALUES (%s, %s)
+                    INSERT INTO user_base_experience_bullet (user_experience_id, bullet, bullet_order)
+                    VALUES (%s, %s, %s)
                     """,
-                    [experience_id, bullet.text],
+                    [experience_id, bullet.text, i],
                 )
 
         pg_client.execute(
