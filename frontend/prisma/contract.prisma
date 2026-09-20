@@ -148,3 +148,27 @@ model UserSuggestion {
   @@index([user_id])
   @@unique([user_id, experience_id, bullet_id])
 }
+
+enum TailorStatus {
+  PROCESSING
+  WAITING_FOR_INPUT
+  COMPLETED
+  FAILED
+}
+
+// A tailor-run tailors the base profile to one pasted job description.
+// `result` holds the tailored resume JSON once COMPLETED.
+model UserTailorRun {
+  id               String       @id
+  user_id          String
+  user             User         @relation(fields: [user_id], references: [auth0_id])
+  job_description  String
+  pending_question String?
+  result           String?
+  status           TailorStatus @default(PROCESSING)
+  created_at       DateTime     @default(now())
+
+  @@map("user_tailor_run")
+
+  @@index([user_id])
+}

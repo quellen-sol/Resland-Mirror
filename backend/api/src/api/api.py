@@ -11,6 +11,7 @@ from . import deps
 from .bullet_point_sugg.router import router as bullet_sugg_router
 from .env_vars import AMQP_URL, PG_URL
 from .resume_upload.router import router as resume_upload_router
+from .tailor.router import router as tailor_router
 
 
 @asynccontextmanager
@@ -48,3 +49,4 @@ app.add_middleware(
 
 app.include_router(resume_upload_router)
 app.include_router(bullet_sugg_router)
+app.include_router(tailor_router)
