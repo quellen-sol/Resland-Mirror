@@ -207,10 +207,14 @@ model TokenUsage {
   job_kind        UsageJobKind
   job_id          String
   model           String
-  input_tokens    Int
-  output_tokens   Int
-  amount_cents    Decimal
-  created_at      DateTime     @default(now())
+  input_tokens               Int
+  output_tokens              Int
+  amount_cents               Decimal
+  // OpenRouter generation stats: actual billed cost (pre-markup) + ids for
+  // tracing a ledger row back to individual provider calls.
+  actual_cost_cents          Decimal?
+  openrouter_generation_ids  String[]     @default([])
+  created_at                 DateTime     @default(now())
 
   @@map("token_usage")
   @@index([user_id])

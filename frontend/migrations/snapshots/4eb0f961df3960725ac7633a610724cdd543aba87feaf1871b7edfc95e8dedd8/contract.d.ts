@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'5e30f261d7e4b644a7ccec75be7cc69bdfbe0063a96c67b0ac8dd2c6fd453faf'>;
+  StorageHashBase<'4eb0f961df3960725ac7633a610724cdd543aba87feaf1871b7edfc95e8dedd8'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -266,6 +266,8 @@ export type FieldOutputTypes = {
       readonly input_tokens: CodecTypes['pg/int4@1']['output'];
       readonly output_tokens: CodecTypes['pg/int4@1']['output'];
       readonly amount_cents: CodecTypes['pg/numeric@1']['output'];
+      readonly actual_cost_cents: CodecTypes['pg/numeric@1']['output'] | null;
+      readonly openrouter_generation_ids: ReadonlyArray<CodecTypes['pg/text@1']['output']>;
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
     readonly User: {
@@ -386,6 +388,8 @@ export type FieldInputTypes = {
       readonly input_tokens: CodecTypes['pg/int4@1']['input'];
       readonly output_tokens: CodecTypes['pg/int4@1']['input'];
       readonly amount_cents: CodecTypes['pg/numeric@1']['input'];
+      readonly actual_cost_cents: CodecTypes['pg/numeric@1']['input'] | null;
+      readonly openrouter_generation_ids: ReadonlyArray<CodecTypes['pg/text@1']['input']>;
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
     readonly User: {
@@ -498,6 +502,7 @@ export type StorageColumnTypes = {
       readonly sort_order: CodecTypes['pg/int4@1']['output'];
     };
     readonly token_usage: {
+      readonly actual_cost_cents: CodecTypes['pg/numeric@1']['output'] | null;
       readonly amount_cents: CodecTypes['pg/numeric@1']['output'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly id: CodecTypes['pg/int4@1']['output'];
@@ -505,6 +510,7 @@ export type StorageColumnTypes = {
       readonly job_id: CodecTypes['pg/text@1']['output'];
       readonly job_kind: 'SUGGESTION' | 'TAILOR';
       readonly model: CodecTypes['pg/text@1']['output'];
+      readonly openrouter_generation_ids: ReadonlyArray<CodecTypes['pg/text@1']['output']>;
       readonly output_tokens: CodecTypes['pg/int4@1']['output'];
       readonly user_id: CodecTypes['pg/text@1']['output'];
     };
@@ -618,6 +624,7 @@ export type StorageColumnInputTypes = {
       readonly sort_order: CodecTypes['pg/int4@1']['input'];
     };
     readonly token_usage: {
+      readonly actual_cost_cents: CodecTypes['pg/numeric@1']['input'] | null;
       readonly amount_cents: CodecTypes['pg/numeric@1']['input'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly id: CodecTypes['pg/int4@1']['input'];
@@ -625,6 +632,7 @@ export type StorageColumnInputTypes = {
       readonly job_id: CodecTypes['pg/text@1']['input'];
       readonly job_kind: 'SUGGESTION' | 'TAILOR';
       readonly model: CodecTypes['pg/text@1']['input'];
+      readonly openrouter_generation_ids: ReadonlyArray<CodecTypes['pg/text@1']['input']>;
       readonly output_tokens: CodecTypes['pg/int4@1']['input'];
       readonly user_id: CodecTypes['pg/text@1']['input'];
     };
@@ -895,6 +903,20 @@ type ContractBase = Omit<
                   readonly nativeType: 'numeric';
                   readonly codecId: 'pg/numeric@1';
                   readonly nullable: false;
+                };
+                readonly actual_cost_cents: {
+                  readonly nativeType: 'numeric';
+                  readonly codecId: 'pg/numeric@1';
+                  readonly nullable: true;
+                };
+                readonly openrouter_generation_ids: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', readonly []>;
+                  };
                 };
                 readonly created_at: {
                   readonly nativeType: 'timestamptz';
@@ -1875,6 +1897,15 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/numeric@1' };
               };
+              readonly actual_cost_cents: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/numeric@1' };
+              };
+              readonly openrouter_generation_ids: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+                readonly many: true;
+              };
               readonly created_at: {
                 readonly nullable: false;
                 readonly type: {
@@ -1905,6 +1936,10 @@ type ContractBase = Omit<
                 readonly input_tokens: { readonly column: 'input_tokens' };
                 readonly output_tokens: { readonly column: 'output_tokens' };
                 readonly amount_cents: { readonly column: 'amount_cents' };
+                readonly actual_cost_cents: { readonly column: 'actual_cost_cents' };
+                readonly openrouter_generation_ids: {
+                  readonly column: 'openrouter_generation_ids';
+                };
                 readonly created_at: { readonly column: 'created_at' };
               };
             };

@@ -1,7 +1,9 @@
 import json
 import math
+import time
 from dataclasses import asdict
 
+from openrouter import OpenRouter
 from psycopg import Connection
 from psycopg.rows import class_row
 
@@ -18,6 +20,7 @@ from ..agents.tailor import (
     TailorSkillRow,
     TailorSocialLinkRow,
 )
+from ..env_vars import OPENROUTER_API_KEY
 
 
 class DbOpError(Exception):
@@ -30,6 +33,38 @@ class DbOpError(Exception):
 FALLBACK_CENTS_PER_1K_INPUT = 0.16
 FALLBACK_CENTS_PER_1K_OUTPUT = 1.25
 
+# Markup applied on top of OpenRouter's reported cost.
+COST_MARKUP = 1.25
+
+
+def fetch_generation_cost_cents(generation_ids: list[str]) -> float | None:
+    """Sum OpenRouter's actual billed cost (in cents) for the given generation
+    ids. Returns None when no ids were captured, the key is unset, or every
+    lookup failed — callers then fall back to the rate card."""
+    if not generation_ids or not OPENROUTER_API_KEY:
+        return None
+    client = OpenRouter(api_key=OPENROUTER_API_KEY)
+    total = 0.0
+    resolved = 0
+    for gen_id in generation_ids:
+        data = None
+        for attempt in range(2):
+            try:
+                data = client.generations.get_generation(id=gen_id).data
+                break
+            except Exception as e:
+                # Stats can lag the response by a moment; retry once.
+                if attempt == 0:
+                    time.sleep(0.5)
+                else:
+                    print(f"Generation stats lookup failed for {gen_id}: {e}")
+        if data is not None:
+            resolved += 1
+            total += float(data.total_cost or 0)
+    if resolved == 0:
+        return None
+    return total * 100
+
 
 def record_token_usage(
     pg_client: Connection,
@@ -40,33 +75,41 @@ def record_token_usage(
     model: str,
     input_tokens: int,
     output_tokens: int,
+    generation_ids: list[str],
 ) -> float:
     """Insert one token_usage row and deduct from the user's balance.
     Floors at 0 — a job that overruns still finishes. Returns cents charged."""
     if not input_tokens and not output_tokens:
         return 0.0
 
-    row = pg_client.execute(
-        """
-        SELECT cents_per_1k_input, cents_per_1k_output
-        FROM model_pricing WHERE id = %s
-        """,
-        (model,),
-    ).fetchone()
-    rate_in = float(row[0]) if row else FALLBACK_CENTS_PER_1K_INPUT
-    rate_out = float(row[1]) if row else FALLBACK_CENTS_PER_1K_OUTPUT
-    # Round up to 1/10,000¢ so sub-cent charges never round down to free.
-    amount_cents = math.ceil(
-        (input_tokens * rate_in + output_tokens * rate_out) / 1000 * 10_000
-    ) / 10_000
+    actual_cost_cents = fetch_generation_cost_cents(generation_ids)
+    if actual_cost_cents is not None:
+        # Round up to 1/10,000¢ so sub-cent charges never round down to free.
+        amount_cents = (
+            math.ceil(actual_cost_cents * COST_MARKUP * 10_000) / 10_000
+        )
+    else:
+        row = pg_client.execute(
+            """
+            SELECT cents_per_1k_input, cents_per_1k_output
+            FROM model_pricing WHERE id = %s
+            """,
+            (model,),
+        ).fetchone()
+        rate_in = float(row[0]) if row else FALLBACK_CENTS_PER_1K_INPUT
+        rate_out = float(row[1]) if row else FALLBACK_CENTS_PER_1K_OUTPUT
+        amount_cents = math.ceil(
+            (input_tokens * rate_in + output_tokens * rate_out) / 1000 * 10_000
+        ) / 10_000
 
     with pg_client.transaction():
         pg_client.execute(
             """
             INSERT INTO token_usage
               (user_id, job_kind, job_id, model,
-               input_tokens, output_tokens, amount_cents)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
+               input_tokens, output_tokens, amount_cents,
+               actual_cost_cents, openrouter_generation_ids)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 user_id,
@@ -76,6 +119,8 @@ def record_token_usage(
                 input_tokens,
                 output_tokens,
                 amount_cents,
+                actual_cost_cents,
+                generation_ids,
             ),
         )
         pg_client.execute(

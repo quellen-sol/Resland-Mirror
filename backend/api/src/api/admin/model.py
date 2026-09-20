@@ -44,6 +44,7 @@ class RecentUsageRow(BaseModel):
     input_tokens: int
     output_tokens: int
     amount_cents: float
+    actual_cost_cents: float | None
     created_at: str
 
 

@@ -143,11 +143,16 @@ def build_and_invoke_agent(
     # Nodes
     def llm_call(state: State):
         msg = model.invoke(
-            [SystemMessage(content=SUGGESTIONS_SYSTEM_PROMPT)] + state["messages"]
+            [SystemMessage(content=SUGGESTIONS_SYSTEM_PROMPT)] + state["messages"],
+            metadata={"resland_job": session_id},
         )
         usage_meta = msg.usage_metadata or {}
         usage["input_tokens"] += usage_meta.get("input_tokens") or 0
         usage["output_tokens"] += usage_meta.get("output_tokens") or 0
+        # OpenRouter generation id — lets us pull actual billed cost after
+        # the run via the generation stats endpoint.
+        if gen_id := msg.response_metadata.get("id"):
+            usage["generation_ids"].append(gen_id)
         return {"messages": [msg]}
 
     def tool_node(state: State):

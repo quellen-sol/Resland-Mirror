@@ -51,6 +51,7 @@ interface RecentUsage {
   input_tokens: number;
   output_tokens: number;
   amount_cents: number;
+  actual_cost_cents: number | null;
   created_at: string;
 }
 
@@ -341,6 +342,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                 <th className={th}>Model</th>
                 <th className={th}>In / Out</th>
                 <th className={th}>Charged</th>
+                <th className={th}>Actual cost</th>
               </tr>
             </thead>
             <tbody>
@@ -355,6 +357,11 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                     {r.output_tokens.toLocaleString()}
                   </td>
                   <td className={td}>{fmtMoney(r.amount_cents, "usd")}</td>
+                  <td className={td}>
+                    {r.actual_cost_cents == null
+                      ? "—"
+                      : fmtMoney(r.actual_cost_cents, "usd")}
+                  </td>
                 </tr>
               ))}
             </tbody>

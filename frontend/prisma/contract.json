@@ -345,6 +345,13 @@
           },
           "TokenUsage": {
             "fields": {
+              "actual_cost_cents": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/numeric@1",
+                  "kind": "scalar"
+                }
+              },
               "amount_cents": {
                 "nullable": false,
                 "type": {
@@ -400,6 +407,14 @@
                   "kind": "scalar"
                 }
               },
+              "openrouter_generation_ids": {
+                "many": true,
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "output_tokens": {
                 "nullable": false,
                 "type": {
@@ -434,6 +449,9 @@
             },
             "storage": {
               "fields": {
+                "actual_cost_cents": {
+                  "column": "actual_cost_cents"
+                },
                 "amount_cents": {
                   "column": "amount_cents"
                 },
@@ -454,6 +472,9 @@
                 },
                 "model": {
                   "column": "model"
+                },
+                "openrouter_generation_ids": {
+                  "column": "openrouter_generation_ids"
                 },
                 "output_tokens": {
                   "column": "output_tokens"
@@ -1613,9 +1634,19 @@
                   "expression": "\"job_kind\" IN ('SUGGESTION', 'TAILOR')",
                   "name": "token_usage_job_kind_check_74df029d",
                   "prefix": "token_usage_job_kind_check"
+                },
+                {
+                  "expression": "array_position(\"openrouter_generation_ids\", NULL) IS NULL",
+                  "name": "token_usage_openrouter_generation_ids_elem_not_null_73635ad0",
+                  "prefix": "token_usage_openrouter_generation_ids_elem_not_null"
                 }
               ],
               "columns": {
+                "actual_cost_cents": {
+                  "codecId": "pg/numeric@1",
+                  "nativeType": "numeric",
+                  "nullable": true
+                },
                 "amount_cents": {
                   "codecId": "pg/numeric@1",
                   "nativeType": "numeric",
@@ -1662,6 +1693,16 @@
                 },
                 "model": {
                   "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "openrouter_generation_ids": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": []
+                  },
+                  "many": true,
                   "nativeType": "text",
                   "nullable": false
                 },
@@ -2705,7 +2746,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "5e30f261d7e4b644a7ccec75be7cc69bdfbe0063a96c67b0ac8dd2c6fd453faf"
+    "storageHash": "4eb0f961df3960725ac7633a610724cdd543aba87feaf1871b7edfc95e8dedd8"
   },
   "capabilities": {
     "postgres": {

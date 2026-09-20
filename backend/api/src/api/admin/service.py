@@ -81,7 +81,7 @@ async def get_usage(pg_conn: PgConnection) -> model.AdminUsageResponse:
             await cursor.execute(
                 """
                 SELECT id, user_id, job_kind, job_id, model, input_tokens,
-                       output_tokens, amount_cents, created_at
+                       output_tokens, amount_cents, actual_cost_cents, created_at
                 FROM token_usage ORDER BY created_at DESC LIMIT 50
                 """
             )
@@ -118,7 +118,10 @@ async def get_usage(pg_conn: PgConnection) -> model.AdminUsageResponse:
                 input_tokens=r[5],
                 output_tokens=r[6],
                 amount_cents=float(r[7]),
-                created_at=r[8].isoformat(),
+                actual_cost_cents=(
+                    float(r[8]) if r[8] is not None else None
+                ),
+                created_at=r[9].isoformat(),
             )
             for r in recent
         ],

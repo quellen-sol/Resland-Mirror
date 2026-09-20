@@ -1,8 +1,8 @@
 #!/usr/bin/env -S node
 import type { Contract as Start } from '../../snapshots/4cfa9de85dda60dd8eabf3b7d38fdfb73de17bf860102235b1e9c846e345aa23/contract';
 import startContract from '../../snapshots/4cfa9de85dda60dd8eabf3b7d38fdfb73de17bf860102235b1e9c846e345aa23/contract.json' with { type: 'json' };
-import type { Contract as End } from '../../snapshots/5e30f261d7e4b644a7ccec75be7cc69bdfbe0063a96c67b0ac8dd2c6fd453faf/contract';
-import endContract from '../../snapshots/5e30f261d7e4b644a7ccec75be7cc69bdfbe0063a96c67b0ac8dd2c6fd453faf/contract.json' with { type: 'json' };
+import type { Contract as End } from '../../snapshots/4eb0f961df3960725ac7633a610724cdd543aba87feaf1871b7edfc95e8dedd8/contract';
+import endContract from '../../snapshots/4eb0f961df3960725ac7633a610724cdd543aba87feaf1871b7edfc95e8dedd8/contract.json' with { type: 'json' };
 import {
   Migration,
   MigrationCLI,
@@ -82,6 +82,7 @@ export default class M extends Migration<Start, End> {
         schema: 'public',
         table: 'token_usage',
         columns: [
+          col('actual_cost_cents', 'numeric', { codecRef: { codecId: 'pg/numeric@1' } }),
           col('amount_cents', 'numeric', { notNull: true, codecRef: { codecId: 'pg/numeric@1' } }),
           col('created_at', 'timestamptz', {
             notNull: true,
@@ -93,6 +94,11 @@ export default class M extends Migration<Start, End> {
           col('job_id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
           col('job_kind', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
           col('model', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('openrouter_generation_ids', 'text[]', {
+            notNull: true,
+            default: lit([]),
+            codecRef: { codecId: 'pg/text@1', many: true },
+          }),
           col('output_tokens', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
           col('user_id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
         ],
@@ -101,6 +107,10 @@ export default class M extends Migration<Start, End> {
           checkExpression(
             'token_usage_job_kind_check_74df029d',
             "\"job_kind\" IN ('SUGGESTION', 'TAILOR')",
+          ),
+          checkExpression(
+            'token_usage_openrouter_generation_ids_elem_not_null_73635ad0',
+            'array_position("openrouter_generation_ids", NULL) IS NULL',
           ),
         ],
       }),

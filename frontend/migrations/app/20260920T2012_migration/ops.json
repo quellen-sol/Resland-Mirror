@@ -102,7 +102,7 @@
     "execute": [
       {
         "description": "create table \"token_usage\"",
-        "sql": "CREATE TABLE \"public\".\"token_usage\" (\n  \"amount_cents\" numeric NOT NULL,\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" SERIAL NOT NULL,\n  \"input_tokens\" int4 NOT NULL,\n  \"job_id\" text NOT NULL,\n  \"job_kind\" text NOT NULL,\n  \"model\" text NOT NULL,\n  \"output_tokens\" int4 NOT NULL,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"token_usage_job_kind_check_74df029d\" CHECK (\"job_kind\" IN ('SUGGESTION', 'TAILOR'))\n)",
+        "sql": "CREATE TABLE \"public\".\"token_usage\" (\n  \"actual_cost_cents\" numeric,\n  \"amount_cents\" numeric NOT NULL,\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" SERIAL NOT NULL,\n  \"input_tokens\" int4 NOT NULL,\n  \"job_id\" text NOT NULL,\n  \"job_kind\" text NOT NULL,\n  \"model\" text NOT NULL,\n  \"openrouter_generation_ids\" text[] DEFAULT '{}' NOT NULL,\n  \"output_tokens\" int4 NOT NULL,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"token_usage_job_kind_check_74df029d\" CHECK (\"job_kind\" IN ('SUGGESTION', 'TAILOR')),\n  CONSTRAINT \"token_usage_openrouter_generation_ids_elem_not_null_73635ad0\" CHECK (array_position(\"openrouter_generation_ids\", NULL) IS NULL)\n)",
         "params": []
       }
     ],

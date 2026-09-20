@@ -27,7 +27,7 @@ class SuggestionsRunner(LocalThreadJobRunner):
         super().__init__(job_data)
 
     def task(self, queue: queue.Queue):
-        usage = {"input_tokens": 0, "output_tokens": 0}
+        usage = {"input_tokens": 0, "output_tokens": 0, "generation_ids": []}
         user_id: str | None = None
         model_spec = SUGGESTIONS_MODEL
         session_id: str | None = None
@@ -100,6 +100,7 @@ class SuggestionsRunner(LocalThreadJobRunner):
                             model=model_spec,
                             input_tokens=usage["input_tokens"],
                             output_tokens=usage["output_tokens"],
+                            generation_ids=usage["generation_ids"],
                         )
                         print(f"Charged {charged}¢ for {session_id}")
                 except Exception as e:

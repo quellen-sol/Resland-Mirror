@@ -234,11 +234,14 @@ def build_and_invoke_agent(
     # Nodes
     def llm_call(state: State):
         msg = model.invoke(
-            [SystemMessage(content=TAILOR_SYSTEM_PROMPT)] + state["messages"]
+            [SystemMessage(content=TAILOR_SYSTEM_PROMPT)] + state["messages"],
+            metadata={"resland_job": run_id},
         )
         usage_meta = msg.usage_metadata or {}
         usage["input_tokens"] += usage_meta.get("input_tokens") or 0
         usage["output_tokens"] += usage_meta.get("output_tokens") or 0
+        if gen_id := msg.response_metadata.get("id"):
+            usage["generation_ids"].append(gen_id)
         return {"messages": [msg]}
 
     def tool_node(state: State):
