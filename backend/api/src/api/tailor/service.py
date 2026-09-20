@@ -14,26 +14,26 @@ async def start_tailor(
     req: model.StartTailorRequest,
     user_id: str,
 ) -> model.StartTailorResponse:
-    await require_balance(pg_conn, user_id)
-    chosen_model = await validate_model_choice(pg_conn, req.model)
-
     async with pg_conn.cursor() as cursor:
-        # One active run per user — a second run would race the first for the
-        # same base profile.
+        # Runs are only deleted on dismiss, so a surviving row is work the
+        # user hasn't finished with — hand it back to resume instead of
+        # erroring. (Resuming also avoids racing the in-flight run.)
         active = await cursor.execute(
             """
-            SELECT 1 FROM user_tailor_run
-            WHERE user_id = %s AND status IN ('PROCESSING', 'WAITING_FOR_INPUT')
+            SELECT id FROM user_tailor_run
+            WHERE user_id = %s
+              AND status IN ('PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED')
+            ORDER BY created_at DESC
             LIMIT 1
             """,
             (user_id,),
         )
         active = await active.fetchone()
         if active:
-            raise HTTPException(
-                status_code=409,
-                detail="A tailor run is already in progress",
-            )
+            return model.StartTailorResponse(run_id=active[0])
+
+    await require_balance(pg_conn, user_id)
+    chosen_model = await validate_model_choice(pg_conn, req.model)
 
     run_id = str(uuid.uuid4())
     await db.create_tailor_run(
