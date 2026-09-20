@@ -379,6 +379,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                   <td className={td}>
                     <input
                       type="checkbox"
+                      className="size-4 cursor-pointer accent-purple-500"
                       checked={m.enabled}
                       onChange={(e) =>
                         updateModel(m.id, { enabled: e.target.checked })
