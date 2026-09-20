@@ -63,7 +63,7 @@
     "execute": [
       {
         "description": "create table \"model_pricing\"",
-        "sql": "CREATE TABLE \"public\".\"model_pricing\" (\n  \"cents_per_1k_input\" numeric NOT NULL,\n  \"cents_per_1k_output\" numeric NOT NULL,\n  \"display_name\" text NOT NULL,\n  \"enabled\" bool DEFAULT true NOT NULL,\n  \"id\" text NOT NULL,\n  \"sort_order\" int4 DEFAULT 0 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "sql": "CREATE TABLE \"public\".\"model_pricing\" (\n  \"cents_per_1k_input\" numeric NOT NULL,\n  \"cents_per_1k_output\" numeric NOT NULL,\n  \"display_name\" text NOT NULL,\n  \"enabled\" bool DEFAULT true NOT NULL,\n  \"id\" text NOT NULL,\n  \"is_default\" bool DEFAULT false NOT NULL,\n  \"sort_order\" int4 DEFAULT 0 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
         "params": []
       }
     ],
@@ -544,7 +544,7 @@
     "execute": [
       {
         "description": "Run seed-model_pricing-catalog",
-        "sql": "\n            INSERT INTO model_pricing\n              (id, display_name, cents_per_1k_input, cents_per_1k_output, enabled, sort_order)\n            VALUES\n              ('openrouter:openai/gpt-5-mini', 'GPT-5 Mini', 0.03, 0.25, true, 1),\n              ('openrouter:openai/gpt-5', 'GPT-5', 0.16, 1.25, true, 2),\n              ('openrouter:anthropic/claude-sonnet-4.5', 'Claude Sonnet 4.5', 0.375, 1.9, true, 3),\n              ('openrouter:google/gemini-2.5-flash', 'Gemini 2.5 Flash', 0.04, 0.315, true, 4)\n            ON CONFLICT (id) DO NOTHING\n          ",
+        "sql": "\n            INSERT INTO model_pricing\n              (id, display_name, cents_per_1k_input, cents_per_1k_output,\n               enabled, is_default, sort_order)\n            VALUES\n              ('openrouter:openai/gpt-5-mini', 'GPT-5 Mini', 0.03, 0.25, true, true, 1),\n              ('openrouter:openai/gpt-5', 'GPT-5', 0.16, 1.25, true, false, 2),\n              ('openrouter:anthropic/claude-sonnet-4.5', 'Claude Sonnet 4.5', 0.375, 1.9, true, false, 3),\n              ('openrouter:google/gemini-2.5-flash', 'Gemini 2.5 Flash', 0.04, 0.315, true, false, 4)\n            ON CONFLICT (id) DO UPDATE SET is_default = EXCLUDED.is_default\n          ",
         "params": []
       }
     ],

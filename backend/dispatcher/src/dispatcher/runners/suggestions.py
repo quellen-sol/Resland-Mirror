@@ -6,6 +6,7 @@ from ..agents.suggestions import build_and_invoke_agent
 from ..env_vars import SUGGESTIONS_MODEL
 from ..pg import pg_pool
 from .db_ops import (
+    default_model_spec,
     fetch_suggestion_rows,
     record_token_usage,
     set_suggestion_question,
@@ -53,7 +54,12 @@ class SuggestionsRunner(LocalThreadJobRunner):
                 raise RunnerError("Session not found")
 
             user_id = rows[0].user_id
-            model_spec = rows[0].model or SUGGESTIONS_MODEL
+            model_spec = rows[0].model
+            if not model_spec:
+                with pg_pool.connection() as conn:
+                    model_spec = default_model_spec(conn)
+            if not model_spec:
+                model_spec = SUGGESTIONS_MODEL
 
             try:
                 outcome = build_and_invoke_agent(

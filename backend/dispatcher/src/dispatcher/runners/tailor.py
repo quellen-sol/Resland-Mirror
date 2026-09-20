@@ -6,6 +6,7 @@ from ..agents.tailor import build_and_invoke_agent
 from ..env_vars import TAILOR_MODEL
 from ..pg import pg_pool
 from .db_ops import (
+    default_model_spec,
     fetch_tailor_profile,
     fetch_tailor_run,
     record_token_usage,
@@ -54,7 +55,12 @@ class TailorRunner(LocalThreadJobRunner):
                 raise RunnerError("Tailor run not found")
 
             user_id = run.user_id
-            model_spec = run.model or TAILOR_MODEL
+            model_spec = run.model
+            if not model_spec:
+                with pg_pool.connection() as conn:
+                    model_spec = default_model_spec(conn)
+            if not model_spec:
+                model_spec = TAILOR_MODEL
 
             with pg_pool.connection() as conn:
                 profile = fetch_tailor_profile(conn, run.user_id)

@@ -38,6 +38,7 @@ export interface PricedModel {
   display_name: string;
   cents_per_1k_input: number;
   cents_per_1k_output: number;
+  is_default: boolean;
 }
 
 export function fmtCents(cents: number) {

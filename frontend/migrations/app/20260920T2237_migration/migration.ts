@@ -1,8 +1,8 @@
 #!/usr/bin/env -S node
 import type { Contract as Start } from '../../snapshots/4cfa9de85dda60dd8eabf3b7d38fdfb73de17bf860102235b1e9c846e345aa23/contract';
 import startContract from '../../snapshots/4cfa9de85dda60dd8eabf3b7d38fdfb73de17bf860102235b1e9c846e345aa23/contract.json' with { type: 'json' };
-import type { Contract as End } from '../../snapshots/4eb0f961df3960725ac7633a610724cdd543aba87feaf1871b7edfc95e8dedd8/contract';
-import endContract from '../../snapshots/4eb0f961df3960725ac7633a610724cdd543aba87feaf1871b7edfc95e8dedd8/contract.json' with { type: 'json' };
+import type { Contract as End } from '../../snapshots/be50cf86c51698349572a4290ed7a14af7374cfe98db45c480fd99b1d6e61037/contract';
+import endContract from '../../snapshots/be50cf86c51698349572a4290ed7a14af7374cfe98db45c480fd99b1d6e61037/contract.json' with { type: 'json' };
 import {
   Migration,
   MigrationCLI,
@@ -70,6 +70,11 @@ export default class M extends Migration<Start, End> {
             codecRef: { codecId: 'pg/bool@1' },
           }),
           col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('is_default', 'bool', {
+            notNull: true,
+            default: lit(false),
+            codecRef: { codecId: 'pg/bool@1' },
+          }),
           col('sort_order', 'int4', {
             notNull: true,
             default: lit(0),
@@ -199,13 +204,14 @@ export default class M extends Migration<Start, End> {
         run: () =>
           raw.sql`
             INSERT INTO model_pricing
-              (id, display_name, cents_per_1k_input, cents_per_1k_output, enabled, sort_order)
+              (id, display_name, cents_per_1k_input, cents_per_1k_output,
+               enabled, is_default, sort_order)
             VALUES
-              ('openrouter:openai/gpt-5-mini', 'GPT-5 Mini', 0.03, 0.25, true, 1),
-              ('openrouter:openai/gpt-5', 'GPT-5', 0.16, 1.25, true, 2),
-              ('openrouter:anthropic/claude-sonnet-4.5', 'Claude Sonnet 4.5', 0.375, 1.9, true, 3),
-              ('openrouter:google/gemini-2.5-flash', 'Gemini 2.5 Flash', 0.04, 0.315, true, 4)
-            ON CONFLICT (id) DO NOTHING
+              ('openrouter:openai/gpt-5-mini', 'GPT-5 Mini', 0.03, 0.25, true, true, 1),
+              ('openrouter:openai/gpt-5', 'GPT-5', 0.16, 1.25, true, false, 2),
+              ('openrouter:anthropic/claude-sonnet-4.5', 'Claude Sonnet 4.5', 0.375, 1.9, true, false, 3),
+              ('openrouter:google/gemini-2.5-flash', 'Gemini 2.5 Flash', 0.04, 0.315, true, false, 4)
+            ON CONFLICT (id) DO UPDATE SET is_default = EXCLUDED.is_default
           `.affectedCount(),
       }),
     ];

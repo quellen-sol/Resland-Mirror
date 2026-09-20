@@ -67,6 +67,7 @@ class ModelInfo(BaseModel):
     display_name: str
     cents_per_1k_input: float
     cents_per_1k_output: float
+    is_default: bool
 
 
 class ModelsResponse(BaseModel):

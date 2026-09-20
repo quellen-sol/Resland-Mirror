@@ -28,7 +28,8 @@ async def list_models(pg_conn: PgConnection) -> model.ModelsResponse:
     async with pg_conn.cursor() as cursor:
         res = await cursor.execute(
             """
-            SELECT id, display_name, cents_per_1k_input, cents_per_1k_output
+            SELECT id, display_name, cents_per_1k_input, cents_per_1k_output,
+                   is_default
             FROM model_pricing WHERE enabled ORDER BY sort_order
             """
         )
@@ -40,6 +41,7 @@ async def list_models(pg_conn: PgConnection) -> model.ModelsResponse:
                 display_name=r[1],
                 cents_per_1k_input=float(r[2]),
                 cents_per_1k_output=float(r[3]),
+                is_default=r[4],
             )
             for r in rows
         ]

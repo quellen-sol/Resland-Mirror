@@ -19,6 +19,7 @@ export default function ModelSelect({
   className?: string;
 }) {
   const [models, setModels] = useState<PricedModel[]>([]);
+  const defaultModel = models.find((m) => m.is_default);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,7 +45,9 @@ export default function ModelSelect({
         className,
       )}
     >
-      <option value="">Default model</option>
+      <option value="">
+        Default{defaultModel ? ` (${defaultModel.display_name})` : ""}
+      </option>
       {models.map((m) => (
         <option key={m.id} value={m.id}>
           {m.display_name} — {m.cents_per_1k_input}/{m.cents_per_1k_output}¢
