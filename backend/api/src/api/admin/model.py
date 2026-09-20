@@ -5,11 +5,11 @@ class AdminUserRow(BaseModel):
     auth0_id: str
     email: str | None
     full_name: str | None
-    token_balance: int
-    credits_used: int
+    balance_cents: float
+    cents_used: float
     input_tokens: int
     output_tokens: int
-    credits_purchased: int
+    cents_purchased: int
 
 
 class AdminUsersResponse(BaseModel):
@@ -21,18 +21,18 @@ class UsageByModelRow(BaseModel):
     job_count: int
     input_tokens: int
     output_tokens: int
-    credits: int
+    cents: float
 
 
 class UsageByKindRow(BaseModel):
     job_kind: str
     job_count: int
-    credits: int
+    cents: float
 
 
 class UsageByDayRow(BaseModel):
     day: str
-    credits: int
+    cents: float
 
 
 class RecentUsageRow(BaseModel):
@@ -43,7 +43,7 @@ class RecentUsageRow(BaseModel):
     model: str
     input_tokens: int
     output_tokens: int
-    credits_charged: int
+    amount_cents: float
     created_at: str
 
 
@@ -57,7 +57,7 @@ class AdminUsageResponse(BaseModel):
 class AdminPurchaseRow(BaseModel):
     id: str
     user_id: str
-    credits: int
+    cents: int
     amount_cents: int
     currency: str
     status: str

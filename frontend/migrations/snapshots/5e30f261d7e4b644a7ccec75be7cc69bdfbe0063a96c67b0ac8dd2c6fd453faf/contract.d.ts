@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'ab83bc9d635db30afd8840549bb14c2c7d6c3da024579d31bc5be53d1dc4a20f'>;
+  StorageHashBase<'5e30f261d7e4b644a7ccec75be7cc69bdfbe0063a96c67b0ac8dd2c6fd453faf'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -240,22 +240,22 @@ type DefaultLiteralValue<CodecId extends string, Encoded> = CodecId extends keyo
 
 export type FieldOutputTypes = {
   readonly public: {
-    readonly ModelPricing: {
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly display_name: CodecTypes['pg/text@1']['output'];
-      readonly credits_per_1k_input: CodecTypes['pg/int4@1']['output'];
-      readonly credits_per_1k_output: CodecTypes['pg/int4@1']['output'];
-      readonly enabled: CodecTypes['pg/bool@1']['output'];
-      readonly sort_order: CodecTypes['pg/int4@1']['output'];
-    };
-    readonly TokenPurchase: {
+    readonly BalancePurchase: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly user_id: CodecTypes['pg/text@1']['output'];
-      readonly credits: CodecTypes['pg/int4@1']['output'];
+      readonly cents: CodecTypes['pg/int4@1']['output'];
       readonly amount_cents: CodecTypes['pg/int4@1']['output'];
       readonly currency: CodecTypes['pg/text@1']['output'];
       readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED';
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+    };
+    readonly ModelPricing: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly display_name: CodecTypes['pg/text@1']['output'];
+      readonly cents_per_1k_input: CodecTypes['pg/numeric@1']['output'];
+      readonly cents_per_1k_output: CodecTypes['pg/numeric@1']['output'];
+      readonly enabled: CodecTypes['pg/bool@1']['output'];
+      readonly sort_order: CodecTypes['pg/int4@1']['output'];
     };
     readonly TokenUsage: {
       readonly id: CodecTypes['pg/int4@1']['output'];
@@ -265,13 +265,13 @@ export type FieldOutputTypes = {
       readonly model: CodecTypes['pg/text@1']['output'];
       readonly input_tokens: CodecTypes['pg/int4@1']['output'];
       readonly output_tokens: CodecTypes['pg/int4@1']['output'];
-      readonly credits_charged: CodecTypes['pg/int4@1']['output'];
+      readonly amount_cents: CodecTypes['pg/numeric@1']['output'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
     readonly User: {
       readonly auth0_id: CodecTypes['pg/text@1']['output'];
       readonly has_onboarded: CodecTypes['pg/bool@1']['output'];
-      readonly token_balance: CodecTypes['pg/int4@1']['output'];
+      readonly balance_cents: CodecTypes['pg/numeric@1']['output'];
       readonly site_admin: CodecTypes['pg/bool@1']['output'];
       readonly stripe_customer_id: CodecTypes['pg/text@1']['output'] | null;
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
@@ -360,22 +360,22 @@ export type FieldOutputTypes = {
 };
 export type FieldInputTypes = {
   readonly public: {
-    readonly ModelPricing: {
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly display_name: CodecTypes['pg/text@1']['input'];
-      readonly credits_per_1k_input: CodecTypes['pg/int4@1']['input'];
-      readonly credits_per_1k_output: CodecTypes['pg/int4@1']['input'];
-      readonly enabled: CodecTypes['pg/bool@1']['input'];
-      readonly sort_order: CodecTypes['pg/int4@1']['input'];
-    };
-    readonly TokenPurchase: {
+    readonly BalancePurchase: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly user_id: CodecTypes['pg/text@1']['input'];
-      readonly credits: CodecTypes['pg/int4@1']['input'];
+      readonly cents: CodecTypes['pg/int4@1']['input'];
       readonly amount_cents: CodecTypes['pg/int4@1']['input'];
       readonly currency: CodecTypes['pg/text@1']['input'];
       readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED';
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+    };
+    readonly ModelPricing: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly display_name: CodecTypes['pg/text@1']['input'];
+      readonly cents_per_1k_input: CodecTypes['pg/numeric@1']['input'];
+      readonly cents_per_1k_output: CodecTypes['pg/numeric@1']['input'];
+      readonly enabled: CodecTypes['pg/bool@1']['input'];
+      readonly sort_order: CodecTypes['pg/int4@1']['input'];
     };
     readonly TokenUsage: {
       readonly id: CodecTypes['pg/int4@1']['input'];
@@ -385,13 +385,13 @@ export type FieldInputTypes = {
       readonly model: CodecTypes['pg/text@1']['input'];
       readonly input_tokens: CodecTypes['pg/int4@1']['input'];
       readonly output_tokens: CodecTypes['pg/int4@1']['input'];
-      readonly credits_charged: CodecTypes['pg/int4@1']['input'];
+      readonly amount_cents: CodecTypes['pg/numeric@1']['input'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
     readonly User: {
       readonly auth0_id: CodecTypes['pg/text@1']['input'];
       readonly has_onboarded: CodecTypes['pg/bool@1']['input'];
-      readonly token_balance: CodecTypes['pg/int4@1']['input'];
+      readonly balance_cents: CodecTypes['pg/numeric@1']['input'];
       readonly site_admin: CodecTypes['pg/bool@1']['input'];
       readonly stripe_customer_id: CodecTypes['pg/text@1']['input'] | null;
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
@@ -480,26 +480,26 @@ export type FieldInputTypes = {
 };
 export type StorageColumnTypes = {
   readonly public: {
-    readonly model_pricing: {
-      readonly credits_per_1k_input: CodecTypes['pg/int4@1']['output'];
-      readonly credits_per_1k_output: CodecTypes['pg/int4@1']['output'];
-      readonly display_name: CodecTypes['pg/text@1']['output'];
-      readonly enabled: CodecTypes['pg/bool@1']['output'];
-      readonly id: CodecTypes['pg/text@1']['output'];
-      readonly sort_order: CodecTypes['pg/int4@1']['output'];
-    };
-    readonly token_purchase: {
+    readonly balance_purchase: {
       readonly amount_cents: CodecTypes['pg/int4@1']['output'];
+      readonly cents: CodecTypes['pg/int4@1']['output'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
-      readonly credits: CodecTypes['pg/int4@1']['output'];
       readonly currency: CodecTypes['pg/text@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED';
       readonly user_id: CodecTypes['pg/text@1']['output'];
     };
+    readonly model_pricing: {
+      readonly cents_per_1k_input: CodecTypes['pg/numeric@1']['output'];
+      readonly cents_per_1k_output: CodecTypes['pg/numeric@1']['output'];
+      readonly display_name: CodecTypes['pg/text@1']['output'];
+      readonly enabled: CodecTypes['pg/bool@1']['output'];
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly sort_order: CodecTypes['pg/int4@1']['output'];
+    };
     readonly token_usage: {
+      readonly amount_cents: CodecTypes['pg/numeric@1']['output'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
-      readonly credits_charged: CodecTypes['pg/int4@1']['output'];
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly input_tokens: CodecTypes['pg/int4@1']['output'];
       readonly job_id: CodecTypes['pg/text@1']['output'];
@@ -510,6 +510,7 @@ export type StorageColumnTypes = {
     };
     readonly user: {
       readonly auth0_id: CodecTypes['pg/text@1']['output'];
+      readonly balance_cents: CodecTypes['pg/numeric@1']['output'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly email: CodecTypes['pg/text@1']['output'] | null;
       readonly full_name: CodecTypes['pg/text@1']['output'] | null;
@@ -518,7 +519,6 @@ export type StorageColumnTypes = {
       readonly phone: CodecTypes['pg/text@1']['output'] | null;
       readonly site_admin: CodecTypes['pg/bool@1']['output'];
       readonly stripe_customer_id: CodecTypes['pg/text@1']['output'] | null;
-      readonly token_balance: CodecTypes['pg/int4@1']['output'];
     };
     readonly user_base_education: {
       readonly degree: CodecTypes['pg/text@1']['output'];
@@ -600,26 +600,26 @@ export type StorageColumnTypes = {
 };
 export type StorageColumnInputTypes = {
   readonly public: {
-    readonly model_pricing: {
-      readonly credits_per_1k_input: CodecTypes['pg/int4@1']['input'];
-      readonly credits_per_1k_output: CodecTypes['pg/int4@1']['input'];
-      readonly display_name: CodecTypes['pg/text@1']['input'];
-      readonly enabled: CodecTypes['pg/bool@1']['input'];
-      readonly id: CodecTypes['pg/text@1']['input'];
-      readonly sort_order: CodecTypes['pg/int4@1']['input'];
-    };
-    readonly token_purchase: {
+    readonly balance_purchase: {
       readonly amount_cents: CodecTypes['pg/int4@1']['input'];
+      readonly cents: CodecTypes['pg/int4@1']['input'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
-      readonly credits: CodecTypes['pg/int4@1']['input'];
       readonly currency: CodecTypes['pg/text@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED';
       readonly user_id: CodecTypes['pg/text@1']['input'];
     };
+    readonly model_pricing: {
+      readonly cents_per_1k_input: CodecTypes['pg/numeric@1']['input'];
+      readonly cents_per_1k_output: CodecTypes['pg/numeric@1']['input'];
+      readonly display_name: CodecTypes['pg/text@1']['input'];
+      readonly enabled: CodecTypes['pg/bool@1']['input'];
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly sort_order: CodecTypes['pg/int4@1']['input'];
+    };
     readonly token_usage: {
+      readonly amount_cents: CodecTypes['pg/numeric@1']['input'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
-      readonly credits_charged: CodecTypes['pg/int4@1']['input'];
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly input_tokens: CodecTypes['pg/int4@1']['input'];
       readonly job_id: CodecTypes['pg/text@1']['input'];
@@ -630,6 +630,7 @@ export type StorageColumnInputTypes = {
     };
     readonly user: {
       readonly auth0_id: CodecTypes['pg/text@1']['input'];
+      readonly balance_cents: CodecTypes['pg/numeric@1']['input'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly email: CodecTypes['pg/text@1']['input'] | null;
       readonly full_name: CodecTypes['pg/text@1']['input'] | null;
@@ -638,7 +639,6 @@ export type StorageColumnInputTypes = {
       readonly phone: CodecTypes['pg/text@1']['input'] | null;
       readonly site_admin: CodecTypes['pg/bool@1']['input'];
       readonly stripe_customer_id: CodecTypes['pg/text@1']['input'] | null;
-      readonly token_balance: CodecTypes['pg/int4@1']['input'];
     };
     readonly user_base_education: {
       readonly degree: CodecTypes['pg/text@1']['input'];
@@ -736,53 +736,7 @@ type ContractBase = Omit<
         readonly kind: 'postgres-schema';
         readonly entries: {
           readonly table: {
-            readonly model_pricing: {
-              columns: {
-                readonly id: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly display_name: {
-                  readonly nativeType: 'text';
-                  readonly codecId: 'pg/text@1';
-                  readonly nullable: false;
-                };
-                readonly credits_per_1k_input: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                };
-                readonly credits_per_1k_output: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                };
-                readonly enabled: {
-                  readonly nativeType: 'bool';
-                  readonly codecId: 'pg/bool@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/bool@1', true>;
-                  };
-                };
-                readonly sort_order: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
-                  readonly nullable: false;
-                  readonly default: {
-                    readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/int4@1', 0>;
-                  };
-                };
-              };
-              primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [];
-              indexes: readonly [];
-              foreignKeys: readonly [];
-            };
-            readonly token_purchase: {
+            readonly balance_purchase: {
               columns: {
                 readonly id: {
                   readonly nativeType: 'text';
@@ -794,7 +748,7 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
-                readonly credits: {
+                readonly cents: {
                   readonly nativeType: 'int4';
                   readonly codecId: 'pg/int4@1';
                   readonly nullable: false;
@@ -829,8 +783,8 @@ type ContractBase = Omit<
               uniques: readonly [];
               indexes: readonly [
                 {
-                  readonly name: 'token_purchase_user_id_idx_6c952402';
-                  readonly prefix: 'token_purchase_user_id_idx';
+                  readonly name: 'balance_purchase_user_id_idx_6c952402';
+                  readonly prefix: 'balance_purchase_user_id_idx';
                   readonly columns: readonly ['user_id'];
                   readonly unique: false;
                 },
@@ -839,7 +793,7 @@ type ContractBase = Omit<
                 {
                   readonly source: {
                     readonly namespaceId: 'public' & NamespaceId;
-                    readonly tableName: 'token_purchase';
+                    readonly tableName: 'balance_purchase';
                     readonly columns: readonly ['user_id'];
                   };
                   readonly target: {
@@ -849,6 +803,52 @@ type ContractBase = Omit<
                   };
                 },
               ];
+            };
+            readonly model_pricing: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly display_name: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly cents_per_1k_input: {
+                  readonly nativeType: 'numeric';
+                  readonly codecId: 'pg/numeric@1';
+                  readonly nullable: false;
+                };
+                readonly cents_per_1k_output: {
+                  readonly nativeType: 'numeric';
+                  readonly codecId: 'pg/numeric@1';
+                  readonly nullable: false;
+                };
+                readonly enabled: {
+                  readonly nativeType: 'bool';
+                  readonly codecId: 'pg/bool@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/bool@1', true>;
+                  };
+                };
+                readonly sort_order: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/int4@1', 0>;
+                  };
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [];
+              foreignKeys: readonly [];
             };
             readonly token_usage: {
               columns: {
@@ -891,9 +891,9 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/int4@1';
                   readonly nullable: false;
                 };
-                readonly credits_charged: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
+                readonly amount_cents: {
+                  readonly nativeType: 'numeric';
+                  readonly codecId: 'pg/numeric@1';
                   readonly nullable: false;
                 };
                 readonly created_at: {
@@ -950,13 +950,13 @@ type ContractBase = Omit<
                     readonly value: DefaultLiteralValue<'pg/bool@1', false>;
                   };
                 };
-                readonly token_balance: {
-                  readonly nativeType: 'int4';
-                  readonly codecId: 'pg/int4@1';
+                readonly balance_cents: {
+                  readonly nativeType: 'numeric';
+                  readonly codecId: 'pg/numeric@1';
                   readonly nullable: false;
                   readonly default: {
                     readonly kind: 'literal';
-                    readonly value: DefaultLiteralValue<'pg/int4@1', 100000>;
+                    readonly value: DefaultLiteralValue<'pg/numeric@1', '100'>;
                   };
                 };
                 readonly site_admin: {
@@ -1733,57 +1733,16 @@ type ContractBase = Omit<
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'TokenUsage';
     };
-    readonly token_purchase: {
+    readonly balance_purchase: {
       readonly namespace: 'public' & NamespaceId;
-      readonly model: 'TokenPurchase';
+      readonly model: 'BalancePurchase';
     };
   };
   readonly domain: {
     readonly namespaces: {
       readonly public: {
         readonly models: {
-          readonly ModelPricing: {
-            readonly fields: {
-              readonly id: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly display_name: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
-              };
-              readonly credits_per_1k_input: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly credits_per_1k_output: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-              readonly enabled: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
-              };
-              readonly sort_order: {
-                readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
-              };
-            };
-            readonly relations: Record<string, never>;
-            readonly storage: {
-              readonly table: 'model_pricing';
-              readonly namespaceId: 'public';
-              readonly fields: {
-                readonly id: { readonly column: 'id' };
-                readonly display_name: { readonly column: 'display_name' };
-                readonly credits_per_1k_input: { readonly column: 'credits_per_1k_input' };
-                readonly credits_per_1k_output: { readonly column: 'credits_per_1k_output' };
-                readonly enabled: { readonly column: 'enabled' };
-                readonly sort_order: { readonly column: 'sort_order' };
-              };
-            };
-          };
-          readonly TokenPurchase: {
+          readonly BalancePurchase: {
             readonly fields: {
               readonly id: {
                 readonly nullable: false;
@@ -1793,7 +1752,7 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
-              readonly credits: {
+              readonly cents: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
               };
@@ -1828,16 +1787,57 @@ type ContractBase = Omit<
               };
             };
             readonly storage: {
-              readonly table: 'token_purchase';
+              readonly table: 'balance_purchase';
               readonly namespaceId: 'public';
               readonly fields: {
                 readonly id: { readonly column: 'id' };
                 readonly user_id: { readonly column: 'user_id' };
-                readonly credits: { readonly column: 'credits' };
+                readonly cents: { readonly column: 'cents' };
                 readonly amount_cents: { readonly column: 'amount_cents' };
                 readonly currency: { readonly column: 'currency' };
                 readonly status: { readonly column: 'status' };
                 readonly created_at: { readonly column: 'created_at' };
+              };
+            };
+          };
+          readonly ModelPricing: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly display_name: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly cents_per_1k_input: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/numeric@1' };
+              };
+              readonly cents_per_1k_output: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/numeric@1' };
+              };
+              readonly enabled: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
+              };
+              readonly sort_order: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+            };
+            readonly relations: Record<string, never>;
+            readonly storage: {
+              readonly table: 'model_pricing';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly display_name: { readonly column: 'display_name' };
+                readonly cents_per_1k_input: { readonly column: 'cents_per_1k_input' };
+                readonly cents_per_1k_output: { readonly column: 'cents_per_1k_output' };
+                readonly enabled: { readonly column: 'enabled' };
+                readonly sort_order: { readonly column: 'sort_order' };
               };
             };
           };
@@ -1871,9 +1871,9 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
               };
-              readonly credits_charged: {
+              readonly amount_cents: {
                 readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/numeric@1' };
               };
               readonly created_at: {
                 readonly nullable: false;
@@ -1904,7 +1904,7 @@ type ContractBase = Omit<
                 readonly model: { readonly column: 'model' };
                 readonly input_tokens: { readonly column: 'input_tokens' };
                 readonly output_tokens: { readonly column: 'output_tokens' };
-                readonly credits_charged: { readonly column: 'credits_charged' };
+                readonly amount_cents: { readonly column: 'amount_cents' };
                 readonly created_at: { readonly column: 'created_at' };
               };
             };
@@ -1919,9 +1919,9 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
               };
-              readonly token_balance: {
+              readonly balance_cents: {
                 readonly nullable: false;
-                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/numeric@1' };
               };
               readonly site_admin: {
                 readonly nullable: false;
@@ -1962,7 +1962,7 @@ type ContractBase = Omit<
               readonly fields: {
                 readonly auth0_id: { readonly column: 'auth0_id' };
                 readonly has_onboarded: { readonly column: 'has_onboarded' };
-                readonly token_balance: { readonly column: 'token_balance' };
+                readonly balance_cents: { readonly column: 'balance_cents' };
                 readonly site_admin: { readonly column: 'site_admin' };
                 readonly stripe_customer_id: { readonly column: 'stripe_customer_id' };
                 readonly created_at: { readonly column: 'created_at' };

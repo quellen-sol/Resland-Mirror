@@ -47,8 +47,8 @@ export default function ModelSelect({
       <option value="">Default model</option>
       {models.map((m) => (
         <option key={m.id} value={m.id}>
-          {m.display_name} — {m.credits_per_1k_input}/{m.credits_per_1k_output}{" "}
-          credits per 1K tok
+          {m.display_name} — {m.cents_per_1k_input}/{m.cents_per_1k_output}¢
+          per 1K tok
         </option>
       ))}
     </select>

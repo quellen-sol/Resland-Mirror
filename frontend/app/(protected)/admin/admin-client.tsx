@@ -16,11 +16,11 @@ interface AdminUser {
   auth0_id: string;
   email: string | null;
   full_name: string | null;
-  token_balance: number;
-  credits_used: number;
+  balance_cents: number;
+  cents_used: number;
   input_tokens: number;
   output_tokens: number;
-  credits_purchased: number;
+  cents_purchased: number;
 }
 
 interface UsageByModel {
@@ -28,18 +28,18 @@ interface UsageByModel {
   job_count: number;
   input_tokens: number;
   output_tokens: number;
-  credits: number;
+  cents: number;
 }
 
 interface UsageByKind {
   job_kind: string;
   job_count: number;
-  credits: number;
+  cents: number;
 }
 
 interface UsageByDay {
   day: string;
-  credits: number;
+  cents: number;
 }
 
 interface RecentUsage {
@@ -50,14 +50,14 @@ interface RecentUsage {
   model: string;
   input_tokens: number;
   output_tokens: number;
-  credits_charged: number;
+  amount_cents: number;
   created_at: string;
 }
 
 interface AdminPurchase {
   id: string;
   user_id: string;
-  credits: number;
+  cents: number;
   amount_cents: number;
   currency: string;
   status: string;
@@ -139,7 +139,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
             Admin
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Token usage, purchases, and revenue across all users.
+            Usage, purchases, and revenue across all users.
           </p>
         </div>
         <Link
@@ -163,12 +163,13 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
           <CardContent className="pt-6">
             <p className="text-2xl font-semibold">
               {loaded
-                ? users
-                    .reduce((acc, u) => acc + u.credits_used, 0)
-                    .toLocaleString()
+                ? fmtMoney(
+                    users.reduce((acc, u) => acc + u.cents_used, 0),
+                    "usd",
+                  )
                 : "—"}
             </p>
-            <p className="text-xs text-zinc-500">credits consumed</p>
+            <p className="text-xs text-zinc-500">balance consumed</p>
           </CardContent>
         </Card>
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
@@ -191,7 +192,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               <tr className="border-b border-zinc-800 text-xs">
                 <th className={th}>User</th>
                 <th className={th}>Balance</th>
-                <th className={th}>Used</th>
+                <th className={th}>Spent</th>
                 <th className={th}>In / Out tokens</th>
                 <th className={th}>Purchased</th>
               </tr>
@@ -202,14 +203,14 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                   <td className={td}>
                     {u.full_name ?? u.email ?? u.auth0_id}
                   </td>
-                  <td className={td}>{u.token_balance.toLocaleString()}</td>
-                  <td className={td}>{u.credits_used.toLocaleString()}</td>
+                  <td className={td}>{fmtMoney(u.balance_cents, "usd")}</td>
+                  <td className={td}>{fmtMoney(u.cents_used, "usd")}</td>
                   <td className={td}>
                     {u.input_tokens.toLocaleString()} /{" "}
                     {u.output_tokens.toLocaleString()}
                   </td>
                   <td className={td}>
-                    {u.credits_purchased.toLocaleString()}
+                    {fmtMoney(u.cents_purchased, "usd")}
                   </td>
                 </tr>
               ))}
@@ -229,7 +230,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                 <tr className="border-b border-zinc-800 text-xs">
                   <th className={th}>Model</th>
                   <th className={th}>Jobs</th>
-                  <th className={th}>Credits</th>
+                  <th className={th}>Charged</th>
                 </tr>
               </thead>
               <tbody>
@@ -237,7 +238,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                   <tr key={m.model} className="border-b border-zinc-800/50">
                     <td className={td}>{m.model}</td>
                     <td className={td}>{m.job_count}</td>
-                    <td className={td}>{m.credits.toLocaleString()}</td>
+                    <td className={td}>{fmtMoney(m.cents, "usd")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -255,7 +256,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                 <tr className="border-b border-zinc-800 text-xs">
                   <th className={th}>Kind</th>
                   <th className={th}>Jobs</th>
-                  <th className={th}>Credits</th>
+                  <th className={th}>Charged</th>
                 </tr>
               </thead>
               <tbody>
@@ -263,7 +264,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                   <tr key={k.job_kind} className="border-b border-zinc-800/50">
                     <td className={td}>{k.job_kind}</td>
                     <td className={td}>{k.job_count}</td>
-                    <td className={td}>{k.credits.toLocaleString()}</td>
+                    <td className={td}>{fmtMoney(k.cents, "usd")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -280,14 +281,14 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               <thead>
                 <tr className="border-b border-zinc-800 text-xs">
                   <th className={th}>Day</th>
-                  <th className={th}>Credits</th>
+                  <th className={th}>Charged</th>
                 </tr>
               </thead>
               <tbody>
                 {byDay.map((d) => (
                   <tr key={d.day} className="border-b border-zinc-800/50">
                     <td className={td}>{d.day}</td>
-                    <td className={td}>{d.credits.toLocaleString()}</td>
+                    <td className={td}>{fmtMoney(d.cents, "usd")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -306,7 +307,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               <tr className="border-b border-zinc-800 text-xs">
                 <th className={th}>Date</th>
                 <th className={th}>User</th>
-                <th className={th}>Tokens</th>
+                <th className={th}>Granted</th>
                 <th className={th}>Amount</th>
                 <th className={th}>Status</th>
               </tr>
@@ -316,7 +317,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                 <tr key={p.id} className="border-b border-zinc-800/50">
                   <td className={td}>{fmtDate(p.created_at)}</td>
                   <td className={td}>{p.user_id}</td>
-                  <td className={td}>{p.credits.toLocaleString()}</td>
+                  <td className={td}>{fmtMoney(p.cents, p.currency)}</td>
                   <td className={td}>{fmtMoney(p.amount_cents, p.currency)}</td>
                   <td className={td}>{p.status}</td>
                 </tr>
@@ -339,7 +340,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                 <th className={th}>Kind</th>
                 <th className={th}>Model</th>
                 <th className={th}>In / Out</th>
-                <th className={th}>Credits</th>
+                <th className={th}>Charged</th>
               </tr>
             </thead>
             <tbody>
@@ -353,7 +354,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                     {r.input_tokens.toLocaleString()} /{" "}
                     {r.output_tokens.toLocaleString()}
                   </td>
-                  <td className={td}>{r.credits_charged.toLocaleString()}</td>
+                  <td className={td}>{fmtMoney(r.amount_cents, "usd")}</td>
                 </tr>
               ))}
             </tbody>

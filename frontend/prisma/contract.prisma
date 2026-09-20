@@ -3,7 +3,8 @@
 model User {
   auth0_id            String   @id
   has_onboarded       Boolean  @default(false)
-  token_balance       Int      @default(100000)
+  // USD cents, fractional — sub-cent charges from cheap models still count.
+  balance_cents       Decimal  @default("100")
   site_admin          Boolean  @default(false)
   stripe_customer_id  String?
   created_at          DateTime @default(now())
@@ -180,13 +181,13 @@ model UserTailorRun {
   @@index([user_id])
 }
 
-// Whitelist of selectable models with internal-credit pricing.
+// Whitelist of selectable models, priced in cents per 1K tokens.
 // `id` is the langchain model spec, e.g. "openrouter:openai/gpt-5-mini".
 model ModelPricing {
   id                    String  @id
   display_name          String
-  credits_per_1k_input  Int
-  credits_per_1k_output Int
+  cents_per_1k_input    Decimal
+  cents_per_1k_output   Decimal
   enabled               Boolean @default(true)
   sort_order            Int     @default(0)
 
@@ -208,7 +209,7 @@ model TokenUsage {
   model           String
   input_tokens    Int
   output_tokens   Int
-  credits_charged Int
+  amount_cents    Decimal
   created_at      DateTime     @default(now())
 
   @@map("token_usage")
@@ -223,17 +224,17 @@ enum PurchaseStatus {
 }
 
 // One row per Stripe Checkout session; `id` is the Stripe session id so the
-// webhook credit is idempotent.
-model TokenPurchase {
+// webhook top-up is idempotent.
+model BalancePurchase {
   id           String         @id
   user_id      String
   user         User           @relation(fields: [user_id], references: [auth0_id])
-  credits      Int
+  cents        Int
   amount_cents Int
   currency     String
   status       PurchaseStatus @default(PENDING)
   created_at   DateTime       @default(now())
 
-  @@map("token_purchase")
+  @@map("balance_purchase")
   @@index([user_id])
 }

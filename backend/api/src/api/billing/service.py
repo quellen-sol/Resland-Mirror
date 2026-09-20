@@ -18,17 +18,17 @@ def _require_stripe() -> None:
 async def get_balance(pg_conn: PgConnection, user_id: str) -> model.BalanceResponse:
     async with pg_conn.cursor() as cursor:
         res = await cursor.execute(
-            'SELECT token_balance FROM "user" WHERE auth0_id = %s', (user_id,)
+            'SELECT balance_cents FROM "user" WHERE auth0_id = %s', (user_id,)
         )
         row = await res.fetchone()
-    return model.BalanceResponse(token_balance=row[0] if row else 0)
+    return model.BalanceResponse(balance_cents=float(row[0]) if row else 0.0)
 
 
 async def list_models(pg_conn: PgConnection) -> model.ModelsResponse:
     async with pg_conn.cursor() as cursor:
         res = await cursor.execute(
             """
-            SELECT id, display_name, credits_per_1k_input, credits_per_1k_output
+            SELECT id, display_name, cents_per_1k_input, cents_per_1k_output
             FROM model_pricing WHERE enabled ORDER BY sort_order
             """
         )
@@ -38,8 +38,8 @@ async def list_models(pg_conn: PgConnection) -> model.ModelsResponse:
             model.ModelInfo(
                 id=r[0],
                 display_name=r[1],
-                credits_per_1k_input=r[2],
-                credits_per_1k_output=r[3],
+                cents_per_1k_input=float(r[2]),
+                cents_per_1k_output=float(r[3]),
             )
             for r in rows
         ]
@@ -52,8 +52,8 @@ async def list_purchases(
     async with pg_conn.cursor() as cursor:
         res = await cursor.execute(
             """
-            SELECT id, credits, amount_cents, currency, status, created_at
-            FROM token_purchase WHERE user_id = %s ORDER BY created_at DESC
+            SELECT id, cents, amount_cents, currency, status, created_at
+            FROM balance_purchase WHERE user_id = %s ORDER BY created_at DESC
             """,
             (user_id,),
         )
@@ -62,7 +62,7 @@ async def list_purchases(
         purchases=[
             model.PurchaseItem(
                 id=r[0],
-                credits=r[1],
+                cents=r[1],
                 amount_cents=r[2],
                 currency=r[3],
                 status=r[4],
@@ -118,25 +118,26 @@ async def create_checkout(
                 "quantity": 1,
             }
         ],
-        metadata={"pack_id": pack.id, "credits": str(pack.credits)},
+        metadata={"pack_id": pack.id, "cents": str(pack.cents)},
         success_url=f"{FRONTEND_BASE_URL}/billing?checkout=success",
         cancel_url=f"{FRONTEND_BASE_URL}/billing?checkout=cancelled",
     )
 
-    # The webhook flips this to COMPLETED and credits the balance; the session
-    # id is the purchase's PK so a redelivered webhook can't double-credit.
+    # The webhook flips this to COMPLETED and tops up the balance; the
+    # session id is the purchase's PK so a redelivered webhook can't
+    # double-credit.
     async with pg_conn.transaction(), pg_conn.cursor() as cursor:
         await cursor.execute(
             """
-            INSERT INTO token_purchase
-              (id, user_id, credits, amount_cents, currency, status)
+            INSERT INTO balance_purchase
+              (id, user_id, cents, amount_cents, currency, status)
             VALUES (%s, %s, %s, %s, %s, 'PENDING')
             ON CONFLICT (id) DO NOTHING
             """,
             (
                 session.id,
                 user_id,
-                pack.credits,
+                pack.cents,
                 pack.amount_cents,
                 pack.currency,
             ),
@@ -163,8 +164,8 @@ async def handle_webhook(
 
     if event_type == "checkout.session.completed":
         purchaser_id = session.get("client_reference_id")
-        credits = (session.get("metadata") or {}).get("credits")
-        if not purchaser_id or not credits:
+        cents = (session.get("metadata") or {}).get("cents")
+        if not purchaser_id or not cents:
             # Not one of our token-pack sessions — acknowledge and move on.
             return {"ok": True}
         async with pg_conn.transaction(), pg_conn.cursor() as cursor:
@@ -172,15 +173,15 @@ async def handle_webhook(
             # INSERT commits — upsert from the session payload first.
             await cursor.execute(
                 """
-                INSERT INTO token_purchase
-                  (id, user_id, credits, amount_cents, currency, status)
+                INSERT INTO balance_purchase
+                  (id, user_id, cents, amount_cents, currency, status)
                 VALUES (%s, %s, %s, %s, %s, 'PENDING')
                 ON CONFLICT (id) DO NOTHING
                 """,
                 (
                     session["id"],
                     purchaser_id,
-                    int(credits),
+                    int(cents),
                     session["amount_total"],
                     session["currency"],
                 ),
@@ -188,9 +189,9 @@ async def handle_webhook(
             # Only a PENDING row transitions — a redelivered event is a no-op.
             res = await cursor.execute(
                 """
-                UPDATE token_purchase SET status = 'COMPLETED'
+                UPDATE balance_purchase SET status = 'COMPLETED'
                 WHERE id = %s AND status = 'PENDING'
-                RETURNING user_id, credits
+                RETURNING user_id, cents
                 """,
                 (session["id"],),
             )
@@ -199,7 +200,7 @@ async def handle_webhook(
                 await cursor.execute(
                     """
                     UPDATE "user"
-                    SET token_balance = token_balance + %s
+                    SET balance_cents = balance_cents + %s
                     WHERE auth0_id = %s
                     """,
                     (purchase[1], purchase[0]),
@@ -208,7 +209,7 @@ async def handle_webhook(
         async with pg_conn.transaction(), pg_conn.cursor() as cursor:
             await cursor.execute(
                 """
-                UPDATE token_purchase SET status = 'EXPIRED'
+                UPDATE balance_purchase SET status = 'EXPIRED'
                 WHERE id = %s AND status = 'PENDING'
                 """,
                 (session["id"],),

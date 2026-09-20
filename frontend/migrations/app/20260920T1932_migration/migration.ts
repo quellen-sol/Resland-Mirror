@@ -1,8 +1,8 @@
 #!/usr/bin/env -S node
 import type { Contract as Start } from '../../snapshots/4cfa9de85dda60dd8eabf3b7d38fdfb73de17bf860102235b1e9c846e345aa23/contract';
 import startContract from '../../snapshots/4cfa9de85dda60dd8eabf3b7d38fdfb73de17bf860102235b1e9c846e345aa23/contract.json' with { type: 'json' };
-import type { Contract as End } from '../../snapshots/ab83bc9d635db30afd8840549bb14c2c7d6c3da024579d31bc5be53d1dc4a20f/contract';
-import endContract from '../../snapshots/ab83bc9d635db30afd8840549bb14c2c7d6c3da024579d31bc5be53d1dc4a20f/contract.json' with { type: 'json' };
+import type { Contract as End } from '../../snapshots/5e30f261d7e4b644a7ccec75be7cc69bdfbe0063a96c67b0ac8dd2c6fd453faf/contract';
+import endContract from '../../snapshots/5e30f261d7e4b644a7ccec75be7cc69bdfbe0063a96c67b0ac8dd2c6fd453faf/contract.json' with { type: 'json' };
 import {
   Migration,
   MigrationCLI,
@@ -25,15 +25,43 @@ export default class M extends Migration<Start, End> {
     return [
       this.createTable({
         schema: 'public',
+        table: 'balance_purchase',
+        columns: [
+          col('amount_cents', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
+          col('cents', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
+          col('created_at', 'timestamptz', {
+            notNull: true,
+            default: fn('now()'),
+            codecRef: { codecId: 'pg/timestamptz-temporal@1' },
+          }),
+          col('currency', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+          col('status', 'text', {
+            notNull: true,
+            default: lit('PENDING'),
+            codecRef: { codecId: 'pg/text@1' },
+          }),
+          col('user_id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
+        ],
+        constraints: [
+          primaryKey(['id']),
+          checkExpression(
+            'balance_purchase_status_check_37d7c798',
+            "\"status\" IN ('PENDING', 'COMPLETED', 'EXPIRED')",
+          ),
+        ],
+      }),
+      this.createTable({
+        schema: 'public',
         table: 'model_pricing',
         columns: [
-          col('credits_per_1k_input', 'int4', {
+          col('cents_per_1k_input', 'numeric', {
             notNull: true,
-            codecRef: { codecId: 'pg/int4@1' },
+            codecRef: { codecId: 'pg/numeric@1' },
           }),
-          col('credits_per_1k_output', 'int4', {
+          col('cents_per_1k_output', 'numeric', {
             notNull: true,
-            codecRef: { codecId: 'pg/int4@1' },
+            codecRef: { codecId: 'pg/numeric@1' },
           }),
           col('display_name', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
           col('enabled', 'bool', {
@@ -52,42 +80,14 @@ export default class M extends Migration<Start, End> {
       }),
       this.createTable({
         schema: 'public',
-        table: 'token_purchase',
-        columns: [
-          col('amount_cents', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
-          col('created_at', 'timestamptz', {
-            notNull: true,
-            default: fn('now()'),
-            codecRef: { codecId: 'pg/timestamptz-temporal@1' },
-          }),
-          col('credits', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
-          col('currency', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
-          col('id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
-          col('status', 'text', {
-            notNull: true,
-            default: lit('PENDING'),
-            codecRef: { codecId: 'pg/text@1' },
-          }),
-          col('user_id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
-        ],
-        constraints: [
-          primaryKey(['id']),
-          checkExpression(
-            'token_purchase_status_check_37d7c798',
-            "\"status\" IN ('PENDING', 'COMPLETED', 'EXPIRED')",
-          ),
-        ],
-      }),
-      this.createTable({
-        schema: 'public',
         table: 'token_usage',
         columns: [
+          col('amount_cents', 'numeric', { notNull: true, codecRef: { codecId: 'pg/numeric@1' } }),
           col('created_at', 'timestamptz', {
             notNull: true,
             default: fn('now()'),
             codecRef: { codecId: 'pg/timestamptz-temporal@1' },
           }),
-          col('credits_charged', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
           col('id', 'SERIAL', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
           col('input_tokens', 'int4', { notNull: true, codecRef: { codecId: 'pg/int4@1' } }),
           col('job_id', 'text', { notNull: true, codecRef: { codecId: 'pg/text@1' } }),
@@ -107,6 +107,15 @@ export default class M extends Migration<Start, End> {
       this.addColumn({
         schema: 'public',
         table: 'user',
+        column: col('balance_cents', 'numeric', {
+          notNull: true,
+          default: lit('100'),
+          codecRef: { codecId: 'pg/numeric@1' },
+        }),
+      }),
+      this.addColumn({
+        schema: 'public',
+        table: 'user',
         column: col('site_admin', 'bool', {
           notNull: true,
           default: lit(false),
@@ -120,15 +129,6 @@ export default class M extends Migration<Start, End> {
       }),
       this.addColumn({
         schema: 'public',
-        table: 'user',
-        column: col('token_balance', 'int4', {
-          notNull: true,
-          default: lit(100000),
-          codecRef: { codecId: 'pg/int4@1' },
-        }),
-      }),
-      this.addColumn({
-        schema: 'public',
         table: 'user_suggestion',
         column: col('model', 'text', { codecRef: { codecId: 'pg/text@1' } }),
       }),
@@ -139,8 +139,8 @@ export default class M extends Migration<Start, End> {
       }),
       this.createIndex({
         schema: 'public',
-        table: 'token_purchase',
-        index: 'token_purchase_user_id_idx_6c952402',
+        table: 'balance_purchase',
+        index: 'balance_purchase_user_id_idx_6c952402',
         columns: ['user_id'],
       }),
       this.createIndex({
@@ -157,9 +157,9 @@ export default class M extends Migration<Start, End> {
       }),
       this.addForeignKey({
         schema: 'public',
-        table: 'token_purchase',
+        table: 'balance_purchase',
         foreignKey: {
-          name: 'token_purchase_user_id_fkey',
+          name: 'balance_purchase_user_id_fkey',
           columns: ['user_id'],
           references: { schema: 'public', table: 'user', columns: ['auth0_id'] },
         },
@@ -173,8 +173,6 @@ export default class M extends Migration<Start, End> {
           references: { schema: 'public', table: 'user', columns: ['auth0_id'] },
         },
       }),
-      // Seed the selectable-model catalog. 1 credit = $0.00001; rates are
-      // roughly OpenRouter list price x1.25 per 1K tokens.
       this.dataTransform(statics.contract, 'seed-model_pricing-catalog', {
         check: () =>
           raw.sql`
@@ -191,12 +189,12 @@ export default class M extends Migration<Start, End> {
         run: () =>
           raw.sql`
             INSERT INTO model_pricing
-              (id, display_name, credits_per_1k_input, credits_per_1k_output, enabled, sort_order)
+              (id, display_name, cents_per_1k_input, cents_per_1k_output, enabled, sort_order)
             VALUES
-              ('openrouter:openai/gpt-5-mini', 'GPT-5 Mini', 30, 250, true, 1),
-              ('openrouter:openai/gpt-5', 'GPT-5', 160, 1250, true, 2),
-              ('openrouter:anthropic/claude-sonnet-4.5', 'Claude Sonnet 4.5', 375, 1900, true, 3),
-              ('openrouter:google/gemini-2.5-flash', 'Gemini 2.5 Flash', 40, 315, true, 4)
+              ('openrouter:openai/gpt-5-mini', 'GPT-5 Mini', 0.03, 0.25, true, 1),
+              ('openrouter:openai/gpt-5', 'GPT-5', 0.16, 1.25, true, 2),
+              ('openrouter:anthropic/claude-sonnet-4.5', 'Claude Sonnet 4.5', 0.375, 1.9, true, 3),
+              ('openrouter:google/gemini-2.5-flash', 'Gemini 2.5 Flash', 0.04, 0.315, true, 4)
             ON CONFLICT (id) DO NOTHING
           `.affectedCount(),
       }),

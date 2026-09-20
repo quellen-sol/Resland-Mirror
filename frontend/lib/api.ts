@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-export function isOutOfCredits(error: unknown) {
+export function isInsufficientBalance(error: unknown) {
   return error instanceof ApiError && error.status === 402;
 }
 
@@ -35,6 +35,13 @@ export async function apiFetch(
 export interface PricedModel {
   id: string;
   display_name: string;
-  credits_per_1k_input: number;
-  credits_per_1k_output: number;
+  cents_per_1k_input: number;
+  cents_per_1k_output: number;
+}
+
+export function fmtCents(cents: number) {
+  return (cents / 100).toLocaleString("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
 }

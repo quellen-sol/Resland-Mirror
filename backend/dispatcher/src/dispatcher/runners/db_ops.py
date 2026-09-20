@@ -27,8 +27,8 @@ class DbOpError(Exception):
 # Charged when a job's model has no model_pricing row (e.g. the env-default
 # model isn't in the catalog). Roughly gpt-5 rates — mid-tier, so unpriced
 # models never run free.
-FALLBACK_CREDITS_PER_1K_INPUT = 160
-FALLBACK_CREDITS_PER_1K_OUTPUT = 1250
+FALLBACK_CENTS_PER_1K_INPUT = 0.16
+FALLBACK_CENTS_PER_1K_OUTPUT = 1.25
 
 
 def record_token_usage(
@@ -40,31 +40,32 @@ def record_token_usage(
     model: str,
     input_tokens: int,
     output_tokens: int,
-) -> int:
-    """Insert one token_usage row and deduct credits from the user's balance.
-    Floors at 0 — a job that overruns still finishes. Returns credits charged."""
+) -> float:
+    """Insert one token_usage row and deduct from the user's balance.
+    Floors at 0 — a job that overruns still finishes. Returns cents charged."""
     if not input_tokens and not output_tokens:
-        return 0
+        return 0.0
 
     row = pg_client.execute(
         """
-        SELECT credits_per_1k_input, credits_per_1k_output
+        SELECT cents_per_1k_input, cents_per_1k_output
         FROM model_pricing WHERE id = %s
         """,
         (model,),
     ).fetchone()
-    rate_in = row[0] if row else FALLBACK_CREDITS_PER_1K_INPUT
-    rate_out = row[1] if row else FALLBACK_CREDITS_PER_1K_OUTPUT
-    credits = math.ceil(
-        (input_tokens * rate_in + output_tokens * rate_out) / 1000
-    )
+    rate_in = float(row[0]) if row else FALLBACK_CENTS_PER_1K_INPUT
+    rate_out = float(row[1]) if row else FALLBACK_CENTS_PER_1K_OUTPUT
+    # Round up to 1/10,000¢ so sub-cent charges never round down to free.
+    amount_cents = math.ceil(
+        (input_tokens * rate_in + output_tokens * rate_out) / 1000 * 10_000
+    ) / 10_000
 
     with pg_client.transaction():
         pg_client.execute(
             """
             INSERT INTO token_usage
               (user_id, job_kind, job_id, model,
-               input_tokens, output_tokens, credits_charged)
+               input_tokens, output_tokens, amount_cents)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
             (
@@ -74,18 +75,18 @@ def record_token_usage(
                 model,
                 input_tokens,
                 output_tokens,
-                credits,
+                amount_cents,
             ),
         )
         pg_client.execute(
             """
             UPDATE "user"
-            SET token_balance = GREATEST(0, token_balance - %s)
+            SET balance_cents = GREATEST(0, balance_cents - %s)
             WHERE auth0_id = %s
             """,
-            (credits, user_id),
+            (amount_cents, user_id),
         )
-    return credits
+    return amount_cents
 
 
 def fetch_suggestion_rows(

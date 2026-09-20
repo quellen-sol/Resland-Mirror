@@ -101,6 +101,6 @@ class SuggestionsRunner(LocalThreadJobRunner):
                             input_tokens=usage["input_tokens"],
                             output_tokens=usage["output_tokens"],
                         )
-                        print(f"Charged {charged} credits for {session_id}")
+                        print(f"Charged {charged}¢ for {session_id}")
                 except Exception as e:
                     print(f"Failed to record token usage: {e}")

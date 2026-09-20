@@ -4,12 +4,12 @@
   "target": "postgres",
   "profileHash": "3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2",
   "roots": {
-    "model_pricing": {
-      "model": "ModelPricing",
+    "balance_purchase": {
+      "model": "BalancePurchase",
       "namespace": "public"
     },
-    "token_purchase": {
-      "model": "TokenPurchase",
+    "model_pricing": {
+      "model": "ModelPricing",
       "namespace": "public"
     },
     "token_usage": {
@@ -169,80 +169,16 @@
           }
         },
         "models": {
-          "ModelPricing": {
-            "fields": {
-              "credits_per_1k_input": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              },
-              "credits_per_1k_output": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              },
-              "display_name": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "enabled": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/bool@1",
-                  "kind": "scalar"
-                }
-              },
-              "id": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/text@1",
-                  "kind": "scalar"
-                }
-              },
-              "sort_order": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
-              }
-            },
-            "relations": {},
-            "storage": {
-              "fields": {
-                "credits_per_1k_input": {
-                  "column": "credits_per_1k_input"
-                },
-                "credits_per_1k_output": {
-                  "column": "credits_per_1k_output"
-                },
-                "display_name": {
-                  "column": "display_name"
-                },
-                "enabled": {
-                  "column": "enabled"
-                },
-                "id": {
-                  "column": "id"
-                },
-                "sort_order": {
-                  "column": "sort_order"
-                }
-              },
-              "namespaceId": "public",
-              "table": "model_pricing"
-            }
-          },
-          "TokenPurchase": {
+          "BalancePurchase": {
             "fields": {
               "amount_cents": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "cents": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/int4@1",
@@ -253,13 +189,6 @@
                 "nullable": false,
                 "type": {
                   "codecId": "pg/timestamptz-temporal@1",
-                  "kind": "scalar"
-                }
-              },
-              "credits": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
@@ -320,11 +249,11 @@
                 "amount_cents": {
                   "column": "amount_cents"
                 },
+                "cents": {
+                  "column": "cents"
+                },
                 "created_at": {
                   "column": "created_at"
-                },
-                "credits": {
-                  "column": "credits"
                 },
                 "currency": {
                   "column": "currency"
@@ -340,22 +269,93 @@
                 }
               },
               "namespaceId": "public",
-              "table": "token_purchase"
+              "table": "balance_purchase"
+            }
+          },
+          "ModelPricing": {
+            "fields": {
+              "cents_per_1k_input": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/numeric@1",
+                  "kind": "scalar"
+                }
+              },
+              "cents_per_1k_output": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/numeric@1",
+                  "kind": "scalar"
+                }
+              },
+              "display_name": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "enabled": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "sort_order": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "cents_per_1k_input": {
+                  "column": "cents_per_1k_input"
+                },
+                "cents_per_1k_output": {
+                  "column": "cents_per_1k_output"
+                },
+                "display_name": {
+                  "column": "display_name"
+                },
+                "enabled": {
+                  "column": "enabled"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "sort_order": {
+                  "column": "sort_order"
+                }
+              },
+              "namespaceId": "public",
+              "table": "model_pricing"
             }
           },
           "TokenUsage": {
             "fields": {
+              "amount_cents": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/numeric@1",
+                  "kind": "scalar"
+                }
+              },
               "created_at": {
                 "nullable": false,
                 "type": {
                   "codecId": "pg/timestamptz-temporal@1",
-                  "kind": "scalar"
-                }
-              },
-              "credits_charged": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
                   "kind": "scalar"
                 }
               },
@@ -434,11 +434,11 @@
             },
             "storage": {
               "fields": {
+                "amount_cents": {
+                  "column": "amount_cents"
+                },
                 "created_at": {
                   "column": "created_at"
-                },
-                "credits_charged": {
-                  "column": "credits_charged"
                 },
                 "id": {
                   "column": "id"
@@ -472,6 +472,13 @@
                 "nullable": false,
                 "type": {
                   "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "balance_cents": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/numeric@1",
                   "kind": "scalar"
                 }
               },
@@ -530,13 +537,6 @@
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
-              },
-              "token_balance": {
-                "nullable": false,
-                "type": {
-                  "codecId": "pg/int4@1",
-                  "kind": "scalar"
-                }
               }
             },
             "relations": {},
@@ -544,6 +544,9 @@
               "fields": {
                 "auth0_id": {
                   "column": "auth0_id"
+                },
+                "balance_cents": {
+                  "column": "balance_cents"
                 },
                 "created_at": {
                   "column": "created_at"
@@ -568,9 +571,6 @@
                 },
                 "stripe_customer_id": {
                   "column": "stripe_customer_id"
-                },
-                "token_balance": {
-                  "column": "token_balance"
                 }
               },
               "namespaceId": "public",
@@ -1463,66 +1463,21 @@
       "public": {
         "entries": {
           "table": {
-            "model_pricing": {
-              "columns": {
-                "credits_per_1k_input": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
-                  "nullable": false
-                },
-                "credits_per_1k_output": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
-                  "nullable": false
-                },
-                "display_name": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "enabled": {
-                  "codecId": "pg/bool@1",
-                  "default": {
-                    "kind": "literal",
-                    "value": true
-                  },
-                  "nativeType": "bool",
-                  "nullable": false
-                },
-                "id": {
-                  "codecId": "pg/text@1",
-                  "nativeType": "text",
-                  "nullable": false
-                },
-                "sort_order": {
-                  "codecId": "pg/int4@1",
-                  "default": {
-                    "kind": "literal",
-                    "value": 0
-                  },
-                  "nativeType": "int4",
-                  "nullable": false
-                }
-              },
-              "foreignKeys": [],
-              "indexes": [],
-              "primaryKey": {
-                "columns": [
-                  "id"
-                ]
-              },
-              "uniques": []
-            },
-            "token_purchase": {
+            "balance_purchase": {
               "checks": [
                 {
                   "expression": "\"status\" IN ('PENDING', 'COMPLETED', 'EXPIRED')",
-                  "name": "token_purchase_status_check_37d7c798",
-                  "prefix": "token_purchase_status_check"
+                  "name": "balance_purchase_status_check_37d7c798",
+                  "prefix": "balance_purchase_status_check"
                 }
               ],
               "columns": {
                 "amount_cents": {
+                  "codecId": "pg/int4@1",
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "cents": {
                   "codecId": "pg/int4@1",
                   "nativeType": "int4",
                   "nullable": false
@@ -1534,11 +1489,6 @@
                     "kind": "function"
                   },
                   "nativeType": "timestamptz",
-                  "nullable": false
-                },
-                "credits": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
                   "nullable": false
                 },
                 "currency": {
@@ -1579,7 +1529,7 @@
                       "user_id"
                     ],
                     "namespaceId": "public",
-                    "tableName": "token_purchase"
+                    "tableName": "balance_purchase"
                   },
                   "target": {
                     "columns": [
@@ -1595,11 +1545,61 @@
                   "columns": [
                     "user_id"
                   ],
-                  "name": "token_purchase_user_id_idx_6c952402",
-                  "prefix": "token_purchase_user_id_idx",
+                  "name": "balance_purchase_user_id_idx_6c952402",
+                  "prefix": "balance_purchase_user_id_idx",
                   "unique": false
                 }
               ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "model_pricing": {
+              "columns": {
+                "cents_per_1k_input": {
+                  "codecId": "pg/numeric@1",
+                  "nativeType": "numeric",
+                  "nullable": false
+                },
+                "cents_per_1k_output": {
+                  "codecId": "pg/numeric@1",
+                  "nativeType": "numeric",
+                  "nullable": false
+                },
+                "display_name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "enabled": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": true
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "sort_order": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
               "primaryKey": {
                 "columns": [
                   "id"
@@ -1616,6 +1616,11 @@
                 }
               ],
               "columns": {
+                "amount_cents": {
+                  "codecId": "pg/numeric@1",
+                  "nativeType": "numeric",
+                  "nullable": false
+                },
                 "created_at": {
                   "codecId": "pg/timestamptz-temporal@1",
                   "default": {
@@ -1623,11 +1628,6 @@
                     "kind": "function"
                   },
                   "nativeType": "timestamptz",
-                  "nullable": false
-                },
-                "credits_charged": {
-                  "codecId": "pg/int4@1",
-                  "nativeType": "int4",
                   "nullable": false
                 },
                 "id": {
@@ -1726,6 +1726,15 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "balance_cents": {
+                  "codecId": "pg/numeric@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "100"
+                  },
+                  "nativeType": "numeric",
+                  "nullable": false
+                },
                 "created_at": {
                   "codecId": "pg/timestamptz-temporal@1",
                   "default": {
@@ -1777,15 +1786,6 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
-                },
-                "token_balance": {
-                  "codecId": "pg/int4@1",
-                  "default": {
-                    "kind": "literal",
-                    "value": 100000
-                  },
-                  "nativeType": "int4",
-                  "nullable": false
                 }
               },
               "foreignKeys": [],
@@ -2705,7 +2705,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "ab83bc9d635db30afd8840549bb14c2c7d6c3da024579d31bc5be53d1dc4a20f"
+    "storageHash": "5e30f261d7e4b644a7ccec75be7cc69bdfbe0063a96c67b0ac8dd2c6fd453faf"
   },
   "capabilities": {
     "postgres": {

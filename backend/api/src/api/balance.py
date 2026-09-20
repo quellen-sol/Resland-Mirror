@@ -3,20 +3,20 @@ from fastapi import HTTPException
 from .deps import PgConnection
 
 
-async def require_token_balance(pg_conn: PgConnection, user_id: str) -> int:
+async def require_balance(pg_conn: PgConnection, user_id: str) -> float:
     """Gate for starting a paid job. Running jobs are never interrupted —
     the dispatcher deducts what they burn, flooring the balance at 0."""
     async with pg_conn.cursor() as cursor:
         res = await cursor.execute(
-            'SELECT token_balance FROM "user" WHERE auth0_id = %s',
+            'SELECT balance_cents FROM "user" WHERE auth0_id = %s',
             (user_id,),
         )
         row = await res.fetchone()
-    balance = row[0] if row else 0
+    balance = float(row[0]) if row else 0.0
     if balance <= 0:
         raise HTTPException(
             status_code=402,
-            detail="out_of_tokens",
+            detail="insufficient_balance",
         )
     return balance
 

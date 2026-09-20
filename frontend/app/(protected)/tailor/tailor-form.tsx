@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "cn";
 import ModelSelect from "@/components/model-select";
-import { apiFetch as apiRequest, isOutOfCredits } from "@/lib/api";
+import { apiFetch as apiRequest, isInsufficientBalance } from "@/lib/api";
 
 const MAX_JD_CHARS = 10_000;
 const POLL_INTERVAL_MS = 3000;
@@ -105,11 +105,11 @@ export default function TailorForm({
       });
       setRun({ run_id, status: "PROCESSING" });
     } catch (error) {
-      if (isOutOfCredits(error)) {
-        toast.error("Out of tokens", {
-          description: "Top up your balance to keep going.",
+      if (isInsufficientBalance(error)) {
+        toast.error("Insufficient balance", {
+          description: "Top up to keep going.",
           action: {
-            label: "Buy tokens",
+            label: "Top up",
             onClick: () => router.push("/billing"),
           },
         });

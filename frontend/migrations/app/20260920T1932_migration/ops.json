@@ -1,5 +1,44 @@
 [
   {
+    "id": "table.balance_purchase",
+    "label": "Create table \"balance_purchase\"",
+    "summary": "Creates table \"balance_purchase\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "balance_purchase"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"balance_purchase\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"balance_purchase\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"balance_purchase\"",
+        "sql": "CREATE TABLE \"public\".\"balance_purchase\" (\n  \"amount_cents\" int4 NOT NULL,\n  \"cents\" int4 NOT NULL,\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"currency\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"status\" text DEFAULT 'PENDING' NOT NULL,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"balance_purchase_status_check_37d7c798\" CHECK (\"status\" IN ('PENDING', 'COMPLETED', 'EXPIRED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"balance_purchase\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"balance_purchase\""
+        ]
+      }
+    ]
+  },
+  {
     "id": "table.model_pricing",
     "label": "Create table \"model_pricing\"",
     "summary": "Creates table \"model_pricing\"",
@@ -24,7 +63,7 @@
     "execute": [
       {
         "description": "create table \"model_pricing\"",
-        "sql": "CREATE TABLE \"public\".\"model_pricing\" (\n  \"credits_per_1k_input\" int4 NOT NULL,\n  \"credits_per_1k_output\" int4 NOT NULL,\n  \"display_name\" text NOT NULL,\n  \"enabled\" bool DEFAULT true NOT NULL,\n  \"id\" text NOT NULL,\n  \"sort_order\" int4 DEFAULT 0 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "sql": "CREATE TABLE \"public\".\"model_pricing\" (\n  \"cents_per_1k_input\" numeric NOT NULL,\n  \"cents_per_1k_output\" numeric NOT NULL,\n  \"display_name\" text NOT NULL,\n  \"enabled\" bool DEFAULT true NOT NULL,\n  \"id\" text NOT NULL,\n  \"sort_order\" int4 DEFAULT 0 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
         "params": []
       }
     ],
@@ -34,45 +73,6 @@
         "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
         "params": [
           "\"public\".\"model_pricing\""
-        ]
-      }
-    ]
-  },
-  {
-    "id": "table.token_purchase",
-    "label": "Create table \"token_purchase\"",
-    "summary": "Creates table \"token_purchase\"",
-    "operationClass": "additive",
-    "target": {
-      "id": "postgres",
-      "details": {
-        "schema": "public",
-        "objectType": "table",
-        "name": "token_purchase"
-      }
-    },
-    "precheck": [
-      {
-        "description": "ensure table \"token_purchase\" does not exist",
-        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
-        "params": [
-          "\"public\".\"token_purchase\""
-        ]
-      }
-    ],
-    "execute": [
-      {
-        "description": "create table \"token_purchase\"",
-        "sql": "CREATE TABLE \"public\".\"token_purchase\" (\n  \"amount_cents\" int4 NOT NULL,\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"credits\" int4 NOT NULL,\n  \"currency\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"status\" text DEFAULT 'PENDING' NOT NULL,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"token_purchase_status_check_37d7c798\" CHECK (\"status\" IN ('PENDING', 'COMPLETED', 'EXPIRED'))\n)",
-        "params": []
-      }
-    ],
-    "postcheck": [
-      {
-        "description": "verify table \"token_purchase\" exists",
-        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
-        "params": [
-          "\"public\".\"token_purchase\""
         ]
       }
     ]
@@ -102,7 +102,7 @@
     "execute": [
       {
         "description": "create table \"token_usage\"",
-        "sql": "CREATE TABLE \"public\".\"token_usage\" (\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"credits_charged\" int4 NOT NULL,\n  \"id\" SERIAL NOT NULL,\n  \"input_tokens\" int4 NOT NULL,\n  \"job_id\" text NOT NULL,\n  \"job_kind\" text NOT NULL,\n  \"model\" text NOT NULL,\n  \"output_tokens\" int4 NOT NULL,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"token_usage_job_kind_check_74df029d\" CHECK (\"job_kind\" IN ('SUGGESTION', 'TAILOR'))\n)",
+        "sql": "CREATE TABLE \"public\".\"token_usage\" (\n  \"amount_cents\" numeric NOT NULL,\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" SERIAL NOT NULL,\n  \"input_tokens\" int4 NOT NULL,\n  \"job_id\" text NOT NULL,\n  \"job_kind\" text NOT NULL,\n  \"model\" text NOT NULL,\n  \"output_tokens\" int4 NOT NULL,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"token_usage_job_kind_check_74df029d\" CHECK (\"job_kind\" IN ('SUGGESTION', 'TAILOR'))\n)",
         "params": []
       }
     ],
@@ -112,6 +112,48 @@
         "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
         "params": [
           "\"public\".\"token_usage\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.balance_cents",
+    "label": "Add column \"balance_cents\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "balance_cents",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"balance_cents\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "balance_cents"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"balance_cents\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"balance_cents\" numeric DEFAULT '100'::numeric NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"balance_cents\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "balance_cents"
         ]
       }
     ]
@@ -201,48 +243,6 @@
     ]
   },
   {
-    "id": "column.public.user.token_balance",
-    "label": "Add column \"token_balance\" to \"user\"",
-    "operationClass": "additive",
-    "target": {
-      "id": "postgres",
-      "details": {
-        "schema": "public",
-        "objectType": "column",
-        "name": "token_balance",
-        "table": "user"
-      }
-    },
-    "precheck": [
-      {
-        "description": "ensure column \"token_balance\" is missing",
-        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
-        "params": [
-          "public",
-          "user",
-          "token_balance"
-        ]
-      }
-    ],
-    "execute": [
-      {
-        "description": "add column \"token_balance\"",
-        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"token_balance\" int4 DEFAULT 100000 NOT NULL"
-      }
-    ],
-    "postcheck": [
-      {
-        "description": "verify column \"token_balance\" exists",
-        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
-        "params": [
-          "public",
-          "user",
-          "token_balance"
-        ]
-      }
-    ]
-  },
-  {
     "id": "column.public.user_suggestion.model",
     "label": "Add column \"model\" to \"user_suggestion\"",
     "operationClass": "additive",
@@ -327,40 +327,40 @@
     ]
   },
   {
-    "id": "index.token_purchase.token_purchase_user_id_idx_6c952402",
-    "label": "Create index \"token_purchase_user_id_idx_6c952402\" on \"token_purchase\"",
+    "id": "index.balance_purchase.balance_purchase_user_id_idx_6c952402",
+    "label": "Create index \"balance_purchase_user_id_idx_6c952402\" on \"balance_purchase\"",
     "operationClass": "additive",
     "target": {
       "id": "postgres",
       "details": {
         "schema": "public",
         "objectType": "index",
-        "name": "token_purchase_user_id_idx_6c952402",
-        "table": "token_purchase"
+        "name": "balance_purchase_user_id_idx_6c952402",
+        "table": "balance_purchase"
       }
     },
     "precheck": [
       {
-        "description": "ensure index \"token_purchase_user_id_idx_6c952402\" does not exist",
+        "description": "ensure index \"balance_purchase_user_id_idx_6c952402\" does not exist",
         "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
         "params": [
-          "\"public\".\"token_purchase_user_id_idx_6c952402\""
+          "\"public\".\"balance_purchase_user_id_idx_6c952402\""
         ]
       }
     ],
     "execute": [
       {
-        "description": "create index \"token_purchase_user_id_idx_6c952402\"",
-        "sql": "CREATE INDEX \"token_purchase_user_id_idx_6c952402\" ON \"public\".\"token_purchase\" (\"user_id\")",
+        "description": "create index \"balance_purchase_user_id_idx_6c952402\"",
+        "sql": "CREATE INDEX \"balance_purchase_user_id_idx_6c952402\" ON \"public\".\"balance_purchase\" (\"user_id\")",
         "params": []
       }
     ],
     "postcheck": [
       {
-        "description": "verify index \"token_purchase_user_id_idx_6c952402\" exists",
+        "description": "verify index \"balance_purchase_user_id_idx_6c952402\" exists",
         "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
         "params": [
-          "\"public\".\"token_purchase_user_id_idx_6c952402\""
+          "\"public\".\"balance_purchase_user_id_idx_6c952402\""
         ]
       }
     ]
@@ -444,43 +444,43 @@
     ]
   },
   {
-    "id": "foreignKey.token_purchase.token_purchase_user_id_fkey",
-    "label": "Add foreign key \"token_purchase_user_id_fkey\" on \"token_purchase\"",
+    "id": "foreignKey.balance_purchase.balance_purchase_user_id_fkey",
+    "label": "Add foreign key \"balance_purchase_user_id_fkey\" on \"balance_purchase\"",
     "operationClass": "additive",
     "target": {
       "id": "postgres",
       "details": {
         "schema": "public",
         "objectType": "foreignKey",
-        "name": "token_purchase_user_id_fkey",
-        "table": "token_purchase"
+        "name": "balance_purchase_user_id_fkey",
+        "table": "balance_purchase"
       }
     },
     "precheck": [
       {
-        "description": "ensure FK \"token_purchase_user_id_fkey\" does not exist",
+        "description": "ensure FK \"balance_purchase_user_id_fkey\" does not exist",
         "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
         "params": [
-          "token_purchase_user_id_fkey",
+          "balance_purchase_user_id_fkey",
           "public",
-          "\"public\".\"token_purchase\""
+          "\"public\".\"balance_purchase\""
         ]
       }
     ],
     "execute": [
       {
-        "description": "add FK \"token_purchase_user_id_fkey\"",
-        "sql": "ALTER TABLE \"public\".\"token_purchase\"\nADD CONSTRAINT \"token_purchase_user_id_fkey\"\nFOREIGN KEY (\"user_id\")\nREFERENCES \"public\".\"user\" (\"auth0_id\")"
+        "description": "add FK \"balance_purchase_user_id_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"balance_purchase\"\nADD CONSTRAINT \"balance_purchase_user_id_fkey\"\nFOREIGN KEY (\"user_id\")\nREFERENCES \"public\".\"user\" (\"auth0_id\")"
       }
     ],
     "postcheck": [
       {
-        "description": "verify FK \"token_purchase_user_id_fkey\" exists",
+        "description": "verify FK \"balance_purchase_user_id_fkey\" exists",
         "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
         "params": [
-          "token_purchase_user_id_fkey",
+          "balance_purchase_user_id_fkey",
           "public",
-          "\"public\".\"token_purchase\""
+          "\"public\".\"balance_purchase\""
         ]
       }
     ]
@@ -544,7 +544,7 @@
     "execute": [
       {
         "description": "Run seed-model_pricing-catalog",
-        "sql": "\n            INSERT INTO model_pricing\n              (id, display_name, credits_per_1k_input, credits_per_1k_output, enabled, sort_order)\n            VALUES\n              ('openrouter:openai/gpt-5-mini', 'GPT-5 Mini', 30, 250, true, 1),\n              ('openrouter:openai/gpt-5', 'GPT-5', 160, 1250, true, 2),\n              ('openrouter:anthropic/claude-sonnet-4.5', 'Claude Sonnet 4.5', 375, 1900, true, 3),\n              ('openrouter:google/gemini-2.5-flash', 'Gemini 2.5 Flash', 40, 315, true, 4)\n            ON CONFLICT (id) DO NOTHING\n          ",
+        "sql": "\n            INSERT INTO model_pricing\n              (id, display_name, cents_per_1k_input, cents_per_1k_output, enabled, sort_order)\n            VALUES\n              ('openrouter:openai/gpt-5-mini', 'GPT-5 Mini', 0.03, 0.25, true, 1),\n              ('openrouter:openai/gpt-5', 'GPT-5', 0.16, 1.25, true, 2),\n              ('openrouter:anthropic/claude-sonnet-4.5', 'Claude Sonnet 4.5', 0.375, 1.9, true, 3),\n              ('openrouter:google/gemini-2.5-flash', 'Gemini 2.5 Flash', 0.04, 0.315, true, 4)\n            ON CONFLICT (id) DO NOTHING\n          ",
         "params": []
       }
     ],

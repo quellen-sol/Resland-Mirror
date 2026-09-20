@@ -3,7 +3,7 @@ import uuid
 from fastapi import HTTPException
 from shared.amqp import TAILOR_EXCHANGE_NAME, AmqpTailorJob
 
-from ..credits import require_token_balance, validate_model_choice
+from ..balance import require_balance, validate_model_choice
 from ..deps import AmqpClientDep, PgConnection
 from . import db, model
 
@@ -14,7 +14,7 @@ async def start_tailor(
     req: model.StartTailorRequest,
     user_id: str,
 ) -> model.StartTailorResponse:
-    await require_token_balance(pg_conn, user_id)
+    await require_balance(pg_conn, user_id)
     chosen_model = await validate_model_choice(pg_conn, req.model)
 
     async with pg_conn.cursor() as cursor:

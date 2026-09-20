@@ -11,19 +11,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, fmtCents } from "@/lib/api";
 
 interface TokenPack {
   id: string;
   name: string;
-  credits: number;
+  cents: number;
   amount_cents: number;
   currency: string;
 }
 
 interface Purchase {
   id: string;
-  credits: number;
+  cents: number;
   amount_cents: number;
   currency: string;
   status: string;
@@ -62,7 +62,7 @@ export default function BillingClient({
 
   useEffect(() => {
     if (checkoutResult === "success") {
-      toast.success("Purchase complete — credits added to your balance");
+      toast.success("Purchase complete — balance topped up");
     } else if (checkoutResult === "cancelled") {
       toast.info("Checkout cancelled");
     }
@@ -77,7 +77,7 @@ export default function BillingClient({
     ])
       .then(([bal, pk, pu]) => {
         if (cancelled) return;
-        setBalance((bal as { token_balance: number }).token_balance);
+        setBalance((bal as { balance_cents: number }).balance_cents);
         setPacks(pk as TokenPack[]);
         setPurchases((pu as { purchases: Purchase[] }).purchases);
       })
@@ -115,7 +115,7 @@ export default function BillingClient({
             Billing
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Tokens power suggestions and tailoring — top up when you run low.
+            Balance powers suggestions and tailoring — top up when you run low.
           </p>
         </div>
         <Link
@@ -131,9 +131,9 @@ export default function BillingClient({
           <Zap className="size-5 text-purple-400" />
           <div>
             <p className="text-2xl font-semibold">
-              {balance === null ? "—" : balance.toLocaleString()}
+              {balance === null ? "—" : fmtCents(balance)}
             </p>
-            <p className="text-xs text-zinc-500">tokens remaining</p>
+            <p className="text-xs text-zinc-500">balance</p>
           </div>
         </CardContent>
       </Card>
@@ -152,7 +152,7 @@ export default function BillingClient({
                 {fmtMoney(pack.amount_cents, pack.currency)}
               </p>
               <p className="text-xs text-zinc-500">
-                {pack.credits.toLocaleString()} tokens
+                +{fmtCents(pack.cents)} balance
               </p>
               <Button
                 onClick={() => buy(pack.id)}
@@ -182,7 +182,7 @@ export default function BillingClient({
               <thead>
                 <tr className="border-b border-zinc-800 text-xs text-zinc-500">
                   <th className="py-2 font-medium">Date</th>
-                  <th className="py-2 font-medium">Tokens</th>
+                  <th className="py-2 font-medium">Added</th>
                   <th className="py-2 font-medium">Amount</th>
                   <th className="py-2 font-medium">Status</th>
                 </tr>
@@ -192,7 +192,7 @@ export default function BillingClient({
                   <tr key={p.id} className="border-b border-zinc-800/50">
                     <td className="py-2 text-zinc-300">{fmtDate(p.created_at)}</td>
                     <td className="py-2 text-zinc-300">
-                      {p.credits.toLocaleString()}
+                      {fmtMoney(p.cents, p.currency)}
                     </td>
                     <td className="py-2 text-zinc-300">
                       {fmtMoney(p.amount_cents, p.currency)}

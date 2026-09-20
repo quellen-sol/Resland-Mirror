@@ -4,7 +4,7 @@ import uuid
 from fastapi import HTTPException
 from shared.amqp import BULLET_SUGG_EXCHANGE_NAME, AmqpSuggestionJob
 
-from ..credits import require_token_balance, validate_model_choice
+from ..balance import require_balance, validate_model_choice
 from ..deps import AmqpClientDep, PgConnection
 from . import db, model
 
@@ -15,7 +15,7 @@ async def start_suggestion(
     req: model.StartSuggestionRequest,
     user_id: str,
 ) -> model.StartSuggestionResponse:
-    await require_token_balance(pg_conn, user_id)
+    await require_balance(pg_conn, user_id)
     chosen_model = await validate_model_choice(pg_conn, req.model)
 
     async with pg_conn.cursor() as cursor:

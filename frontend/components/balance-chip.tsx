@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Zap } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, fmtCents } from "@/lib/api";
 import { cn } from "cn";
 
 export default function BalanceChip({ accessToken }: { accessToken: string }) {
@@ -12,8 +12,8 @@ export default function BalanceChip({ accessToken }: { accessToken: string }) {
   useEffect(() => {
     let cancelled = false;
     apiFetch(accessToken, "/billing/balance")
-      .then((data: { token_balance: number }) => {
-        if (!cancelled) setBalance(data.token_balance);
+      .then((data: { balance_cents: number }) => {
+        if (!cancelled) setBalance(data.balance_cents);
       })
       .catch(() => {});
     return () => {
@@ -26,7 +26,7 @@ export default function BalanceChip({ accessToken }: { accessToken: string }) {
   return (
     <Link
       href="/billing"
-      title="Token balance — buy more"
+      title="Balance — top up"
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
         balance > 0
@@ -35,7 +35,7 @@ export default function BalanceChip({ accessToken }: { accessToken: string }) {
       )}
     >
       <Zap className="size-3.5 text-purple-400" />
-      {balance.toLocaleString()}
+      {fmtCents(balance)}
     </Link>
   );
 }
