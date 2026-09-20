@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'4eb0f961df3960725ac7633a610724cdd543aba87feaf1871b7edfc95e8dedd8'>;
+  StorageHashBase<'be50cf86c51698349572a4290ed7a14af7374cfe98db45c480fd99b1d6e61037'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -255,6 +255,7 @@ export type FieldOutputTypes = {
       readonly cents_per_1k_input: CodecTypes['pg/numeric@1']['output'];
       readonly cents_per_1k_output: CodecTypes['pg/numeric@1']['output'];
       readonly enabled: CodecTypes['pg/bool@1']['output'];
+      readonly is_default: CodecTypes['pg/bool@1']['output'];
       readonly sort_order: CodecTypes['pg/int4@1']['output'];
     };
     readonly TokenUsage: {
@@ -377,6 +378,7 @@ export type FieldInputTypes = {
       readonly cents_per_1k_input: CodecTypes['pg/numeric@1']['input'];
       readonly cents_per_1k_output: CodecTypes['pg/numeric@1']['input'];
       readonly enabled: CodecTypes['pg/bool@1']['input'];
+      readonly is_default: CodecTypes['pg/bool@1']['input'];
       readonly sort_order: CodecTypes['pg/int4@1']['input'];
     };
     readonly TokenUsage: {
@@ -499,6 +501,7 @@ export type StorageColumnTypes = {
       readonly display_name: CodecTypes['pg/text@1']['output'];
       readonly enabled: CodecTypes['pg/bool@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
+      readonly is_default: CodecTypes['pg/bool@1']['output'];
       readonly sort_order: CodecTypes['pg/int4@1']['output'];
     };
     readonly token_usage: {
@@ -621,6 +624,7 @@ export type StorageColumnInputTypes = {
       readonly display_name: CodecTypes['pg/text@1']['input'];
       readonly enabled: CodecTypes['pg/bool@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
+      readonly is_default: CodecTypes['pg/bool@1']['input'];
       readonly sort_order: CodecTypes['pg/int4@1']['input'];
     };
     readonly token_usage: {
@@ -841,6 +845,15 @@ type ContractBase = Omit<
                   readonly default: {
                     readonly kind: 'literal';
                     readonly value: DefaultLiteralValue<'pg/bool@1', true>;
+                  };
+                };
+                readonly is_default: {
+                  readonly nativeType: 'bool';
+                  readonly codecId: 'pg/bool@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/bool@1', false>;
                   };
                 };
                 readonly sort_order: {
@@ -1844,6 +1857,10 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
               };
+              readonly is_default: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/bool@1' };
+              };
               readonly sort_order: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
@@ -1859,6 +1876,7 @@ type ContractBase = Omit<
                 readonly cents_per_1k_input: { readonly column: 'cents_per_1k_input' };
                 readonly cents_per_1k_output: { readonly column: 'cents_per_1k_output' };
                 readonly enabled: { readonly column: 'enabled' };
+                readonly is_default: { readonly column: 'is_default' };
                 readonly sort_order: { readonly column: 'sort_order' };
               };
             };

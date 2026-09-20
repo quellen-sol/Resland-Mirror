@@ -61,6 +61,7 @@ class ModelPricingRow(BaseModel):
     cents_per_1k_input: float
     cents_per_1k_output: float
     enabled: bool
+    is_default: bool
     sort_order: int
 
 
@@ -73,6 +74,7 @@ class ModelPricingUpsert(BaseModel):
     cents_per_1k_input: float
     cents_per_1k_output: float
     enabled: bool
+    is_default: bool
     sort_order: int
 
 

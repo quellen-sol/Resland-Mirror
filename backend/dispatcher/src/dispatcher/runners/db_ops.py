@@ -61,8 +61,15 @@ def fetch_generation_cost_cents(generation_ids: list[str]) -> float | None:
         if data is not None:
             resolved += 1
             total += float(data.total_cost or 0)
-    if resolved == 0:
+    # All-or-nothing: a partially-resolved job would undercharge, so any
+    # failed lookup falls the whole job back to the rate card.
+    if resolved != len(generation_ids):
         return None
+    # total_cost is USD (dollars); store cents.
+    print(
+        f"OpenRouter actual cost: ${total:.6f} "
+        f"across {resolved} generation(s)"
+    )
     return total * 100
 
 
@@ -132,6 +139,17 @@ def record_token_usage(
             (amount_cents, user_id),
         )
     return amount_cents
+
+
+def default_model_spec(pg_client: Connection) -> str | None:
+    """The admin-selected default model (is_default + enabled)."""
+    row = pg_client.execute(
+        """
+        SELECT id FROM model_pricing
+        WHERE is_default AND enabled ORDER BY sort_order LIMIT 1
+        """
+    ).fetchone()
+    return row[0] if row else None
 
 
 def fetch_suggestion_rows(

@@ -61,6 +61,7 @@ interface ModelPricing {
   cents_per_1k_input: number;
   cents_per_1k_output: number;
   enabled: boolean;
+  is_default: boolean;
   sort_order: number;
 }
 
@@ -247,6 +248,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
             cents_per_1k_input: m.cents_per_1k_input,
             cents_per_1k_output: m.cents_per_1k_output,
             enabled: m.enabled,
+            is_default: m.is_default,
             sort_order: m.sort_order,
           }),
         },
@@ -322,6 +324,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       cents_per_1k_input: parseFloat(newModel.cents_per_1k_input) || 0,
       cents_per_1k_output: parseFloat(newModel.cents_per_1k_output) || 0,
       enabled: true,
+      is_default: false,
       sort_order: parseInt(newModel.sort_order) || 0,
     };
     await saveModel(row);
@@ -447,6 +450,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                 <th className={th}>¢/1K out</th>
                 <th className={th}>Sort</th>
                 <th className={th}>Enabled</th>
+                <th className={th}>Default</th>
                 <th className={th}></th>
               </tr>
             </thead>
@@ -513,6 +517,27 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                       onChange={(e) =>
                         updateModel(m.id, { enabled: e.target.checked })
                       }
+                    />
+                  </td>
+                  <td className={td}>
+                    <input
+                      type="radio"
+                      name="default-model"
+                      className="size-4 cursor-pointer accent-purple-500"
+                      checked={m.is_default}
+                      onChange={() => {
+                        if (m.is_default) return;
+                        const next = { ...m, is_default: true };
+                        updateModel(m.id, { is_default: true });
+                        setModels((ms) =>
+                          ms.map((x) =>
+                            x.id !== m.id
+                              ? { ...x, is_default: false }
+                              : { ...x, is_default: true },
+                          ),
+                        );
+                        saveModel(next);
+                      }}
                     />
                   </td>
                   <td className={td}>
@@ -602,6 +627,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                     placeholder="0"
                   />
                 </td>
+                <td className={td}></td>
                 <td className={td}></td>
                 <td className={td}>
                   <button

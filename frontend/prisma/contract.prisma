@@ -189,6 +189,7 @@ model ModelPricing {
   cents_per_1k_input    Decimal
   cents_per_1k_output   Decimal
   enabled               Boolean @default(true)
+  is_default            Boolean @default(false)
   sort_order            Int     @default(0)
 
   @@map("model_pricing")

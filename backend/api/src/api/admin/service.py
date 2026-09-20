@@ -169,7 +169,7 @@ async def list_models(pg_conn: PgConnection) -> model.AdminModelsResponse:
         res = await cursor.execute(
             """
             SELECT id, display_name, cents_per_1k_input, cents_per_1k_output,
-                   enabled, sort_order
+                   enabled, is_default, sort_order
             FROM model_pricing ORDER BY sort_order, id
             """
         )
@@ -182,7 +182,8 @@ async def list_models(pg_conn: PgConnection) -> model.AdminModelsResponse:
                 cents_per_1k_input=float(r[2]),
                 cents_per_1k_output=float(r[3]),
                 enabled=r[4],
-                sort_order=r[5],
+                is_default=r[5],
+                sort_order=r[6],
             )
             for r in rows
         ]
@@ -200,18 +201,28 @@ async def upsert_model(
         )
     if body.cents_per_1k_input < 0 or body.cents_per_1k_output < 0:
         raise HTTPException(status_code=400, detail="Rates can't be negative")
+    if body.is_default and not body.enabled:
+        raise HTTPException(
+            status_code=400, detail="The default model must be enabled"
+        )
     async with pg_conn.cursor() as cursor:
+        # Single-winner flag — clear the rest in the same txn.
+        if body.is_default:
+            await cursor.execute(
+                "UPDATE model_pricing SET is_default = false"
+            )
         await cursor.execute(
             """
             INSERT INTO model_pricing
               (id, display_name, cents_per_1k_input, cents_per_1k_output,
-               enabled, sort_order)
-            VALUES (%s, %s, %s, %s, %s, %s)
+               enabled, is_default, sort_order)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (id) DO UPDATE SET
               display_name = EXCLUDED.display_name,
               cents_per_1k_input = EXCLUDED.cents_per_1k_input,
               cents_per_1k_output = EXCLUDED.cents_per_1k_output,
               enabled = EXCLUDED.enabled,
+              is_default = EXCLUDED.is_default,
               sort_order = EXCLUDED.sort_order
             """,
             (
@@ -220,6 +231,7 @@ async def upsert_model(
                 body.cents_per_1k_input,
                 body.cents_per_1k_output,
                 body.enabled,
+                body.is_default,
                 body.sort_order,
             ),
         )
