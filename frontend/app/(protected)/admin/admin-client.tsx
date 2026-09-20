@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -95,6 +95,75 @@ function fmtMoney(cents: number, currency: string) {
 
 const th = "py-2 pr-4 font-medium text-zinc-500";
 const td = "py-2 pr-4 text-zinc-300";
+const searchInput =
+  "w-52 rounded border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs";
+
+const PAGE_SIZE = 10;
+
+function matches(q: string, ...fields: (string | null | undefined)[]) {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  return fields.some((f) => f?.toLowerCase().includes(needle));
+}
+
+function usePager<T>(rows: T[]) {
+  const [page, setPage] = useState(0);
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const safePage = Math.min(page, pages - 1);
+  return {
+    page: safePage,
+    setPage,
+    pages,
+    total: rows.length,
+    slice: rows.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE),
+  };
+}
+
+function Pager({ pager }: { pager: ReturnType<typeof usePager> }) {
+  if (pager.pages <= 1) return null;
+  return (
+    <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
+      <span>
+        Page {pager.page + 1} of {pager.pages} · {pager.total} rows
+      </span>
+      <div className="flex gap-2">
+        <button
+          className="rounded bg-zinc-700 px-2 py-1 hover:bg-zinc-600 disabled:opacity-40"
+          disabled={pager.page === 0}
+          onClick={() => pager.setPage(pager.page - 1)}
+        >
+          Prev
+        </button>
+        <button
+          className="rounded bg-zinc-700 px-2 py-1 hover:bg-zinc-600 disabled:opacity-40"
+          disabled={pager.page >= pager.pages - 1}
+          onClick={() => pager.setPage(pager.page + 1)}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SearchBox({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <input
+      className={searchInput}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+    />
+  );
+}
 
 export default function AdminClient({ accessToken }: { accessToken: string }) {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -113,6 +182,10 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
     cents_per_1k_output: "",
     sort_order: "",
   });
+  const [usersQ, setUsersQ] = useState("");
+  const [modelsQ, setModelsQ] = useState("");
+  const [purchasesQ, setPurchasesQ] = useState("");
+  const [recentQ, setRecentQ] = useState("");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -207,6 +280,34 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
     }
   }
 
+  const filteredUsers = useMemo(
+    () =>
+      users.filter((u) => matches(usersQ, u.auth0_id, u.email, u.full_name)),
+    [users, usersQ],
+  );
+  const filteredModels = useMemo(
+    () => models.filter((m) => matches(modelsQ, m.id, m.display_name)),
+    [models, modelsQ],
+  );
+  const filteredPurchases = useMemo(
+    () =>
+      purchases.filter((p) =>
+        matches(purchasesQ, p.id, p.user_id, p.status),
+      ),
+    [purchases, purchasesQ],
+  );
+  const filteredRecent = useMemo(
+    () =>
+      recent.filter((r) =>
+        matches(recentQ, r.user_id, r.job_kind, r.job_id, r.model),
+      ),
+    [recent, recentQ],
+  );
+  const usersPager = usePager(filteredUsers);
+  const modelsPager = usePager(filteredModels);
+  const purchasesPager = usePager(filteredPurchases);
+  const recentPager = usePager(filteredRecent);
+
   async function addModel() {
     const id = newModel.id.trim();
     if (!id || id === "openrouter:") {
@@ -285,8 +386,13 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       </div>
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle className="text-lg">Per-user usage</CardTitle>
+          <SearchBox
+            value={usersQ}
+            onChange={setUsersQ}
+            placeholder="Search users…"
+          />
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -300,7 +406,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => (
+              {usersPager.slice.map((u) => (
                 <tr key={u.auth0_id} className="border-b border-zinc-800/50">
                   <td className={td}>
                     {u.full_name ?? u.email ?? u.auth0_id}
@@ -318,12 +424,18 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               ))}
             </tbody>
           </table>
+          <Pager pager={usersPager} />
         </CardContent>
       </Card>
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle className="text-lg">Model pricing</CardTitle>
+          <SearchBox
+            value={modelsQ}
+            onChange={setModelsQ}
+            placeholder="Search models…"
+          />
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -339,7 +451,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               </tr>
             </thead>
             <tbody>
-              {models.map((m) => (
+              {modelsPager.slice.map((m) => (
                 <tr key={m.id} className="border-b border-zinc-800/50">
                   <td className={td}>{m.id}</td>
                   <td className={td}>
@@ -508,6 +620,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
             OpenRouter&apos;s reported cost ×1.25. Disabled models are rejected
             at job creation.
           </p>
+          <Pager pager={modelsPager} />
         </CardContent>
       </Card>
 
@@ -590,8 +703,13 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       </div>
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle className="text-lg">Purchases</CardTitle>
+          <SearchBox
+            value={purchasesQ}
+            onChange={setPurchasesQ}
+            placeholder="Search purchases…"
+          />
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -605,7 +723,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               </tr>
             </thead>
             <tbody>
-              {purchases.map((p) => (
+              {purchasesPager.slice.map((p) => (
                 <tr key={p.id} className="border-b border-zinc-800/50">
                   <td className={td}>{fmtDate(p.created_at)}</td>
                   <td className={td}>{p.user_id}</td>
@@ -616,12 +734,18 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               ))}
             </tbody>
           </table>
+          <Pager pager={purchasesPager} />
         </CardContent>
       </Card>
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle className="text-lg">Recent usage events</CardTitle>
+          <SearchBox
+            value={recentQ}
+            onChange={setRecentQ}
+            placeholder="Search events…"
+          />
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full text-left text-sm">
@@ -637,7 +761,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               </tr>
             </thead>
             <tbody>
-              {recent.map((r) => (
+              {recentPager.slice.map((r) => (
                 <tr key={r.id} className="border-b border-zinc-800/50">
                   <td className={td}>{fmtDate(r.created_at)}</td>
                   <td className={td}>{r.user_id}</td>
@@ -657,6 +781,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               ))}
             </tbody>
           </table>
+          <Pager pager={recentPager} />
         </CardContent>
       </Card>
     </div>
