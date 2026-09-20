@@ -13,12 +13,12 @@ from langchain.messages import (
 )
 from langchain.tools import tool
 from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.errors import EmptyInputError
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from psycopg.rows import dict_row
 from pydantic import BaseModel
 
-from ..env_vars import SUGGESTIONS_MODEL
 from ..pg import pg_pool
 
 SUGGESTIONS_SYSTEM_PROMPT = """You help users improve their resume bullet points for a single job experience.
@@ -47,6 +47,8 @@ class FetchSuggestionRow(BaseModel):
     pending_question: str | None
     status: str
     result: str | None
+    model: str | None
+    user_id: str
     company_name: str
     description: str | None
     start_date: str
@@ -79,9 +81,13 @@ class SuggestionRunOutcome:
 
 
 def build_and_invoke_agent(
-    session_id: str, answer: str | None, rows: list[FetchSuggestionRow]
+    session_id: str,
+    answer: str | None,
+    rows: list[FetchSuggestionRow],
+    model_spec: str,
+    usage: dict,
 ) -> SuggestionRunOutcome:
-    model = init_chat_model(model=SUGGESTIONS_MODEL)
+    model = init_chat_model(model=model_spec)
     result_queue: queue.Queue[SuggestionsResult] = queue.Queue()
 
     # Tools
@@ -90,7 +96,15 @@ def build_and_invoke_agent(
         """Returns the user's experience and current bullet points for this session."""
         return json.dumps(
             [
-                r.model_dump(exclude={"pending_question", "status", "result"})
+                r.model_dump(
+                    exclude={
+                        "pending_question",
+                        "status",
+                        "result",
+                        "model",
+                        "user_id",
+                    }
+                )
                 for r in rows
             ]
         )
@@ -128,14 +142,13 @@ def build_and_invoke_agent(
 
     # Nodes
     def llm_call(state: State):
-        return {
-            "messages": [
-                model.invoke(
-                    [SystemMessage(content=SUGGESTIONS_SYSTEM_PROMPT)]
-                    + state["messages"]
-                )
-            ]
-        }
+        msg = model.invoke(
+            [SystemMessage(content=SUGGESTIONS_SYSTEM_PROMPT)] + state["messages"]
+        )
+        usage_meta = msg.usage_metadata or {}
+        usage["input_tokens"] += usage_meta.get("input_tokens") or 0
+        usage["output_tokens"] += usage_meta.get("output_tokens") or 0
+        return {"messages": [msg]}
 
     def tool_node(state: State):
         """Performs the tool call"""
@@ -180,7 +193,13 @@ def build_and_invoke_agent(
 
         config = {"configurable": {"thread_id": session_id}}
         if answer is not None:
-            invoke_param: Command | dict = Command(resume=answer)
+            try:
+                agent.invoke(input=Command(resume=answer), config=config)
+            except EmptyInputError:
+                # A crashed run has pending nodes but no pending interrupt —
+                # Command(resume) has nothing to feed. None resumes the
+                # pending nodes from the checkpoint instead.
+                agent.invoke(input=None, config=config)
         else:
             invoke_param = {
                 "messages": [
@@ -190,8 +209,7 @@ def build_and_invoke_agent(
                     )
                 ]
             }
-
-        agent.invoke(input=invoke_param, config=config)
+            agent.invoke(input=invoke_param, config=config)
         snapshot = agent.get_state(config)
 
     if snapshot.next:

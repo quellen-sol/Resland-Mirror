@@ -5,6 +5,8 @@ class StartSuggestionRequest(BaseModel):
     experience_id: int
     bullet_id: int | None = None
     prompt: str | None = None
+    # Must be an enabled model_pricing id; null = system default.
+    model: str | None = None
 
 
 class AnswerRequest(BaseModel):

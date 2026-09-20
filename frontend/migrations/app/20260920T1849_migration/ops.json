@@ -1,0 +1,559 @@
+[
+  {
+    "id": "table.model_pricing",
+    "label": "Create table \"model_pricing\"",
+    "summary": "Creates table \"model_pricing\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "model_pricing"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"model_pricing\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"model_pricing\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"model_pricing\"",
+        "sql": "CREATE TABLE \"public\".\"model_pricing\" (\n  \"credits_per_1k_input\" int4 NOT NULL,\n  \"credits_per_1k_output\" int4 NOT NULL,\n  \"display_name\" text NOT NULL,\n  \"enabled\" bool DEFAULT true NOT NULL,\n  \"id\" text NOT NULL,\n  \"sort_order\" int4 DEFAULT 0 NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"model_pricing\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"model_pricing\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.token_purchase",
+    "label": "Create table \"token_purchase\"",
+    "summary": "Creates table \"token_purchase\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "token_purchase"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"token_purchase\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"token_purchase\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"token_purchase\"",
+        "sql": "CREATE TABLE \"public\".\"token_purchase\" (\n  \"amount_cents\" int4 NOT NULL,\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"credits\" int4 NOT NULL,\n  \"currency\" text NOT NULL,\n  \"id\" text NOT NULL,\n  \"status\" text DEFAULT 'PENDING' NOT NULL,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"token_purchase_status_check_37d7c798\" CHECK (\"status\" IN ('PENDING', 'COMPLETED', 'EXPIRED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"token_purchase\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"token_purchase\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.token_usage",
+    "label": "Create table \"token_usage\"",
+    "summary": "Creates table \"token_usage\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "token_usage"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"token_usage\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"token_usage\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"token_usage\"",
+        "sql": "CREATE TABLE \"public\".\"token_usage\" (\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"credits_charged\" int4 NOT NULL,\n  \"id\" SERIAL NOT NULL,\n  \"input_tokens\" int4 NOT NULL,\n  \"job_id\" text NOT NULL,\n  \"job_kind\" text NOT NULL,\n  \"model\" text NOT NULL,\n  \"output_tokens\" int4 NOT NULL,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"token_usage_job_kind_check_74df029d\" CHECK (\"job_kind\" IN ('SUGGESTION', 'TAILOR'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"token_usage\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"token_usage\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.site_admin",
+    "label": "Add column \"site_admin\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "site_admin",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"site_admin\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "site_admin"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"site_admin\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"site_admin\" bool DEFAULT false NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"site_admin\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "site_admin"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.stripe_customer_id",
+    "label": "Add column \"stripe_customer_id\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "stripe_customer_id",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"stripe_customer_id\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "stripe_customer_id"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"stripe_customer_id\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"stripe_customer_id\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"stripe_customer_id\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "stripe_customer_id"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user.token_balance",
+    "label": "Add column \"token_balance\" to \"user\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "token_balance",
+        "table": "user"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"token_balance\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "token_balance"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"token_balance\"",
+        "sql": "ALTER TABLE \"public\".\"user\" ADD COLUMN \"token_balance\" int4 DEFAULT 100000 NOT NULL"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"token_balance\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user",
+          "token_balance"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user_suggestion.model",
+    "label": "Add column \"model\" to \"user_suggestion\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "model",
+        "table": "user_suggestion"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"model\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_suggestion",
+          "model"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"model\"",
+        "sql": "ALTER TABLE \"public\".\"user_suggestion\" ADD COLUMN \"model\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"model\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_suggestion",
+          "model"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user_tailor_run.model",
+    "label": "Add column \"model\" to \"user_tailor_run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "model",
+        "table": "user_tailor_run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"model\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_tailor_run",
+          "model"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"model\"",
+        "sql": "ALTER TABLE \"public\".\"user_tailor_run\" ADD COLUMN \"model\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"model\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_tailor_run",
+          "model"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.token_purchase.token_purchase_user_id_idx_6c952402",
+    "label": "Create index \"token_purchase_user_id_idx_6c952402\" on \"token_purchase\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "token_purchase_user_id_idx_6c952402",
+        "table": "token_purchase"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"token_purchase_user_id_idx_6c952402\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"token_purchase_user_id_idx_6c952402\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"token_purchase_user_id_idx_6c952402\"",
+        "sql": "CREATE INDEX \"token_purchase_user_id_idx_6c952402\" ON \"public\".\"token_purchase\" (\"user_id\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"token_purchase_user_id_idx_6c952402\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"token_purchase_user_id_idx_6c952402\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.token_usage.token_usage_created_at_idx_225d8c0f",
+    "label": "Create index \"token_usage_created_at_idx_225d8c0f\" on \"token_usage\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "token_usage_created_at_idx_225d8c0f",
+        "table": "token_usage"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"token_usage_created_at_idx_225d8c0f\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"token_usage_created_at_idx_225d8c0f\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"token_usage_created_at_idx_225d8c0f\"",
+        "sql": "CREATE INDEX \"token_usage_created_at_idx_225d8c0f\" ON \"public\".\"token_usage\" (\"created_at\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"token_usage_created_at_idx_225d8c0f\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"token_usage_created_at_idx_225d8c0f\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.token_usage.token_usage_user_id_idx_6c952402",
+    "label": "Create index \"token_usage_user_id_idx_6c952402\" on \"token_usage\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "token_usage_user_id_idx_6c952402",
+        "table": "token_usage"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"token_usage_user_id_idx_6c952402\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"token_usage_user_id_idx_6c952402\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"token_usage_user_id_idx_6c952402\"",
+        "sql": "CREATE INDEX \"token_usage_user_id_idx_6c952402\" ON \"public\".\"token_usage\" (\"user_id\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"token_usage_user_id_idx_6c952402\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"token_usage_user_id_idx_6c952402\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.token_purchase.token_purchase_user_id_fkey",
+    "label": "Add foreign key \"token_purchase_user_id_fkey\" on \"token_purchase\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "token_purchase_user_id_fkey",
+        "table": "token_purchase"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"token_purchase_user_id_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "token_purchase_user_id_fkey",
+          "public",
+          "\"public\".\"token_purchase\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"token_purchase_user_id_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"token_purchase\"\nADD CONSTRAINT \"token_purchase_user_id_fkey\"\nFOREIGN KEY (\"user_id\")\nREFERENCES \"public\".\"user\" (\"auth0_id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"token_purchase_user_id_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "token_purchase_user_id_fkey",
+          "public",
+          "\"public\".\"token_purchase\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.token_usage.token_usage_user_id_fkey",
+    "label": "Add foreign key \"token_usage_user_id_fkey\" on \"token_usage\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "token_usage_user_id_fkey",
+        "table": "token_usage"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"token_usage_user_id_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "token_usage_user_id_fkey",
+          "public",
+          "\"public\".\"token_usage\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"token_usage_user_id_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"token_usage\"\nADD CONSTRAINT \"token_usage_user_id_fkey\"\nFOREIGN KEY (\"user_id\")\nREFERENCES \"public\".\"user\" (\"auth0_id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"token_usage_user_id_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "token_usage_user_id_fkey",
+          "public",
+          "\"public\".\"token_usage\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "data_migration.seed-model_pricing-catalog",
+    "label": "Data transform: seed-model_pricing-catalog",
+    "operationClass": "data",
+    "target": {
+      "id": "postgres"
+    },
+    "precheck": [
+      {
+        "description": "Check seed-model_pricing-catalog has work to do",
+        "sql": "SELECT EXISTS (\n            SELECT v.id FROM (VALUES\n              ('openrouter:openai/gpt-5-mini'),\n              ('openrouter:openai/gpt-5'),\n              ('openrouter:anthropic/claude-sonnet-4.5'),\n              ('openrouter:google/gemini-2.5-flash')\n            ) AS v(id)\n            WHERE NOT EXISTS (\n              SELECT 1 FROM model_pricing mp WHERE mp.id = v.id\n            )\n          ) AS ok",
+        "params": []
+      }
+    ],
+    "execute": [
+      {
+        "description": "Run seed-model_pricing-catalog",
+        "sql": "\n            INSERT INTO model_pricing\n              (id, display_name, credits_per_1k_input, credits_per_1k_output, enabled, sort_order)\n            VALUES\n              ('openrouter:openai/gpt-5-mini', 'GPT-5 Mini', 30, 250, true, 1),\n              ('openrouter:openai/gpt-5', 'GPT-5', 160, 1250, true, 2),\n              ('openrouter:anthropic/claude-sonnet-4.5', 'Claude Sonnet 4.5', 375, 1900, true, 3),\n              ('openrouter:google/gemini-2.5-flash', 'Gemini 2.5 Flash', 40, 315, true, 4)\n            ON CONFLICT (id) DO NOTHING\n          ",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "Verify seed-model_pricing-catalog resolved all violations",
+        "sql": "SELECT NOT EXISTS (\n            SELECT v.id FROM (VALUES\n              ('openrouter:openai/gpt-5-mini'),\n              ('openrouter:openai/gpt-5'),\n              ('openrouter:anthropic/claude-sonnet-4.5'),\n              ('openrouter:google/gemini-2.5-flash')\n            ) AS v(id)\n            WHERE NOT EXISTS (\n              SELECT 1 FROM model_pricing mp WHERE mp.id = v.id\n            )\n          ) AS ok",
+        "params": []
+      }
+    ]
+  }
+]

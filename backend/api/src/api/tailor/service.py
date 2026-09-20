@@ -3,6 +3,7 @@ import uuid
 from fastapi import HTTPException
 from shared.amqp import TAILOR_EXCHANGE_NAME, AmqpTailorJob
 
+from ..credits import require_token_balance, validate_model_choice
 from ..deps import AmqpClientDep, PgConnection
 from . import db, model
 
@@ -13,6 +14,9 @@ async def start_tailor(
     req: model.StartTailorRequest,
     user_id: str,
 ) -> model.StartTailorResponse:
+    await require_token_balance(pg_conn, user_id)
+    chosen_model = await validate_model_choice(pg_conn, req.model)
+
     async with pg_conn.cursor() as cursor:
         # One active run per user — a second run would race the first for the
         # same base profile.
@@ -37,6 +41,7 @@ async def start_tailor(
         run_id=run_id,
         user_id=user_id,
         job_description=req.job_description,
+        model=chosen_model,
     )
     # The pooled connection only commits on dependency teardown (after the
     # response) — commit now so the dispatcher sees the row when it consumes

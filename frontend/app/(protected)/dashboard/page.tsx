@@ -22,6 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
 import JobStatusPoller from "@/components/job-status-poller";
 import SuggestionDialog from "@/components/suggestion-dialog";
+import BalanceChip from "@/components/balance-chip";
 import UploadResumeDialog from "./upload-resume-dialog";
 
 function fmtDate(date: string | null) {
@@ -83,6 +84,7 @@ export default async function DashboardPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <BalanceChip accessToken={accessToken} />
             <UploadResumeDialog
               accessToken={accessToken}
               disabled={activeJobIds.length > 0}

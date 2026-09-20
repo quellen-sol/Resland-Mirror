@@ -1,4 +1,5 @@
 import json
+import math
 from dataclasses import asdict
 
 from psycopg import Connection
@@ -23,6 +24,70 @@ class DbOpError(Exception):
     pass
 
 
+# Charged when a job's model has no model_pricing row (e.g. the env-default
+# model isn't in the catalog). Roughly gpt-5 rates — mid-tier, so unpriced
+# models never run free.
+FALLBACK_CREDITS_PER_1K_INPUT = 160
+FALLBACK_CREDITS_PER_1K_OUTPUT = 1250
+
+
+def record_token_usage(
+    pg_client: Connection,
+    *,
+    user_id: str,
+    job_kind: str,
+    job_id: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> int:
+    """Insert one token_usage row and deduct credits from the user's balance.
+    Floors at 0 — a job that overruns still finishes. Returns credits charged."""
+    if not input_tokens and not output_tokens:
+        return 0
+
+    row = pg_client.execute(
+        """
+        SELECT credits_per_1k_input, credits_per_1k_output
+        FROM model_pricing WHERE id = %s
+        """,
+        (model,),
+    ).fetchone()
+    rate_in = row[0] if row else FALLBACK_CREDITS_PER_1K_INPUT
+    rate_out = row[1] if row else FALLBACK_CREDITS_PER_1K_OUTPUT
+    credits = math.ceil(
+        (input_tokens * rate_in + output_tokens * rate_out) / 1000
+    )
+
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            INSERT INTO token_usage
+              (user_id, job_kind, job_id, model,
+               input_tokens, output_tokens, credits_charged)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                user_id,
+                job_kind,
+                job_id,
+                model,
+                input_tokens,
+                output_tokens,
+                credits,
+            ),
+        )
+        pg_client.execute(
+            """
+            UPDATE "user"
+            SET token_balance = GREATEST(0, token_balance - %s)
+            WHERE auth0_id = %s
+            """,
+            (credits, user_id),
+        )
+    return credits
+
+
 def fetch_suggestion_rows(
     pg_client: Connection, session_id: str
 ) -> list[FetchSuggestionRow]:
@@ -33,6 +98,8 @@ def fetch_suggestion_rows(
                 us.pending_question,
                 us.status,
                 us.result,
+                us.model,
+                us.user_id,
                 ue.company_name,
                 ue.description,
                 ue.start_date,
@@ -86,7 +153,7 @@ def fetch_tailor_run(
     with pg_client.cursor(row_factory=class_row(FetchTailorRunRow)) as cursor:
         return cursor.execute(
             """
-            SELECT id, user_id, job_description, status
+            SELECT id, user_id, job_description, status, model
             FROM user_tailor_run WHERE id = %s
             """,
             [run_id],

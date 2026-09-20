@@ -1,0 +1,40 @@
+"use client";
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export function isOutOfCredits(error: unknown) {
+  return error instanceof ApiError && error.status === 402;
+}
+
+export async function apiFetch(
+  accessToken: string,
+  path: string,
+  init?: RequestInit,
+) {
+  const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+  const res = await fetch(`${apiBaseUrl}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+  });
+  if (!res.ok) throw new ApiError(res.status, await res.text());
+  return res.json();
+}
+
+export interface PricedModel {
+  id: string;
+  display_name: string;
+  credits_per_1k_input: number;
+  credits_per_1k_output: number;
+}

@@ -5,6 +5,7 @@ import jwt
 from fastapi import Depends, Header, HTTPException
 from jwt import PyJWKClient
 
+from .deps import PgConnection
 from .env_vars import AUTH0_AUDIENCE, AUTH0_DOMAIN
 
 _jwks = PyJWKClient(f"https://{AUTH0_DOMAIN}/.well-known/jwks.json")
@@ -37,3 +38,20 @@ async def require_auth0_id(
 # Annotated alias so routes can declare `user_id: Auth0UserId` — FastAPI
 # resolves the dependency and injects the token's `sub` as the argument. Neat!
 Auth0UserId = Annotated[str, Depends(require_auth0_id)]
+
+
+async def require_site_admin(
+    user_id: Auth0UserId, pg_conn: PgConnection
+) -> str:
+    async with pg_conn.cursor() as cursor:
+        res = await cursor.execute(
+            'SELECT site_admin FROM "user" WHERE auth0_id = %s', (user_id,)
+        )
+        row = await res.fetchone()
+    if not row or not row[0]:
+        # 403 not 401 — the request IS authenticated, it just isn't admin.
+        raise HTTPException(status_code=403, detail="Not a site admin")
+    return user_id
+
+
+SiteAdmin = Annotated[str, Depends(require_site_admin)]

@@ -1,14 +1,17 @@
 // use prisma-next
 
 model User {
-  auth0_id      String   @id
-  has_onboarded Boolean  @default(false)
-  created_at    DateTime @default(now())
+  auth0_id            String   @id
+  has_onboarded       Boolean  @default(false)
+  token_balance       Int      @default(100000)
+  site_admin          Boolean  @default(false)
+  stripe_customer_id  String?
+  created_at          DateTime @default(now())
   // For resume headers
-  full_name     String?
-  email         String?
-  phone         String?
-  location      String?
+  full_name           String?
+  email               String?
+  phone               String?
+  location            String?
 
   @@map("user")
   @@index([auth0_id])
@@ -138,6 +141,8 @@ model UserSuggestion {
   experience       UserBaseExperience          @relation(fields: [experience_id], references: [id])
   bullet_id        Int?
   bullet           UserBaseExperienceBullet?   @relation(fields: [bullet_id], references: [id])
+  // Null = system default model.
+  model            String?
   pending_question String?
   result           String?
   status           SuggestionStatus            @default(PROCESSING)
@@ -163,6 +168,8 @@ model UserTailorRun {
   user_id          String
   user             User         @relation(fields: [user_id], references: [auth0_id])
   job_description  String
+  // Null = system default model.
+  model            String?
   pending_question String?
   result           String?
   status           TailorStatus @default(PROCESSING)
@@ -170,5 +177,63 @@ model UserTailorRun {
 
   @@map("user_tailor_run")
 
+  @@index([user_id])
+}
+
+// Whitelist of selectable models with internal-credit pricing.
+// `id` is the langchain model spec, e.g. "openrouter:openai/gpt-5-mini".
+model ModelPricing {
+  id                    String  @id
+  display_name          String
+  credits_per_1k_input  Int
+  credits_per_1k_output Int
+  enabled               Boolean @default(true)
+  sort_order            Int     @default(0)
+
+  @@map("model_pricing")
+}
+
+enum UsageJobKind {
+  SUGGESTION
+  TAILOR
+}
+
+// Ledger of billed LLM usage — one row per dispatcher task invocation.
+model TokenUsage {
+  id              Int          @id @default(autoincrement())
+  user_id         String
+  user            User         @relation(fields: [user_id], references: [auth0_id])
+  job_kind        UsageJobKind
+  job_id          String
+  model           String
+  input_tokens    Int
+  output_tokens   Int
+  credits_charged Int
+  created_at      DateTime     @default(now())
+
+  @@map("token_usage")
+  @@index([user_id])
+  @@index([created_at])
+}
+
+enum PurchaseStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+}
+
+// One row per Stripe Checkout session; `id` is the Stripe session id so the
+// webhook credit is idempotent.
+model TokenPurchase {
+  id           String         @id
+  user_id      String
+  user         User           @relation(fields: [user_id], references: [auth0_id])
+  credits      Int
+  amount_cents Int
+  currency     String
+  status       PurchaseStatus @default(PENDING)
+  created_at   DateTime       @default(now())
+
+  @@map("token_purchase")
   @@index([user_id])
 }

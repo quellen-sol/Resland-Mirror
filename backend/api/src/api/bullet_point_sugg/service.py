@@ -4,6 +4,7 @@ import uuid
 from fastapi import HTTPException
 from shared.amqp import BULLET_SUGG_EXCHANGE_NAME, AmqpSuggestionJob
 
+from ..credits import require_token_balance, validate_model_choice
 from ..deps import AmqpClientDep, PgConnection
 from . import db, model
 
@@ -14,6 +15,9 @@ async def start_suggestion(
     req: model.StartSuggestionRequest,
     user_id: str,
 ) -> model.StartSuggestionResponse:
+    await require_token_balance(pg_conn, user_id)
+    chosen_model = await validate_model_choice(pg_conn, req.model)
+
     async with pg_conn.cursor() as cursor:
         # Verify that an experience with this id exists for the user
         exp = await cursor.execute(
@@ -63,6 +67,7 @@ async def start_suggestion(
         user_id=user_id,
         experience_id=req.experience_id,
         bullet_id=req.bullet_id,
+        model=chosen_model,
     )
     # The pooled connection only commits on dependency teardown (after the
     # response) — commit now so the dispatcher sees the row when it consumes

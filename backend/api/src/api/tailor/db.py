@@ -11,6 +11,7 @@ class UserTailorRunRow:
     id: str
     user_id: str
     job_description: str
+    model: str | None
     pending_question: str | None
     result: str | None
     status: str
@@ -22,14 +23,15 @@ async def create_tailor_run(
     run_id: str,
     user_id: str,
     job_description: str,
+    model: str | None,
 ) -> str:
     async with conn.cursor() as cursor:
         await cursor.execute(
             """
-            INSERT INTO user_tailor_run (id, user_id, job_description)
-            VALUES (%s, %s, %s)
+            INSERT INTO user_tailor_run (id, user_id, job_description, model)
+            VALUES (%s, %s, %s, %s)
             """,
-            (run_id, user_id, job_description),
+            (run_id, user_id, job_description, model),
         )
     return run_id
 

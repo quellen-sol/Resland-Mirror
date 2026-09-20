@@ -1,0 +1,217 @@
+import asyncio
+
+import stripe
+from fastapi import HTTPException
+
+from ..deps import PgConnection
+from ..env_vars import FRONTEND_BASE_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+from . import model
+from .model import TOKEN_PACKS
+
+
+def _require_stripe() -> None:
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=503, detail="Stripe is not configured")
+    stripe.api_key = STRIPE_SECRET_KEY
+
+
+async def get_balance(pg_conn: PgConnection, user_id: str) -> model.BalanceResponse:
+    async with pg_conn.cursor() as cursor:
+        res = await cursor.execute(
+            'SELECT token_balance FROM "user" WHERE auth0_id = %s', (user_id,)
+        )
+        row = await res.fetchone()
+    return model.BalanceResponse(token_balance=row[0] if row else 0)
+
+
+async def list_models(pg_conn: PgConnection) -> model.ModelsResponse:
+    async with pg_conn.cursor() as cursor:
+        res = await cursor.execute(
+            """
+            SELECT id, display_name, credits_per_1k_input, credits_per_1k_output
+            FROM model_pricing WHERE enabled ORDER BY sort_order
+            """
+        )
+        rows = await res.fetchall()
+    return model.ModelsResponse(
+        models=[
+            model.ModelInfo(
+                id=r[0],
+                display_name=r[1],
+                credits_per_1k_input=r[2],
+                credits_per_1k_output=r[3],
+            )
+            for r in rows
+        ]
+    )
+
+
+async def list_purchases(
+    pg_conn: PgConnection, user_id: str
+) -> model.PurchasesResponse:
+    async with pg_conn.cursor() as cursor:
+        res = await cursor.execute(
+            """
+            SELECT id, credits, amount_cents, currency, status, created_at
+            FROM token_purchase WHERE user_id = %s ORDER BY created_at DESC
+            """,
+            (user_id,),
+        )
+        rows = await res.fetchall()
+    return model.PurchasesResponse(
+        purchases=[
+            model.PurchaseItem(
+                id=r[0],
+                credits=r[1],
+                amount_cents=r[2],
+                currency=r[3],
+                status=r[4],
+                created_at=r[5].isoformat(),
+            )
+            for r in rows
+        ]
+    )
+
+
+async def create_checkout(
+    pg_conn: PgConnection, user_id: str, req: model.CheckoutRequest
+) -> model.CheckoutResponse:
+    _require_stripe()
+    pack = TOKEN_PACKS.get(req.pack_id)
+    if not pack:
+        raise HTTPException(status_code=400, detail="Unknown pack")
+
+    async with pg_conn.cursor() as cursor:
+        res = await cursor.execute(
+            'SELECT stripe_customer_id FROM "user" WHERE auth0_id = %s',
+            (user_id,),
+        )
+        row = await res.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    customer_id = row[0]
+
+    if not customer_id:
+        customer = await asyncio.to_thread(
+            stripe.Customer.create,
+            metadata={"auth0_id": user_id},
+        )
+        customer_id = customer.id
+        async with pg_conn.transaction(), pg_conn.cursor() as cursor:
+            await cursor.execute(
+                'UPDATE "user" SET stripe_customer_id = %s WHERE auth0_id = %s',
+                (customer_id, user_id),
+            )
+
+    session = await asyncio.to_thread(
+        stripe.checkout.Session.create,
+        mode="payment",
+        customer=customer_id,
+        client_reference_id=user_id,
+        line_items=[
+            {
+                "price_data": {
+                    "currency": pack.currency,
+                    "unit_amount": pack.amount_cents,
+                    "product_data": {"name": pack.name},
+                },
+                "quantity": 1,
+            }
+        ],
+        metadata={"pack_id": pack.id, "credits": str(pack.credits)},
+        success_url=f"{FRONTEND_BASE_URL}/billing?checkout=success",
+        cancel_url=f"{FRONTEND_BASE_URL}/billing?checkout=cancelled",
+    )
+
+    # The webhook flips this to COMPLETED and credits the balance; the session
+    # id is the purchase's PK so a redelivered webhook can't double-credit.
+    async with pg_conn.transaction(), pg_conn.cursor() as cursor:
+        await cursor.execute(
+            """
+            INSERT INTO token_purchase
+              (id, user_id, credits, amount_cents, currency, status)
+            VALUES (%s, %s, %s, %s, %s, 'PENDING')
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (
+                session.id,
+                user_id,
+                pack.credits,
+                pack.amount_cents,
+                pack.currency,
+            ),
+        )
+
+    assert session.url
+    return model.CheckoutResponse(url=session.url)
+
+
+async def handle_webhook(
+    pg_conn: PgConnection, payload: bytes, sig_header: str | None
+) -> dict:
+    if not STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Stripe is not configured")
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header or "", STRIPE_WEBHOOK_SECRET
+        )
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid signature") from None
+
+    event_type = event["type"]
+    session = event["data"]["object"]
+
+    if event_type == "checkout.session.completed":
+        purchaser_id = session.get("client_reference_id")
+        credits = (session.get("metadata") or {}).get("credits")
+        if not purchaser_id or not credits:
+            # Not one of our token-pack sessions — acknowledge and move on.
+            return {"ok": True}
+        async with pg_conn.transaction(), pg_conn.cursor() as cursor:
+            # Stripe may deliver the event before the checkout endpoint's
+            # INSERT commits — upsert from the session payload first.
+            await cursor.execute(
+                """
+                INSERT INTO token_purchase
+                  (id, user_id, credits, amount_cents, currency, status)
+                VALUES (%s, %s, %s, %s, %s, 'PENDING')
+                ON CONFLICT (id) DO NOTHING
+                """,
+                (
+                    session["id"],
+                    purchaser_id,
+                    int(credits),
+                    session["amount_total"],
+                    session["currency"],
+                ),
+            )
+            # Only a PENDING row transitions — a redelivered event is a no-op.
+            res = await cursor.execute(
+                """
+                UPDATE token_purchase SET status = 'COMPLETED'
+                WHERE id = %s AND status = 'PENDING'
+                RETURNING user_id, credits
+                """,
+                (session["id"],),
+            )
+            purchase = await res.fetchone()
+            if purchase:
+                await cursor.execute(
+                    """
+                    UPDATE "user"
+                    SET token_balance = token_balance + %s
+                    WHERE auth0_id = %s
+                    """,
+                    (purchase[1], purchase[0]),
+                )
+    elif event_type == "checkout.session.expired":
+        async with pg_conn.transaction(), pg_conn.cursor() as cursor:
+            await cursor.execute(
+                """
+                UPDATE token_purchase SET status = 'EXPIRED'
+                WHERE id = %s AND status = 'PENDING'
+                """,
+                (session["id"],),
+            )
+
+    return {"ok": True}
