@@ -55,6 +55,27 @@ class AdminUsageResponse(BaseModel):
     recent: list[RecentUsageRow]
 
 
+class ModelPricingRow(BaseModel):
+    id: str
+    display_name: str
+    cents_per_1k_input: float
+    cents_per_1k_output: float
+    enabled: bool
+    sort_order: int
+
+
+class AdminModelsResponse(BaseModel):
+    models: list[ModelPricingRow]
+
+
+class ModelPricingUpsert(BaseModel):
+    display_name: str
+    cents_per_1k_input: float
+    cents_per_1k_output: float
+    enabled: bool
+    sort_order: int
+
+
 class AdminPurchaseRow(BaseModel):
     id: str
     user_id: str

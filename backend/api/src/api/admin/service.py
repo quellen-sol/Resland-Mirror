@@ -1,3 +1,5 @@
+from fastapi import HTTPException
+
 from ..deps import PgConnection
 from . import model
 
@@ -161,3 +163,64 @@ async def list_purchases(pg_conn: PgConnection) -> model.AdminPurchasesResponse:
             for r in rows
         ],
     )
+
+async def list_models(pg_conn: PgConnection) -> model.AdminModelsResponse:
+    async with pg_conn.cursor() as cursor:
+        res = await cursor.execute(
+            """
+            SELECT id, display_name, cents_per_1k_input, cents_per_1k_output,
+                   enabled, sort_order
+            FROM model_pricing ORDER BY sort_order, id
+            """
+        )
+        rows = await res.fetchall()
+    return model.AdminModelsResponse(
+        models=[
+            model.ModelPricingRow(
+                id=r[0],
+                display_name=r[1],
+                cents_per_1k_input=float(r[2]),
+                cents_per_1k_output=float(r[3]),
+                enabled=r[4],
+                sort_order=r[5],
+            )
+            for r in rows
+        ]
+    )
+
+
+async def upsert_model(
+    pg_conn: PgConnection, model_id: str, body: model.ModelPricingUpsert
+) -> model.ModelPricingRow:
+    if not model_id.startswith("openrouter:"):
+        raise HTTPException(
+            status_code=400,
+            detail="Model id must be an openrouter: spec — only OpenRouter "
+            "models are reachable with the current provider setup.",
+        )
+    if body.cents_per_1k_input < 0 or body.cents_per_1k_output < 0:
+        raise HTTPException(status_code=400, detail="Rates can't be negative")
+    async with pg_conn.cursor() as cursor:
+        await cursor.execute(
+            """
+            INSERT INTO model_pricing
+              (id, display_name, cents_per_1k_input, cents_per_1k_output,
+               enabled, sort_order)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (id) DO UPDATE SET
+              display_name = EXCLUDED.display_name,
+              cents_per_1k_input = EXCLUDED.cents_per_1k_input,
+              cents_per_1k_output = EXCLUDED.cents_per_1k_output,
+              enabled = EXCLUDED.enabled,
+              sort_order = EXCLUDED.sort_order
+            """,
+            (
+                model_id,
+                body.display_name,
+                body.cents_per_1k_input,
+                body.cents_per_1k_output,
+                body.enabled,
+                body.sort_order,
+            ),
+        )
+    return model.ModelPricingRow(id=model_id, **body.model_dump())

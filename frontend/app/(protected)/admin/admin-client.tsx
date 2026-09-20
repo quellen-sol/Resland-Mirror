@@ -55,6 +55,15 @@ interface RecentUsage {
   created_at: string;
 }
 
+interface ModelPricing {
+  id: string;
+  display_name: string;
+  cents_per_1k_input: number;
+  cents_per_1k_output: number;
+  enabled: boolean;
+  sort_order: number;
+}
+
 interface AdminPurchase {
   id: string;
   user_id: string;
@@ -95,6 +104,15 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
   const [recent, setRecent] = useState<RecentUsage[]>([]);
   const [revenueCents, setRevenueCents] = useState(0);
   const [purchases, setPurchases] = useState<AdminPurchase[]>([]);
+  const [models, setModels] = useState<ModelPricing[]>([]);
+  const [savingModel, setSavingModel] = useState<string | null>(null);
+  const [newModel, setNewModel] = useState({
+    id: "openrouter:",
+    display_name: "",
+    cents_per_1k_input: "",
+    cents_per_1k_output: "",
+    sort_order: "",
+  });
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -103,10 +121,12 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       apiFetch(accessToken, "/admin/users"),
       apiFetch(accessToken, "/admin/usage"),
       apiFetch(accessToken, "/admin/purchases"),
+      apiFetch(accessToken, "/admin/models"),
     ])
-      .then(([u, usage, p]) => {
+      .then(([u, usage, p, m]) => {
         if (cancelled) return;
         setUsers((u as { users: AdminUser[] }).users);
+        setModels((m as { models: ModelPricing[] }).models);
         const us = usage as {
           by_model: UsageByModel[];
           by_kind: UsageByKind[];
@@ -131,6 +151,70 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       cancelled = true;
     };
   }, [accessToken]);
+
+  const numInput =
+    "w-24 rounded border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs";
+
+  function updateModel(id: string, patch: Partial<ModelPricing>) {
+    setModels((ms) =>
+      ms.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    );
+  }
+
+  async function saveModel(m: ModelPricing) {
+    setSavingModel(m.id);
+    try {
+      const saved = await apiFetch(
+        accessToken,
+        `/admin/models/${encodeURIComponent(m.id)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            display_name: m.display_name,
+            cents_per_1k_input: m.cents_per_1k_input,
+            cents_per_1k_output: m.cents_per_1k_output,
+            enabled: m.enabled,
+            sort_order: m.sort_order,
+          }),
+        },
+      );
+      toast.success(`Saved ${(saved as ModelPricing).display_name}`);
+      const res = await apiFetch(accessToken, "/admin/models");
+      setModels((res as { models: ModelPricing[] }).models);
+    } catch (e) {
+      toast.error("Couldn't save model", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setSavingModel(null);
+    }
+  }
+
+  async function addModel() {
+    const id = newModel.id.trim();
+    if (!id || id === "openrouter:") {
+      toast.error("Enter a model id", {
+        description: 'e.g. "openrouter:openai/gpt-5-nano"',
+      });
+      return;
+    }
+    const row: ModelPricing = {
+      id,
+      display_name: newModel.display_name.trim() || id,
+      cents_per_1k_input: parseFloat(newModel.cents_per_1k_input) || 0,
+      cents_per_1k_output: parseFloat(newModel.cents_per_1k_output) || 0,
+      enabled: true,
+      sort_order: parseInt(newModel.sort_order) || 0,
+    };
+    await saveModel(row);
+    setNewModel({
+      id: "openrouter:",
+      display_name: "",
+      cents_per_1k_input: "",
+      cents_per_1k_output: "",
+      sort_order: "",
+    });
+  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -217,6 +301,189 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               ))}
             </tbody>
           </table>
+        </CardContent>
+      </Card>
+
+      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <CardHeader>
+          <CardTitle className="text-lg">Model pricing</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-zinc-800 text-xs">
+                <th className={th}>Id</th>
+                <th className={th}>Name</th>
+                <th className={th}>¢/1K in</th>
+                <th className={th}>¢/1K out</th>
+                <th className={th}>Sort</th>
+                <th className={th}>Enabled</th>
+                <th className={th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {models.map((m) => (
+                <tr key={m.id} className="border-b border-zinc-800/50">
+                  <td className={td}>{m.id}</td>
+                  <td className={td}>
+                    <input
+                      className="w-36 rounded border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs"
+                      value={m.display_name}
+                      onChange={(e) =>
+                        updateModel(m.id, { display_name: e.target.value })
+                      }
+                    />
+                  </td>
+                  <td className={td}>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      className={numInput}
+                      value={m.cents_per_1k_input}
+                      onChange={(e) =>
+                        updateModel(m.id, {
+                          cents_per_1k_input:
+                            parseFloat(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </td>
+                  <td className={td}>
+                    <input
+                      type="number"
+                      step="0.001"
+                      min="0"
+                      className={numInput}
+                      value={m.cents_per_1k_output}
+                      onChange={(e) =>
+                        updateModel(m.id, {
+                          cents_per_1k_output:
+                            parseFloat(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </td>
+                  <td className={td}>
+                    <input
+                      type="number"
+                      className="w-16 rounded border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs"
+                      value={m.sort_order}
+                      onChange={(e) =>
+                        updateModel(m.id, {
+                          sort_order: parseInt(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </td>
+                  <td className={td}>
+                    <input
+                      type="checkbox"
+                      checked={m.enabled}
+                      onChange={(e) =>
+                        updateModel(m.id, { enabled: e.target.checked })
+                      }
+                    />
+                  </td>
+                  <td className={td}>
+                    <button
+                      className="rounded bg-zinc-700 px-2.5 py-1 text-xs font-medium hover:bg-zinc-600 disabled:opacity-50"
+                      disabled={savingModel === m.id}
+                      onClick={() => saveModel(m)}
+                    >
+                      {savingModel === m.id ? "Saving…" : "Save"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-b border-zinc-800/50">
+                <td className={td}>
+                  <input
+                    className="w-56 rounded border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs"
+                    value={newModel.id}
+                    onChange={(e) =>
+                      setNewModel({ ...newModel, id: e.target.value })
+                    }
+                    placeholder="openrouter:vendor/model"
+                  />
+                </td>
+                <td className={td}>
+                  <input
+                    className="w-36 rounded border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs"
+                    value={newModel.display_name}
+                    onChange={(e) =>
+                      setNewModel({
+                        ...newModel,
+                        display_name: e.target.value,
+                      })
+                    }
+                    placeholder="Display name"
+                  />
+                </td>
+                <td className={td}>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    className={numInput}
+                    value={newModel.cents_per_1k_input}
+                    onChange={(e) =>
+                      setNewModel({
+                        ...newModel,
+                        cents_per_1k_input: e.target.value,
+                      })
+                    }
+                    placeholder="0.00"
+                  />
+                </td>
+                <td className={td}>
+                  <input
+                    type="number"
+                    step="0.001"
+                    min="0"
+                    className={numInput}
+                    value={newModel.cents_per_1k_output}
+                    onChange={(e) =>
+                      setNewModel({
+                        ...newModel,
+                        cents_per_1k_output: e.target.value,
+                      })
+                    }
+                    placeholder="0.00"
+                  />
+                </td>
+                <td className={td}>
+                  <input
+                    type="number"
+                    className="w-16 rounded border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs"
+                    value={newModel.sort_order}
+                    onChange={(e) =>
+                      setNewModel({
+                        ...newModel,
+                        sort_order: e.target.value,
+                      })
+                    }
+                    placeholder="0"
+                  />
+                </td>
+                <td className={td}></td>
+                <td className={td}>
+                  <button
+                    className="rounded bg-purple-600/80 px-2.5 py-1 text-xs font-medium hover:bg-purple-500"
+                    disabled={savingModel !== null}
+                    onClick={addModel}
+                  >
+                    Add
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs text-zinc-500">
+            Rates are the advertised fallback price — actual charges use
+            OpenRouter&apos;s reported cost ×1.25. Disabled models are rejected
+            at job creation.
+          </p>
         </CardContent>
       </Card>
 
