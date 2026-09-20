@@ -95,10 +95,11 @@ export async function saveManualProfile(input: SaveProfileInput) {
       end_date: exp.endDate,
       description: exp.description,
     });
-    for (const bullet of exp.bullets) {
+    for (const [i, bullet] of exp.bullets.entries()) {
       await db.orm.public.UserBaseExperienceBullet.create({
         user_experience_id: experience.id,
         bullet: bullet.text,
+        bullet_order: i,
       });
     }
   }

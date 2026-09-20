@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'2ebc10a638e3daa23818a89dda5ef8edbc44a3a68f2cdcfb1ee01d700cf1c472'>;
+  StorageHashBase<'c922ffdeabd27a01d3cd2f3cabddfef92dd43eaf63acabacad4c2f2df8d84ecb'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -273,6 +273,7 @@ export type FieldOutputTypes = {
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly user_experience_id: CodecTypes['pg/int4@1']['output'];
       readonly bullet: CodecTypes['pg/text@1']['output'];
+      readonly bullet_order: CodecTypes['pg/int4@1']['output'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
     readonly UserBaseProject: {
@@ -350,6 +351,7 @@ export type FieldInputTypes = {
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly user_experience_id: CodecTypes['pg/int4@1']['input'];
       readonly bullet: CodecTypes['pg/text@1']['input'];
+      readonly bullet_order: CodecTypes['pg/int4@1']['input'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
     readonly UserBaseProject: {
@@ -425,6 +427,7 @@ export type StorageColumnTypes = {
     };
     readonly user_base_experience_bullet: {
       readonly bullet: CodecTypes['pg/text@1']['output'];
+      readonly bullet_order: CodecTypes['pg/int4@1']['output'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly user_experience_id: CodecTypes['pg/int4@1']['output'];
@@ -502,6 +505,7 @@ export type StorageColumnInputTypes = {
     };
     readonly user_base_experience_bullet: {
       readonly bullet: CodecTypes['pg/text@1']['input'];
+      readonly bullet_order: CodecTypes['pg/int4@1']['input'];
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly user_experience_id: CodecTypes['pg/int4@1']['input'];
@@ -795,6 +799,11 @@ type ContractBase = Omit<
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
                 };
+                readonly bullet_order: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                };
                 readonly created_at: {
                   readonly nativeType: 'timestamptz';
                   readonly codecId: 'pg/timestamptz-temporal@1';
@@ -805,6 +814,11 @@ type ContractBase = Omit<
               primaryKey: { readonly columns: readonly ['id'] };
               uniques: readonly [];
               indexes: readonly [
+                {
+                  readonly name: 'bullet_exp_order_idx';
+                  readonly columns: readonly ['user_experience_id', 'bullet_order'];
+                  readonly unique: false;
+                },
                 {
                   readonly name: 'user_base_experience_bullet_user_experience_id_idx_b5f82fb4';
                   readonly prefix: 'user_base_experience_bullet_user_experience_id_idx';
@@ -1419,6 +1433,10 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly bullet_order: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
               readonly created_at: {
                 readonly nullable: false;
                 readonly type: {
@@ -1447,6 +1465,7 @@ type ContractBase = Omit<
                 readonly id: { readonly column: 'id' };
                 readonly user_experience_id: { readonly column: 'user_experience_id' };
                 readonly bullet: { readonly column: 'bullet' };
+                readonly bullet_order: { readonly column: 'bullet_order' };
                 readonly created_at: { readonly column: 'created_at' };
               };
             };

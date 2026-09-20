@@ -81,15 +81,16 @@ export async function saveProfileEdit(input: SaveProfileInput) {
           b.id.in(staleBulletIds),
         ).deleteAll();
       }
-      for (const b of exp.bullets) {
+      for (const [i, b] of exp.bullets.entries()) {
         if (b.id != null && ownedBulletIds.has(b.id)) {
           await tx.orm.public.UserBaseExperienceBullet.where({
             id: b.id,
-          }).update({ bullet: b.text });
+          }).update({ bullet: b.text, bullet_order: i });
         } else {
           await tx.orm.public.UserBaseExperienceBullet.create({
             user_experience_id: expId,
             bullet: b.text,
+            bullet_order: i,
           });
         }
       }

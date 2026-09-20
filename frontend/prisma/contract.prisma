@@ -73,10 +73,11 @@ model UserBaseExperienceBullet {
   user_experience_id Int
   user_experience    UserBaseExperience @relation(fields: [user_experience_id], references: [id])
   bullet             String
+  bullet_order       Int
   created_at         DateTime           @default(now())
 
   @@map("user_base_experience_bullet")
-  @@index([user_experience_id])
+  @@index([user_experience_id, bullet_order], map: "bullet_exp_order_idx")
 }
 
 model UserBaseSkill {
