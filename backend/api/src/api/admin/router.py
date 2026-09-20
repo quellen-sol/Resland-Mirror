@@ -36,3 +36,10 @@ async def admin_upsert_model(
     pg_conn: PgConnection,
 ):
     return await service.upsert_model(pg_conn=pg_conn, model_id=model_id, body=body)
+
+
+@router.delete("/models/{model_id:path}", status_code=204)
+async def admin_delete_model(
+    model_id: str, user_id: SiteAdmin, pg_conn: PgConnection
+):
+    await service.delete_model(pg_conn=pg_conn, model_id=model_id)

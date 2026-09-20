@@ -190,6 +190,23 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
     }
   }
 
+  async function deleteModel(id: string) {
+    if (!window.confirm(`Delete ${id}? Users can no longer select it.`)) return;
+    try {
+      await apiFetch(
+        accessToken,
+        `/admin/models/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      setModels((ms) => ms.filter((m) => m.id !== id));
+      toast.success(`Deleted ${id}`);
+    } catch (e) {
+      toast.error("Couldn't delete model", {
+        description: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
   async function addModel() {
     const id = newModel.id.trim();
     if (!id || id === "openrouter:") {
@@ -393,6 +410,12 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                       onClick={() => saveModel(m)}
                     >
                       {savingModel === m.id ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      className="ml-2 rounded bg-red-900/60 px-2.5 py-1 text-xs font-medium text-red-300 hover:bg-red-800/60"
+                      onClick={() => deleteModel(m.id)}
+                    >
+                      Delete
                     </button>
                   </td>
                 </tr>

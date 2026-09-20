@@ -29,6 +29,7 @@ export async function apiFetch(
     },
   });
   if (!res.ok) throw new ApiError(res.status, await res.text());
+  if (res.status === 204) return null;
   return res.json();
 }
 

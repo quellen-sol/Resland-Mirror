@@ -224,3 +224,12 @@ async def upsert_model(
             ),
         )
     return model.ModelPricingRow(id=model_id, **body.model_dump())
+
+
+async def delete_model(pg_conn: PgConnection, model_id: str):
+    async with pg_conn.cursor() as cursor:
+        res = await cursor.execute(
+            "DELETE FROM model_pricing WHERE id = %s", (model_id,)
+        )
+    if res.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Model not found")
