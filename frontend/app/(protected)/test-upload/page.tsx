@@ -1,5 +1,5 @@
 import { getUser } from "@/lib/db";
-import { auth0 } from "@/lib/auth0";
+import { getAccessTokenOrLogin } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import {
   Card,
@@ -16,7 +16,7 @@ export default async function TestUploadPage() {
   if (!user) {
     redirect("/auth/login");
   }
-  const { token: accessToken } = await auth0.getAccessToken();
+  const accessToken = await getAccessTokenOrLogin("/test-upload");
 
   return (
     <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-zinc-950 p-6 font-sans">

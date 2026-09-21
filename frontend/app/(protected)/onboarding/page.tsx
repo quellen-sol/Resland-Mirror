@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { getUser } from "@/lib/db";
-import { auth0 } from "@/lib/auth0";
+import { getAccessTokenOrLogin } from "@/lib/auth";
 import OnboardingFlow from "./onboarding-flow";
+
+export const metadata: Metadata = { title: "Onboarding" };
 
 export default async function OnboardingPage() {
   const user = await getUser();
@@ -12,7 +15,7 @@ export default async function OnboardingPage() {
   if (user.has_onboarded) {
     redirect("/dashboard");
   }
-  const { token: accessToken } = await auth0.getAccessToken();
+  const accessToken = await getAccessTokenOrLogin("/onboarding");
 
   return <OnboardingFlow accessToken={accessToken} />;
 }

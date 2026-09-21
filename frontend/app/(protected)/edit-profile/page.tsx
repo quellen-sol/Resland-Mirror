@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import { getUser, getUserProfileData } from "@/lib/db";
 import type { ProfileFormValues } from "@/components/profile-form";
 import EditProfileForm from "./edit-profile-form";
+
+export const metadata: Metadata = { title: "Edit profile" };
 
 function toDateString(date: string | null): string {
   return date ?? "";

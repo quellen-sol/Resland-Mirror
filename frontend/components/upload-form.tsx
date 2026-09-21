@@ -12,12 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ApiError, describeApiError } from "@/lib/api";
 
 type UploadResult =
   | { kind: "idle" }
   | { kind: "uploading" }
   | { kind: "success"; status: number; body: string }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; raw?: string };
 
 export default function UploadForm({
   accessToken,
@@ -37,7 +38,8 @@ export default function UploadForm({
     if (!apiBaseUrl) {
       setResult({
         kind: "error",
-        message: "NEXT_PUBLIC_API_BASE_URL is not configured",
+        message:
+          "The Resland API is unavailable right now. Please try again in a moment.",
       });
       return;
     }
@@ -52,6 +54,7 @@ export default function UploadForm({
         method: "POST",
         headers: { Authorization: `Bearer ${accessToken}` },
         body: formData,
+        signal: AbortSignal.timeout(60_000),
       });
       const body = await response.text();
 
@@ -61,13 +64,15 @@ export default function UploadForm({
       } else {
         setResult({
           kind: "error",
-          message: `HTTP ${response.status}: ${body}`,
+          message: describeApiError(new ApiError(response.status, body)),
+          raw: body,
         });
       }
     } catch (error) {
       setResult({
         kind: "error",
-        message: error instanceof Error ? error.message : String(error),
+        message: describeApiError(error),
+        raw: error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -141,9 +146,17 @@ export default function UploadForm({
           <CircleAlert />
           <AlertTitle>Upload failed</AlertTitle>
           <AlertDescription>
-            <pre className="mt-1 max-h-64 overflow-auto rounded bg-black/40 p-2 font-mono text-xs whitespace-pre-wrap text-zinc-300">
-              {result.message}
-            </pre>
+            <p>{result.message}</p>
+            {result.raw && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs text-zinc-400">
+                  Show technical details
+                </summary>
+                <pre className="mt-1 max-h-64 overflow-auto rounded bg-black/40 p-2 font-mono text-xs whitespace-pre-wrap text-zinc-300">
+                  {result.raw}
+                </pre>
+              </details>
+            )}
           </AlertDescription>
         </Alert>
       )}

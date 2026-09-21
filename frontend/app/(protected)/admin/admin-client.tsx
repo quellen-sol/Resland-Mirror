@@ -4,13 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { apiFetch } from "@/lib/api";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiFetch, describeApiError } from "@/lib/api";
+import ApiUnavailable from "@/components/api-unavailable";
 
 interface AdminUser {
   auth0_id: string;
@@ -188,17 +184,16 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
   const [purchasesQ, setPurchasesQ] = useState("");
   const [recentQ, setRecentQ] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
+  function loadAdmin() {
+    return Promise.all([
       apiFetch(accessToken, "/admin/users"),
       apiFetch(accessToken, "/admin/usage"),
       apiFetch(accessToken, "/admin/purchases"),
       apiFetch(accessToken, "/admin/models"),
     ])
       .then(([u, usage, p, m]) => {
-        if (cancelled) return;
         setUsers((u as { users: AdminUser[] }).users);
         setModels((m as { models: ModelPricing[] }).models);
         const us = usage as {
@@ -217,22 +212,22 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
         setLoaded(true);
       })
       .catch((e) => {
-        toast.error("Couldn't load admin stats", {
-          description: e instanceof Error ? e.message : String(e),
-        });
+        const message = describeApiError(e);
+        setError(message);
+        toast.error("Couldn't load admin stats", { description: message });
       });
-    return () => {
-      cancelled = true;
-    };
+  }
+
+  useEffect(() => {
+    void loadAdmin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
   const numInput =
     "w-24 rounded border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs";
 
   function updateModel(id: string, patch: Partial<ModelPricing>) {
-    setModels((ms) =>
-      ms.map((m) => (m.id === id ? { ...m, ...patch } : m)),
-    );
+    setModels((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
   }
 
   async function saveModel(m: ModelPricing) {
@@ -257,9 +252,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       const res = await apiFetch(accessToken, "/admin/models");
       setModels((res as { models: ModelPricing[] }).models);
     } catch (e) {
-      toast.error("Couldn't save model", {
-        description: e instanceof Error ? e.message : String(e),
-      });
+      toast.error("Couldn't save model", { description: describeApiError(e) });
     } finally {
       setSavingModel(null);
     }
@@ -268,16 +261,14 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
   async function deleteModel(id: string) {
     if (!window.confirm(`Delete ${id}? Users can no longer select it.`)) return;
     try {
-      await apiFetch(
-        accessToken,
-        `/admin/models/${encodeURIComponent(id)}`,
-        { method: "DELETE" },
-      );
+      await apiFetch(accessToken, `/admin/models/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
       setModels((ms) => ms.filter((m) => m.id !== id));
       toast.success(`Deleted ${id}`);
     } catch (e) {
       toast.error("Couldn't delete model", {
-        description: e instanceof Error ? e.message : String(e),
+        description: describeApiError(e),
       });
     }
   }
@@ -293,9 +284,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
   );
   const filteredPurchases = useMemo(
     () =>
-      purchases.filter((p) =>
-        matches(purchasesQ, p.id, p.user_id, p.status),
-      ),
+      purchases.filter((p) => matches(purchasesQ, p.id, p.user_id, p.status)),
     [purchases, purchasesQ],
   );
   const filteredRecent = useMemo(
@@ -355,6 +344,15 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
           <ArrowLeft className="size-3.5" /> Dashboard
         </Link>
       </header>
+      {error && (
+        <ApiUnavailable
+          onRetry={() => {
+            setError(null);
+            void loadAdmin();
+          }}
+          message={error}
+        />
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
@@ -411,18 +409,14 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
             <tbody>
               {usersPager.slice.map((u) => (
                 <tr key={u.auth0_id} className="border-b border-zinc-800/50">
-                  <td className={td}>
-                    {u.full_name ?? u.email ?? u.auth0_id}
-                  </td>
+                  <td className={td}>{u.full_name ?? u.email ?? u.auth0_id}</td>
                   <td className={td}>{fmtMoney(u.balance_cents, "usd")}</td>
                   <td className={td}>{fmtMoney(u.cents_used, "usd")}</td>
                   <td className={td}>
                     {u.input_tokens.toLocaleString()} /{" "}
                     {u.output_tokens.toLocaleString()}
                   </td>
-                  <td className={td}>
-                    {fmtMoney(u.cents_purchased, "usd")}
-                  </td>
+                  <td className={td}>{fmtMoney(u.cents_purchased, "usd")}</td>
                 </tr>
               ))}
             </tbody>
@@ -476,8 +470,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                       value={m.cents_per_1k_input}
                       onChange={(e) =>
                         updateModel(m.id, {
-                          cents_per_1k_input:
-                            parseFloat(e.target.value) || 0,
+                          cents_per_1k_input: parseFloat(e.target.value) || 0,
                         })
                       }
                     />
@@ -491,8 +484,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                       value={m.cents_per_1k_output}
                       onChange={(e) =>
                         updateModel(m.id, {
-                          cents_per_1k_output:
-                            parseFloat(e.target.value) || 0,
+                          cents_per_1k_output: parseFloat(e.target.value) || 0,
                         })
                       }
                     />

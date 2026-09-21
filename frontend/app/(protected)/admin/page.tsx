@@ -1,14 +1,17 @@
 import { notFound, redirect } from "next/navigation";
-import { auth0 } from "@/lib/auth0";
+import type { Metadata } from "next";
+import { getAccessTokenOrLogin } from "@/lib/auth";
 import { getUser } from "@/lib/db";
 import AdminClient from "./admin-client";
+
+export const metadata: Metadata = { title: "Admin" };
 
 export default async function AdminPage() {
   const user = await getUser();
   if (!user) redirect("/auth/login");
   // Hidden route — pretend it doesn't exist for non-admins.
   if (!user.site_admin) notFound();
-  const { token: accessToken } = await auth0.getAccessToken();
+  const accessToken = await getAccessTokenOrLogin("/admin");
 
   return (
     <div className="relative flex flex-1 overflow-hidden bg-zinc-950 font-sans">

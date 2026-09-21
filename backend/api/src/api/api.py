@@ -3,15 +3,16 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import psycopg_pool
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from shared.amqp import AmqpClient
 
 from . import deps
 from .admin.router import router as admin_router
 from .billing.router import router as billing_router
 from .bullet_point_sugg.router import router as bullet_sugg_router
-from .env_vars import AMQP_URL, PG_URL
+from .env_vars import AMQP_URL, MAINTENANCE_MODE, PG_URL
 from .resume_upload.router import router as resume_upload_router
 from .tailor.router import router as tailor_router
 
@@ -33,6 +34,20 @@ async def lifespan(app: FastAPI) -> Generator[None, Any, None]:
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.middleware("http")
+async def maintenance_mode(request: Request, call_next):
+    if MAINTENANCE_MODE:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Resland is down for maintenance. Please try again later."
+            },
+            headers={"Retry-After": "600"},
+        )
+    return await call_next(request)
+
 
 origins = [
     "http://localhost:3000",

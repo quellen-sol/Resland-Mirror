@@ -8,15 +8,16 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "cn";
 import ModelSelect from "@/components/model-select";
-import { apiFetch as apiRequest, isInsufficientBalance } from "@/lib/api";
+import {
+  ApiError,
+  apiFetch as apiRequest,
+  describeApiError,
+  isInsufficientBalance,
+} from "@/lib/api";
+import ApiUnavailable from "@/components/api-unavailable";
 
 const MAX_JD_CHARS = 10_000;
 const POLL_INTERVAL_MS = 3000;
@@ -27,7 +28,9 @@ type TailorStatus =
   | "WAITING_FOR_INPUT"
   | "COMPLETED"
   | "FAILED"
-  | "TIMED_OUT";
+  | "TIMED_OUT"
+  | "GONE"
+  | "UNREACHABLE";
 
 interface TailorRun {
   run_id: string;
@@ -80,6 +83,7 @@ export default function TailorForm({
   const [busy, setBusy] = useState(false);
   const finishedRef = useRef(false);
   const startedAtRef = useRef<number>(0);
+  const consecutiveFailuresRef = useRef(0);
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -97,13 +101,23 @@ export default function TailorForm({
     const text = jd.trim();
     if (!text || run || !apiBaseUrl) return;
     setBusy(true);
+    finishedRef.current = false;
+    consecutiveFailuresRef.current = 0;
     try {
       startedAtRef.current = Date.now();
-      const { run_id } = await apiFetch("", {
+      const { run_id } = (await apiFetch("", {
         method: "POST",
         body: JSON.stringify({ job_description: text, model: model || null }),
-      });
-      setRun({ run_id, status: "PROCESSING" });
+      })) as { run_id: string };
+      try {
+        const status = (await apiFetch(`/${run_id}`)) as Omit<
+          TailorRun,
+          "run_id"
+        >;
+        setRun({ run_id, ...status });
+      } catch {
+        setRun({ run_id, status: "PROCESSING" });
+      }
     } catch (error) {
       if (isInsufficientBalance(error)) {
         toast.error("Insufficient balance", {
@@ -115,7 +129,7 @@ export default function TailorForm({
         });
       } else {
         toast.error("Couldn't start tailoring", {
-          description: error instanceof Error ? error.message : String(error),
+          description: describeApiError(error),
         });
       }
     } finally {
@@ -144,9 +158,23 @@ export default function TailorForm({
           "run_id"
         >;
         if (cancelled) return;
-        setRun((r) => (r ? { ...r, ...data } : r));
-      } catch {
-        // Transient network error — retry on next tick.
+        consecutiveFailuresRef.current = 0;
+        setRun((r) => {
+          if (!r) return r;
+          if (data.status === "PROCESSING") startedAtRef.current = Date.now();
+          return { ...r, ...data };
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          setRun((r) => (r ? { ...r, status: "GONE" } : r));
+          clearInterval(interval);
+          return;
+        }
+        consecutiveFailuresRef.current += 1;
+        if (consecutiveFailuresRef.current >= 5) {
+          setRun((r) => (r ? { ...r, status: "UNREACHABLE" } : r));
+          clearInterval(interval);
+        }
       }
     }, POLL_INTERVAL_MS);
 
@@ -167,10 +195,12 @@ export default function TailorForm({
         body: JSON.stringify({ text }),
       });
       setAnswer("");
+      startedAtRef.current = Date.now();
+      consecutiveFailuresRef.current = 0;
       setRun((r) => (r ? { ...r, status: "PROCESSING" } : r));
     } catch (error) {
       toast.error("Couldn't send answer", {
-        description: error instanceof Error ? error.message : String(error),
+        description: describeApiError(error),
       });
     } finally {
       setBusy(false);
@@ -205,6 +235,8 @@ export default function TailorForm({
   const done = run?.status === "COMPLETED";
   const failed = run?.status === "FAILED";
   const timedOut = run?.status === "TIMED_OUT";
+  const gone = run?.status === "GONE";
+  const unreachable = run?.status === "UNREACHABLE";
 
   return (
     <div className="flex flex-col gap-6">
@@ -277,15 +309,15 @@ export default function TailorForm({
                 <Button
                   onClick={start}
                   disabled={busy || !jd.trim()}
-                className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
-              >
-                {busy ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <>
-                    <Sparkles /> Tailor
-                  </>
-                )}
+                  className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
+                >
+                  {busy ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <>
+                      <Sparkles /> Tailor
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -370,6 +402,33 @@ export default function TailorForm({
         </Card>
       )}
 
+      {gone && (
+        <Card className="border-amber-500/30 bg-zinc-900/80 text-zinc-100">
+          <CardContent className="flex flex-col gap-3 pt-6">
+            <p className="text-sm text-amber-400">
+              This session no longer exists — start a new one.
+            </p>
+            <Button
+              variant="outline"
+              onClick={reset}
+              className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            >
+              Start over
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {unreachable && (
+        <ApiUnavailable
+          onRetry={() => {
+            consecutiveFailuresRef.current = 0;
+            startedAtRef.current = Date.now();
+            setRun((r) => (r ? { ...r, status: "PROCESSING" } : r));
+          }}
+        />
+      )}
+
       {/* Tailored result */}
       {done && tailored && (
         <div className="flex flex-col gap-6">
@@ -410,8 +469,7 @@ export default function TailorForm({
                       </span>
                       {meta && (
                         <span className="shrink-0 text-xs text-zinc-500">
-                          {fmtDate(meta.start_date)} —{" "}
-                          {fmtDate(meta.end_date)}
+                          {fmtDate(meta.start_date)} — {fmtDate(meta.end_date)}
                         </span>
                       )}
                     </div>

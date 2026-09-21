@@ -16,7 +16,13 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "cn";
 import ModelSelect from "@/components/model-select";
-import { apiFetch as apiRequest, isInsufficientBalance } from "@/lib/api";
+import {
+  ApiError,
+  apiFetch as apiRequest,
+  describeApiError,
+  isInsufficientBalance,
+} from "@/lib/api";
+import ApiUnavailable from "@/components/api-unavailable";
 
 const POLL_INTERVAL_MS = 3000;
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -27,7 +33,9 @@ type SuggestionStatus =
   | "WAITING_FOR_INPUT"
   | "COMPLETED"
   | "FAILED"
-  | "TIMED_OUT";
+  | "TIMED_OUT"
+  | "GONE"
+  | "UNREACHABLE";
 
 interface SuggestionSession {
   session_id: string;
@@ -60,6 +68,7 @@ export default function SuggestionDialog({
   const [busy, setBusy] = useState(false);
   const finishedRef = useRef(false);
   const startedAtRef = useRef<number>(0);
+  const consecutiveFailuresRef = useRef(0);
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -68,18 +77,29 @@ export default function SuggestionDialog({
   }
 
   async function start() {
-    if (session || !apiBaseUrl) return;
+    if (session || !apiBaseUrl || busy) return;
+    setBusy(true);
+    finishedRef.current = false;
+    consecutiveFailuresRef.current = 0;
     try {
       startedAtRef.current = Date.now();
-      const { session_id } = await apiFetch("/suggestions", {
+      const { session_id } = (await apiFetch("/suggestions", {
         method: "POST",
         body: JSON.stringify({
           experience_id: experienceId,
           bullet_id: bulletId ?? null,
           model: model || null,
         }),
-      });
-      setSession({ session_id, status: "PROCESSING" });
+      })) as { session_id: string };
+      try {
+        const status = (await apiFetch(`/suggestions/${session_id}`)) as Omit<
+          SuggestionSession,
+          "session_id"
+        >;
+        setSession({ session_id, ...status });
+      } catch {
+        setSession({ session_id, status: "PROCESSING" });
+      }
     } catch (error) {
       if (isInsufficientBalance(error)) {
         toast.error("Insufficient balance", {
@@ -91,10 +111,12 @@ export default function SuggestionDialog({
         });
       } else {
         toast.error("Couldn't start suggestion", {
-          description: error instanceof Error ? error.message : String(error),
+          description: describeApiError(error),
         });
       }
       setOpen(false);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -114,14 +136,27 @@ export default function SuggestionDialog({
         return;
       }
       try {
-        const data = (await apiFetch(`/suggestions/${session.session_id}`)) as Omit<
-          SuggestionSession,
-          "session_id"
-        >;
+        const data = (await apiFetch(
+          `/suggestions/${session.session_id}`,
+        )) as Omit<SuggestionSession, "session_id">;
         if (cancelled) return;
-        setSession((s) => (s ? { ...s, ...data } : s));
-      } catch {
-        // Transient network error — retry on next tick.
+        consecutiveFailuresRef.current = 0;
+        setSession((s) => {
+          if (!s) return s;
+          if (data.status === "PROCESSING") startedAtRef.current = Date.now();
+          return { ...s, ...data };
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          setSession((s) => (s ? { ...s, status: "GONE" } : s));
+          clearInterval(interval);
+          return;
+        }
+        consecutiveFailuresRef.current += 1;
+        if (consecutiveFailuresRef.current >= 5) {
+          setSession((s) => (s ? { ...s, status: "UNREACHABLE" } : s));
+          clearInterval(interval);
+        }
       }
     }, POLL_INTERVAL_MS);
 
@@ -142,10 +177,12 @@ export default function SuggestionDialog({
         body: JSON.stringify({ text }),
       });
       setAnswer("");
+      startedAtRef.current = Date.now();
+      consecutiveFailuresRef.current = 0;
       setSession((s) => (s ? { ...s, status: "PROCESSING" } : s));
     } catch (error) {
       toast.error("Couldn't send answer", {
-        description: error instanceof Error ? error.message : String(error),
+        description: describeApiError(error),
       });
     } finally {
       setBusy(false);
@@ -157,13 +194,15 @@ export default function SuggestionDialog({
     setBusy(true);
     finishedRef.current = true;
     try {
-      await apiFetch(`/suggestions/${session.session_id}/accept`, { method: "POST" });
+      await apiFetch(`/suggestions/${session.session_id}/accept`, {
+        method: "POST",
+      });
       toast.success("Suggestion applied");
       setOpen(false);
       router.refresh();
     } catch (error) {
       toast.error("Couldn't apply suggestion", {
-        description: error instanceof Error ? error.message : String(error),
+        description: describeApiError(error),
       });
     } finally {
       setBusy(false);
@@ -174,12 +213,22 @@ export default function SuggestionDialog({
     finishedRef.current = true;
     try {
       if (session) {
-        await apiFetch(`/suggestions/${session.session_id}/dismiss`, { method: "POST" });
+        await apiFetch(`/suggestions/${session.session_id}/dismiss`, {
+          method: "POST",
+        });
       }
     } catch {
       // Dismiss is best-effort — close regardless.
     }
     setOpen(false);
+  }
+
+  async function reset() {
+    await dismiss();
+    setSession(null);
+    setAnswer("");
+    finishedRef.current = false;
+    consecutiveFailuresRef.current = 0;
   }
 
   // Result is a JSON array of {bullet_id, suggestion} produced by the agent.
@@ -199,6 +248,8 @@ export default function SuggestionDialog({
   const done = session?.status === "COMPLETED";
   const failed = session?.status === "FAILED";
   const timedOut = session?.status === "TIMED_OUT";
+  const gone = session?.status === "GONE";
+  const unreachable = session?.status === "UNREACHABLE";
 
   return (
     <Dialog
@@ -335,17 +386,56 @@ export default function SuggestionDialog({
             </div>
           )}
 
-          {failed && (
-            <p className="text-sm text-red-400">
-              Something went wrong — close this and try again.
-            </p>
-          )}
-
           {timedOut && (
-            <p className="text-sm text-amber-400">
-              This is taking too long — we couldn&apos;t finish the request.
-              Close this and try again.
-            </p>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-amber-400">
+                This is taking too long — we couldn&apos;t finish the request.
+              </p>
+              <Button
+                variant="outline"
+                onClick={reset}
+                className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                Start over
+              </Button>
+            </div>
+          )}
+          {failed && (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-red-400">
+                Something went wrong — try again.
+              </p>
+              <Button
+                variant="outline"
+                onClick={reset}
+                className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                Start over
+              </Button>
+            </div>
+          )}
+          {gone && (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-amber-400">
+                This session no longer exists — start a new one.
+              </p>
+              <Button
+                variant="outline"
+                onClick={reset}
+                className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                Start over
+              </Button>
+            </div>
+          )}
+          {unreachable && (
+            <ApiUnavailable
+              onRetry={() => {
+                consecutiveFailuresRef.current = 0;
+                startedAtRef.current = Date.now();
+                setSession((s) => (s ? { ...s, status: "PROCESSING" } : s));
+              }}
+            />
           )}
         </div>
       </DialogContent>

@@ -5,13 +5,9 @@ import Link from "next/link";
 import { ArrowLeft, Loader2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { apiFetch, fmtCents } from "@/lib/api";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { apiFetch, describeApiError, fmtCents } from "@/lib/api";
+import ApiUnavailable from "@/components/api-unavailable";
 
 interface TokenPack {
   id: string;
@@ -59,6 +55,25 @@ export default function BillingClient({
   const [packs, setPacks] = useState<TokenPack[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [busyPack, setBusyPack] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function loadBilling() {
+    return Promise.all([
+      apiFetch(accessToken, "/billing/balance"),
+      apiFetch(accessToken, "/billing/packs"),
+      apiFetch(accessToken, "/billing/purchases"),
+    ])
+      .then(([bal, pk, pu]) => {
+        setBalance((bal as { balance_cents: number }).balance_cents);
+        setPacks(pk as TokenPack[]);
+        setPurchases((pu as { purchases: Purchase[] }).purchases);
+      })
+      .catch((e) => {
+        const message = describeApiError(e);
+        setError(message);
+        toast.error("Couldn't load billing info", { description: message });
+      });
+  }
 
   useEffect(() => {
     if (checkoutResult === "success") {
@@ -69,26 +84,8 @@ export default function BillingClient({
   }, [checkoutResult]);
 
   useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      apiFetch(accessToken, "/billing/balance"),
-      apiFetch(accessToken, "/billing/packs"),
-      apiFetch(accessToken, "/billing/purchases"),
-    ])
-      .then(([bal, pk, pu]) => {
-        if (cancelled) return;
-        setBalance((bal as { balance_cents: number }).balance_cents);
-        setPacks(pk as TokenPack[]);
-        setPurchases((pu as { purchases: Purchase[] }).purchases);
-      })
-      .catch((e) => {
-        toast.error("Couldn't load billing info", {
-          description: e instanceof Error ? e.message : String(e),
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
+    void loadBilling();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
   async function buy(packId: string) {
@@ -101,7 +98,7 @@ export default function BillingClient({
       window.location.assign(url);
     } catch (e) {
       toast.error("Couldn't start checkout", {
-        description: e instanceof Error ? e.message : String(e),
+        description: describeApiError(e),
       });
       setBusyPack(null);
     }
@@ -125,6 +122,15 @@ export default function BillingClient({
           <ArrowLeft className="size-3.5" /> Dashboard
         </Link>
       </header>
+      {error && (
+        <ApiUnavailable
+          onRetry={() => {
+            setError(null);
+            void loadBilling();
+          }}
+          message={error}
+        />
+      )}
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
         <CardContent className="flex items-center gap-3 pt-6">
@@ -190,7 +196,9 @@ export default function BillingClient({
               <tbody>
                 {purchases.map((p) => (
                   <tr key={p.id} className="border-b border-zinc-800/50">
-                    <td className="py-2 text-zinc-300">{fmtDate(p.created_at)}</td>
+                    <td className="py-2 text-zinc-300">
+                      {fmtDate(p.created_at)}
+                    </td>
                     <td className="py-2 text-zinc-300">
                       {fmtMoney(p.cents, p.currency)}
                     </td>
