@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import Link from "next/link";
 
 // Served with a 503 + Retry-After while MAINTENANCE_MODE is on; crawlers treat
 // that as a temporary outage and keep the existing index, so inherit the root
@@ -26,6 +27,12 @@ export default function MaintenancePage() {
           Resland is temporarily paused while we make some updates. Your data is
           safe — please check back shortly.
         </p>
+        <Link
+          href="/auth/login?returnTo=%2Fdashboard"
+          className="text-sm text-zinc-500 hover:text-zinc-300"
+        >
+          Admin? Log in
+        </Link>
       </div>
     </main>
   );
