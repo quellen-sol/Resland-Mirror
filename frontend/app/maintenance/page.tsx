@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 
+// Served with a 503 + Retry-After while MAINTENANCE_MODE is on; crawlers treat
+// that as a temporary outage and keep the existing index, so inherit the root
+// layout's SEO metadata rather than marking anything noindex.
 export const metadata: Metadata = {
   title: "Down for maintenance",
-  robots: { index: false, follow: false },
 };
 
 export default function MaintenancePage() {
