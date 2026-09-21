@@ -32,8 +32,6 @@ variable "resland_amqp_password" {
   description = "Password for the 'resland' RabbitMQ user (created in the RabbitMQ console, not via AWS)."
 }
 
-data "aws_region" "current" {}
-
 module "api" {
   source = "./modules/ecs"
 
