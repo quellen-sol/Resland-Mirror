@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { auth0 } from "./lib/auth0";
+import { db } from "./prisma/db";
 
 const MAINTENANCE_PATH = "/maintenance";
 
@@ -9,11 +10,27 @@ function isMaintenanceMode() {
   return value === "1" || value === "true" || value === "on" || value === "yes";
 }
 
+async function isSiteAdmin(request) {
+  try {
+    const session = await auth0.getSession(request);
+    if (!session) return false;
+    const user = await db.orm.public.User.where((u) =>
+      u.auth0_id.eq(session.user.sub),
+    ).first();
+    return Boolean(user?.site_admin);
+  } catch {
+    return false;
+  }
+}
+
 export async function proxy(request) {
   const { pathname } = request.nextUrl;
 
   if (isMaintenanceMode()) {
     if (pathname === MAINTENANCE_PATH) return NextResponse.next();
+    // Auth routes stay open so admins can sign in during maintenance.
+    if (pathname.startsWith("/auth/")) return auth0.middleware(request);
+    if (await isSiteAdmin(request)) return auth0.middleware(request);
     const url = request.nextUrl.clone();
     url.pathname = MAINTENANCE_PATH;
     url.search = "";
