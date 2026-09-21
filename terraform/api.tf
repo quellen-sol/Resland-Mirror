@@ -50,7 +50,7 @@ module "api" {
 
   environment = {
     S3_RESUME_BUCKET      = var.s3_resume_bucket
-    AMQP_URL              = "amqps://resland:${urlencode(var.resland_amqp_password)}@${trimprefix(aws_mq_broker.rabbit.instances[0].endpoints[0], "amqps://")}"
+    AMQP_URL              = "amqps://resland:${urlencode(var.resland_amqp_password)}@${trimprefix(aws_mq_broker.rabbit_live.instances[0].endpoints[0], "amqps://")}"
     AWS_REGION            = data.aws_region.current.region
     PG_URL                = var.pg_conn_string
     AUTH0_DOMAIN          = var.auth0_domain

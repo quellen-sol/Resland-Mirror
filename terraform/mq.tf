@@ -29,8 +29,8 @@ variable "rabbitmq_pass" {
 #   }
 # }
 
-resource "aws_mq_broker" "rabbit" {
-  broker_name                = "resland-rabbit"
+resource "aws_mq_broker" "rabbit_live" {
+  broker_name                = "resland-rabbit-live"
   engine_type                = "RabbitMQ"
   engine_version             = "4.3"
   host_instance_type         = "mq.m7g.medium"
