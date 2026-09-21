@@ -15,4 +15,5 @@ docker tag resland:latest $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/api:
 docker push $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/api:latest
 
 # run task def update with `:latest`
-aws ecs update-service --cluster resland --service api --force-new-deployment
+aws ecs update-service --cluster resland-live --service api --force-new-deployment
+aws ecs update-service --cluster resland-live --service dispatcher --force-new-deployment

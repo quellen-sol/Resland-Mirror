@@ -61,7 +61,7 @@ export default async function Home() {
         <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
           <Image src="/resland-logo.png" alt="Resland" width={32} height={32} priority className="rounded-lg" /> Resland
         </Link>
-        <Link href="/auth/login" className={cn(buttonVariants({ variant: "ghost" }), "text-zinc-300")}>Log in</Link>
+        <Link href="/auth/login?returnTo=/dashboard" className={cn(buttonVariants({ variant: "ghost" }), "text-zinc-300")}>Log in</Link>
       </header>
       <main className="relative mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col gap-24 overflow-hidden px-6 pb-20 pt-16 sm:px-8 sm:pt-24">
         <section className="flex w-full min-w-0 flex-col items-center text-center">
@@ -70,7 +70,7 @@ export default async function Home() {
           <p className="mt-6 w-full max-w-[calc(100vw-3rem)] break-words text-lg leading-8 text-zinc-400 sm:max-w-2xl">Upload your resume, sharpen every bullet with AI, and tailor your story to any job description in minutes.</p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link href={primaryHref} className={cn(buttonVariants({ size: "lg" }), "h-11 border-0 bg-gradient-to-r from-violet-600 to-purple-600 px-8 text-white shadow-lg shadow-purple-950/50 hover:from-violet-500 hover:to-purple-500")}>{primaryLabel}</Link>
-            <Link href="/auth/login" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-11 border-zinc-700 bg-transparent px-8 text-zinc-200 hover:bg-zinc-800/60 hover:text-zinc-100")}>Log in</Link>
+            <Link href="/auth/login?returnTo=/dashboard" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-11 border-zinc-700 bg-transparent px-8 text-zinc-200 hover:bg-zinc-800/60 hover:text-zinc-100")}>Log in</Link>
           </div>
           <p className="mt-5 text-xs text-zinc-500">Pay only for what you use — no subscription</p>
         </section>
