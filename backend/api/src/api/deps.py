@@ -13,7 +13,11 @@ amqp_client: AmqpClient | None = None
 
 
 async def get_pg_conn():
-    return await AsyncConnection.connect(conninfo=PG_URL, autocommit=True)
+    conn = await AsyncConnection.connect(conninfo=PG_URL, autocommit=True)
+    try:
+        yield conn
+    finally:
+        await conn.close()
 
 
 def get_amqp_client() -> AmqpClient:

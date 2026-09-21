@@ -1,5 +1,7 @@
 from rabbitmq_amqp_python_client import Event
+from shared.pg import get_pg_client
 
+from ..env_vars import PG_URL
 from ..runners.resume import ResumeRunner
 from .generic import DispatchJobParams, GenericHandlerWithCleanup, HandlerError
 
@@ -10,10 +12,11 @@ class ResumeHandler(GenericHandlerWithCleanup):
 
     def update_db_status(self, job_id: str, status: str):
         print(f"Updating job {job_id} with status {status}")
-        self.pg_client.execute(
-            "UPDATE user_upload_job SET status = %s WHERE id = %s",
-            (status, job_id),
-        )
+        with get_pg_client(PG_URL) as conn:
+            conn.execute(
+                "UPDATE user_upload_job SET status = %s WHERE id = %s",
+                (status, job_id),
+            )
 
     def on_amqp_message(self, event: Event):
         try:

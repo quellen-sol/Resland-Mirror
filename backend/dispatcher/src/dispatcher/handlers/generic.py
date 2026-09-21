@@ -4,9 +4,7 @@ import time
 from dataclasses import dataclass
 
 from rabbitmq_amqp_python_client import AMQPMessagingHandler, Event
-from shared.pg import get_pg_client
 
-from ..env_vars import PG_URL
 from ..runners.generic import JobHandle, JobRunner
 
 
@@ -28,7 +26,6 @@ class GenericHandlerWithCleanup(AMQPMessagingHandler):
     def __init__(self):
         super().__init__()
         self.running_jobs = {}
-        self.pg_client = get_pg_client(PG_URL)
         self.cleanup_thread = threading.Thread(
             target=self._cleanup_finished_jobs, daemon=True
         )

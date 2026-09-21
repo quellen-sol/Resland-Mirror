@@ -23,5 +23,6 @@ module "dispatcher" {
     PG_URL             = var.pg_conn_string
     OPENROUTER_API_KEY = var.openrouter_api_key
     LANGSMITH_API_KEY  = var.langsmith_api_key
+    PYTHONUNBUFFERED   = "1"
   }
 }

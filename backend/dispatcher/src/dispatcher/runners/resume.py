@@ -36,55 +36,55 @@ class ResumeRunner(LocalThreadJobRunner):
                 aws_access_key_id=AWS_ACCESS_KEY_ID,
                 aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
             )
-            pg_client = get_pg_client(PG_URL)
 
-            if not self.job_data.get("job_id"):
-                raise RunnerError("Job ID is required")
+            with get_pg_client(PG_URL) as pg_client:
+                if not self.job_data.get("job_id"):
+                    raise RunnerError("Job ID is required")
 
-            # user_id in the job message is the Auth0 sub — the user PK now
-            user_id = self.job_data["user_id"]
-            user_result = pg_client.execute(
-                """
-                    SELECT auth0_id from "user" where auth0_id = %s
-                """,
-                [user_id],
-            ).fetchone()
-            if not user_result:
-                raise RunnerError("User not found")
+                # user_id in the job message is the Auth0 sub — the user PK now
+                user_id = self.job_data["user_id"]
+                user_result = pg_client.execute(
+                    """
+                        SELECT auth0_id from "user" where auth0_id = %s
+                    """,
+                    [user_id],
+                ).fetchone()
+                if not user_result:
+                    raise RunnerError("User not found")
 
-            # Pull document from s3
-            if not self.job_data.get("s3_key"):
-                raise RunnerError("S3 key is required")
-            s3_key = self.job_data["s3_key"]
-            print(f"Pulling document from S3: {s3_key}")
-            s3_response = s3_client.get_object(Bucket=S3_RESUME_BUCKET, Key=s3_key)
-            if not s3_response:
-                raise RunnerError("No response from S3")
-            print(f"S3 response: {s3_response}")
-            # Parse based on filetype with puremagic
-            body = s3_response["Body"]
-            if not body:
-                raise RunnerError("No body found in S3 response")
-            print("Reading body from S3 response...")
-            body_data = body.read()
-            file_type = puremagic.from_string(body_data)
-            print(f"File type: {file_type}")
-            profile_queue = None
+                # Pull document from s3
+                if not self.job_data.get("s3_key"):
+                    raise RunnerError("S3 key is required")
+                s3_key = self.job_data["s3_key"]
+                print(f"Pulling document from S3: {s3_key}")
+                s3_response = s3_client.get_object(Bucket=S3_RESUME_BUCKET, Key=s3_key)
+                if not s3_response:
+                    raise RunnerError("No response from S3")
+                print(f"S3 response: {s3_response}")
+                # Parse based on filetype with puremagic
+                body = s3_response["Body"]
+                if not body:
+                    raise RunnerError("No body found in S3 response")
+                print("Reading body from S3 response...")
+                body_data = body.read()
+                file_type = puremagic.from_string(body_data)
+                print(f"File type: {file_type}")
+                profile_queue = None
 
-            # Parse document based on file type
-            match file_type:
-                case ".docx":
-                    parsed_text = parse_docx(body_data)
-                    profile_queue = agent_parse_docx(parsed_text)
-                case _:
-                    raise RunnerError("Unsupported file type")
+                # Parse document based on file type
+                match file_type:
+                    case ".docx":
+                        parsed_text = parse_docx(body_data)
+                        profile_queue = agent_parse_docx(parsed_text)
+                    case _:
+                        raise RunnerError("Unsupported file type")
 
-            # Agent will have sent results here, then we write to pg
-            if profile_queue.empty():
-                raise RunnerError("No profile found in queue")
-            profile = profile_queue.get()
-            # Upsert all relevant info to pg
-            upsert_user_profile(pg_client, user_id, profile)
+                # Agent will have sent results here, then we write to pg
+                if profile_queue.empty():
+                    raise RunnerError("No profile found in queue")
+                profile = profile_queue.get()
+                # Upsert all relevant info to pg
+                upsert_user_profile(pg_client, user_id, profile)
 
         except Exception as e:
             print(f"Error in job runner: {e}")

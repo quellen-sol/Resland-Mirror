@@ -33,75 +33,79 @@ class SuggestionsRunner(LocalThreadJobRunner):
         user_id: str | None = None
         model_spec = SUGGESTIONS_MODEL
         session_id: str | None = None
-        pg_conn = get_pg_client(PG_URL)
         try:
-            if not self.job_data:
-                raise RunnerError("Job data is required")
+            with get_pg_client(PG_URL) as pg_conn:
+                try:
+                    if not self.job_data:
+                        raise RunnerError("Job data is required")
 
-            if not isinstance(self.job_data, dict):
-                raise TypeError("Job data must be a dictionary")
+                    if not isinstance(self.job_data, dict):
+                        raise TypeError("Job data must be a dictionary")
 
-            session_id = self.job_data.get("session_id")
-            if not session_id:
-                raise RunnerError("Got job with no session_id")
+                    session_id = self.job_data.get("session_id")
+                    if not session_id:
+                        raise RunnerError("Got job with no session_id")
 
-            if not isinstance(session_id, str):
-                raise TypeError("Session ID must be a string")
+                    if not isinstance(session_id, str):
+                        raise TypeError("Session ID must be a string")
 
-            answer = self.job_data.get("answer")
+                    answer = self.job_data.get("answer")
 
-            rows = fetch_suggestion_rows(pg_conn, session_id)
-            if not rows:
-                raise RunnerError("Session not found")
+                    rows = fetch_suggestion_rows(pg_conn, session_id)
+                    if not rows:
+                        raise RunnerError("Session not found")
 
-            user_id = rows[0].user_id
-            model_spec = rows[0].model
-            if not model_spec:
-                model_spec = default_model_spec(pg_conn)
-            if not model_spec:
-                model_spec = SUGGESTIONS_MODEL
+                    user_id = rows[0].user_id
+                    model_spec = rows[0].model
+                    if not model_spec:
+                        model_spec = default_model_spec(pg_conn)
+                    if not model_spec:
+                        model_spec = SUGGESTIONS_MODEL
 
-            try:
-                outcome = build_and_invoke_agent(
-                    session_id, answer, rows, model_spec, usage
-                )
-            except Exception as e:
-                # Leave the session resumable — the checkpointed graph can be
-                # continued by the answer flow once the failure clears. The
-                # job ends cleanly so the message isn't dead-lettered.
-                print(f"Agent failed for suggestion {session_id}: {e}")
+                    try:
+                        outcome = build_and_invoke_agent(
+                            session_id, answer, rows, model_spec, usage
+                        )
+                    except Exception as e:
+                        # Leave the session resumable — the checkpointed graph can be
+                        # continued by the answer flow once the failure clears. The
+                        # job ends cleanly so the message isn't dead-lettered.
+                        print(f"Agent failed for suggestion {session_id}: {e}")
 
-                set_suggestion_question(pg_conn, session_id, RESUME_AFTER_ERROR_MESSAGE)
-                return
+                        set_suggestion_question(
+                            pg_conn, session_id, RESUME_AFTER_ERROR_MESSAGE
+                        )
+                        return
 
-            if outcome.status == "waiting":
-                set_suggestion_question(pg_conn, session_id, outcome.question)
-            else:
-                if not outcome.result:
-                    raise RunnerError("Agent finished without submitting suggestions")
-                set_suggestion_result(pg_conn, session_id, outcome.result)
-
+                    if outcome.status == "waiting":
+                        set_suggestion_question(pg_conn, session_id, outcome.question)
+                    else:
+                        if not outcome.result:
+                            raise RunnerError(
+                                "Agent finished without submitting suggestions"
+                            )
+                        set_suggestion_result(pg_conn, session_id, outcome.result)
+                finally:
+                    if (
+                        user_id
+                        and session_id
+                        and (usage["input_tokens"] or usage["output_tokens"])
+                    ):
+                        try:
+                            charged = record_token_usage(
+                                pg_conn,
+                                user_id=user_id,
+                                job_kind="SUGGESTION",
+                                job_id=session_id,
+                                model=model_spec,
+                                input_tokens=usage["input_tokens"],
+                                output_tokens=usage["output_tokens"],
+                                generation_ids=usage["generation_ids"],
+                            )
+                            print(f"Charged {charged}¢ for {session_id}")
+                        except Exception as e:
+                            print(f"Failed to record token usage: {e}")
         except Exception as e:
             print(f"Error in job runner: {e}")
             queue.put((threading.current_thread().name, e))
             return
-        finally:
-            if (
-                user_id
-                and session_id
-                and (usage["input_tokens"] or usage["output_tokens"])
-            ):
-                try:
-                    charged = record_token_usage(
-                        pg_conn,
-                        user_id=user_id,
-                        job_kind="SUGGESTION",
-                        job_id=session_id,
-                        model=model_spec,
-                        input_tokens=usage["input_tokens"],
-                        output_tokens=usage["output_tokens"],
-                        generation_ids=usage["generation_ids"],
-                    )
-                    print(f"Charged {charged}¢ for {session_id}")
-                except Exception as e:
-                    print(f"Failed to record token usage: {e}")

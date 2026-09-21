@@ -189,37 +189,37 @@ def build_and_invoke_agent(
     agent_builder.add_conditional_edges("llm_call", should_continue, ["tool_node", END])
     agent_builder.add_conditional_edges("tool_node", after_tools, ["llm_call", END])
 
-    conn = get_pg_client(PG_URL, row_factory=dict_row)
     # PostgresSaver uses pipeline mode, which requires autocommit.
-    checkpointer = PostgresSaver(conn)
-    agent = agent_builder.compile(checkpointer=checkpointer)
+    with get_pg_client(PG_URL, row_factory=dict_row) as conn:
+        checkpointer = PostgresSaver(conn)
+        agent = agent_builder.compile(checkpointer=checkpointer)
 
-    config = {"configurable": {"thread_id": session_id}}
-    if answer is not None:
-        try:
-            agent.invoke(input=Command(resume=answer), config=config)
-        except EmptyInputError:
-            # A crashed run has pending nodes but no pending interrupt —
-            # Command(resume) has nothing to feed. None resumes the
-            # pending nodes from the checkpoint instead.
-            agent.invoke(input=None, config=config)
-    else:
-        invoke_param = {
-            "messages": [
-                HumanMessage(
-                    content="Review my resume bullets for this experience and "
-                    "suggest improvements. Start by calling get_user_bullet_points."
-                )
-            ]
-        }
-        agent.invoke(input=invoke_param, config=config)
-    snapshot = agent.get_state(config)
+        config = {"configurable": {"thread_id": session_id}}
+        if answer is not None:
+            try:
+                agent.invoke(input=Command(resume=answer), config=config)
+            except EmptyInputError:
+                # A crashed run has pending nodes but no pending interrupt —
+                # Command(resume) has nothing to feed. None resumes the
+                # pending nodes from the checkpoint instead.
+                agent.invoke(input=None, config=config)
+        else:
+            invoke_param = {
+                "messages": [
+                    HumanMessage(
+                        content="Review my resume bullets for this experience and "
+                        "suggest improvements. Start by calling get_user_bullet_points."
+                    )
+                ]
+            }
+            agent.invoke(input=invoke_param, config=config)
+        snapshot = agent.get_state(config)
 
-    if snapshot.next:
-        question = snapshot.interrupts[0].value if snapshot.interrupts else None
-        return SuggestionRunOutcome(status="waiting", question=question)
+        if snapshot.next:
+            question = snapshot.interrupts[0].value if snapshot.interrupts else None
+            return SuggestionRunOutcome(status="waiting", question=question)
 
-    return SuggestionRunOutcome(
-        status="completed",
-        result=result_queue.get() if not result_queue.empty() else None,
-    )
+        return SuggestionRunOutcome(
+            status="completed",
+            result=result_queue.get() if not result_queue.empty() else None,
+        )

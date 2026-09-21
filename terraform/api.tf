@@ -44,7 +44,7 @@ module "api" {
   enable_load_balancer = true
   health_check_path    = "/docs"
   container_command    = ["uv", "run", "api"]
-  certificate_arn      = aws_acm_certificate.resland.arn
+  certificate_arn      = aws_acm_certificate.resland_api.arn
 
   environment = {
     S3_RESUME_BUCKET      = var.s3_resume_bucket
@@ -57,5 +57,6 @@ module "api" {
     STRIPE_WEBHOOK_SECRET = var.stripe_webhook_secret
     FRONTEND_BASE_URL     = "https://resland.org"
     MAINTENANCE_MODE      = "0"
+    PYTHONUNBUFFERED      = "1"
   }
 }

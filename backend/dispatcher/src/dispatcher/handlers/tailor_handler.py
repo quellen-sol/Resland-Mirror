@@ -1,5 +1,7 @@
 from rabbitmq_amqp_python_client import Event
+from shared.pg import get_pg_client
 
+from ..env_vars import PG_URL
 from ..runners.db_ops import set_tailor_failed
 from ..runners.tailor import TailorRunner
 from .generic import DispatchJobParams, GenericHandlerWithCleanup, HandlerError
@@ -29,4 +31,5 @@ class TailorHandler(GenericHandlerWithCleanup):
         # The runner writes WAITING_FOR_INPUT/COMPLETED itself; only hard
         # failures need the run row updated here.
         if status == "FAILED":
-            set_tailor_failed(self.pg_client, job_id)
+            with get_pg_client(PG_URL) as conn:
+                set_tailor_failed(conn, job_id)

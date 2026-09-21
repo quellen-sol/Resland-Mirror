@@ -45,10 +45,9 @@ async def maintenance_mode(request: Request, call_next):
 
 origins = [
     "http://localhost:3000",
-    "http://localhost:3001",
     "http://192.168.1.8:3000",
-    "http://192.168.1.8:3001",
-    "https://*.resland.org",
+    "https://resland.org",
+    "https://www.resland.org",
 ]
 
 app.add_middleware(

@@ -7,9 +7,8 @@ from jwt import PyJWKClient
 from psycopg import AsyncConnection
 from psycopg.rows import TupleRow
 
-from . import deps
 from .deps import PgConnection
-from .env_vars import AUTH0_AUDIENCE, AUTH0_DOMAIN
+from .env_vars import AUTH0_AUDIENCE, AUTH0_DOMAIN, PG_URL
 
 _jwks = PyJWKClient(f"https://{AUTH0_DOMAIN}/.well-known/jwks.json")
 
@@ -59,9 +58,9 @@ async def is_site_admin_request(request: Request) -> bool:
         return False
     try:
         user_id = await asyncio.to_thread(_verify_token, authorization[7:])
-        if deps.pg_pool is None:
-            return False
-        async with deps.pg_pool.connection() as conn:
+        async with await AsyncConnection.connect(
+            conninfo=PG_URL, autocommit=True
+        ) as conn:
             return await _is_site_admin(conn, user_id)
     except Exception:
         return False
