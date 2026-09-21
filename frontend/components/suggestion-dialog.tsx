@@ -92,7 +92,10 @@ export default function SuggestionDialog({
         }),
       })) as { session_id: string };
       try {
-        const status = (await apiFetch(`/suggestions/${session_id}`)) as Omit<SuggestionSession, "session_id">;
+        const status = (await apiFetch(`/suggestions/${session_id}`)) as Omit<
+          SuggestionSession,
+          "session_id"
+        >;
         setSession({ session_id, ...status });
       } catch {
         setSession({ session_id, status: "PROCESSING" });
@@ -133,10 +136,9 @@ export default function SuggestionDialog({
         return;
       }
       try {
-        const data = (await apiFetch(`/suggestions/${session.session_id}`)) as Omit<
-          SuggestionSession,
-          "session_id"
-        >;
+        const data = (await apiFetch(
+          `/suggestions/${session.session_id}`,
+        )) as Omit<SuggestionSession, "session_id">;
         if (cancelled) return;
         consecutiveFailuresRef.current = 0;
         setSession((s) => {
@@ -192,7 +194,9 @@ export default function SuggestionDialog({
     setBusy(true);
     finishedRef.current = true;
     try {
-      await apiFetch(`/suggestions/${session.session_id}/accept`, { method: "POST" });
+      await apiFetch(`/suggestions/${session.session_id}/accept`, {
+        method: "POST",
+      });
       toast.success("Suggestion applied");
       setOpen(false);
       router.refresh();
@@ -209,7 +213,9 @@ export default function SuggestionDialog({
     finishedRef.current = true;
     try {
       if (session) {
-        await apiFetch(`/suggestions/${session.session_id}/dismiss`, { method: "POST" });
+        await apiFetch(`/suggestions/${session.session_id}/dismiss`, {
+          method: "POST",
+        });
       }
     } catch {
       // Dismiss is best-effort — close regardless.
@@ -381,13 +387,46 @@ export default function SuggestionDialog({
           )}
 
           {timedOut && (
-            <div className="flex flex-col gap-3"><p className="text-sm text-amber-400">This is taking too long — we couldn&apos;t finish the request.</p><Button variant="outline" onClick={reset} className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800">Start over</Button></div>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-amber-400">
+                This is taking too long — we couldn&apos;t finish the request.
+              </p>
+              <Button
+                variant="outline"
+                onClick={reset}
+                className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                Start over
+              </Button>
+            </div>
           )}
           {failed && (
-            <div className="flex flex-col gap-3"><p className="text-sm text-red-400">Something went wrong — try again.</p><Button variant="outline" onClick={reset} className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800">Start over</Button></div>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-red-400">
+                Something went wrong — try again.
+              </p>
+              <Button
+                variant="outline"
+                onClick={reset}
+                className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                Start over
+              </Button>
+            </div>
           )}
           {gone && (
-            <div className="flex flex-col gap-3"><p className="text-sm text-amber-400">This session no longer exists — start a new one.</p><Button variant="outline" onClick={reset} className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800">Start over</Button></div>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-amber-400">
+                This session no longer exists — start a new one.
+              </p>
+              <Button
+                variant="outline"
+                onClick={reset}
+                className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                Start over
+              </Button>
+            </div>
           )}
           {unreachable && (
             <ApiUnavailable

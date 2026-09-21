@@ -21,22 +21,40 @@ export function isApiUnreachable(error: unknown) {
   );
 }
 
+const API_UNAVAILABLE_MESSAGE =
+  "The Resland API is unavailable right now. Please try again in a moment.";
+
 export function describeApiError(error: unknown): string {
   if (isApiUnreachable(error)) {
-    return "The Resland API is unavailable right now. Please try again in a moment.";
+    return API_UNAVAILABLE_MESSAGE;
   }
   if (error instanceof ApiError) {
-    if (error.status === 401) return "Your session expired — please sign in again.";
+    if (error.status === 401)
+      return "Your session expired — please sign in again.";
     if (error.status === 404) return "That no longer exists.";
     const message = error.message.trim();
     try {
       const parsed = JSON.parse(message) as { detail?: unknown };
       if (typeof parsed.detail === "string") return parsed.detail;
-    } catch {
-    }
+    } catch {}
     return message || "The request failed.";
   }
-  return error instanceof Error ? error.message : String(error);
+  if (error instanceof Error) {
+    const name = error.name;
+    const message = error.message.trim();
+    if (
+      error instanceof TypeError ||
+      name === "TypeError" ||
+      name === "AbortError" ||
+      name === "TimeoutError" ||
+      message === "Failed to fetch" ||
+      message === "Load failed"
+    ) {
+      return API_UNAVAILABLE_MESSAGE;
+    }
+    return message;
+  }
+  return String(error);
 }
 
 export async function apiFetch(

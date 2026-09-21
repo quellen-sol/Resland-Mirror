@@ -36,7 +36,11 @@ export default function UploadForm({
 
     const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
     if (!apiBaseUrl) {
-      setResult({ kind: "error", message: "The Resland API is unavailable right now. Please try again in a moment." });
+      setResult({
+        kind: "error",
+        message:
+          "The Resland API is unavailable right now. Please try again in a moment.",
+      });
       return;
     }
 
@@ -145,8 +149,12 @@ export default function UploadForm({
             <p>{result.message}</p>
             {result.raw && (
               <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-zinc-400">Show technical details</summary>
-                <pre className="mt-1 max-h-64 overflow-auto rounded bg-black/40 p-2 font-mono text-xs whitespace-pre-wrap text-zinc-300">{result.raw}</pre>
+                <summary className="cursor-pointer text-xs text-zinc-400">
+                  Show technical details
+                </summary>
+                <pre className="mt-1 max-h-64 overflow-auto rounded bg-black/40 p-2 font-mono text-xs whitespace-pre-wrap text-zinc-300">
+                  {result.raw}
+                </pre>
               </details>
             )}
           </AlertDescription>

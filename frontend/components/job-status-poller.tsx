@@ -44,13 +44,23 @@ export default function JobStatusPoller({ jobIds }: { jobIds: string[] }) {
           }
           if (!res.ok) {
             consecutiveFailuresRef.current += 1;
+            if (consecutiveFailuresRef.current === 5) {
+              toast.warning("Can't reach the server", {
+                id: LOADING_TOAST_ID,
+                description:
+                  "Still trying — your resume is processing in the background.",
+              });
+            }
             continue;
           }
+          const wasRecovering = consecutiveFailuresRef.current > 0;
           consecutiveFailuresRef.current = 0;
-          toast.loading("Processing your resume…", {
-            id: LOADING_TOAST_ID,
-            description: "We'll update your profile when it finishes.",
-          });
+          if (wasRecovering) {
+            toast.loading("Processing your resume…", {
+              id: LOADING_TOAST_ID,
+              description: "We'll update your profile when it finishes.",
+            });
+          }
           const { status } = (await res.json()) as { status: string };
           if (!TERMINAL_STATES.has(status)) continue;
 
@@ -67,13 +77,14 @@ export default function JobStatusPoller({ jobIds }: { jobIds: string[] }) {
           }
         } catch {
           consecutiveFailuresRef.current += 1;
+          if (consecutiveFailuresRef.current === 5) {
+            toast.warning("Can't reach the server", {
+              id: LOADING_TOAST_ID,
+              description:
+                "Still trying — your resume is processing in the background.",
+            });
+          }
         }
-      }
-      if (consecutiveFailuresRef.current >= 5) {
-        toast.warning("Can't reach the server", {
-          id: LOADING_TOAST_ID,
-          description: "Still trying — your resume is processing in the background.",
-        });
       }
       if (shouldRefresh && !cancelled) router.refresh();
     }

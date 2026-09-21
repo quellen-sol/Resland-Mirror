@@ -5,12 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Loader2, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch, describeApiError, fmtCents } from "@/lib/api";
 import ApiUnavailable from "@/components/api-unavailable";
 
@@ -89,7 +84,7 @@ export default function BillingClient({
   }, [checkoutResult]);
 
   useEffect(() => {
-    void Promise.resolve().then(() => loadBilling());
+    void loadBilling();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
@@ -102,7 +97,9 @@ export default function BillingClient({
       })) as { url: string };
       window.location.assign(url);
     } catch (e) {
-      toast.error("Couldn't start checkout", { description: describeApiError(e) });
+      toast.error("Couldn't start checkout", {
+        description: describeApiError(e),
+      });
       setBusyPack(null);
     }
   }
@@ -125,7 +122,15 @@ export default function BillingClient({
           <ArrowLeft className="size-3.5" /> Dashboard
         </Link>
       </header>
-      {error && <ApiUnavailable onRetry={() => { setError(null); void loadBilling(); }} message={error} />}
+      {error && (
+        <ApiUnavailable
+          onRetry={() => {
+            setError(null);
+            void loadBilling();
+          }}
+          message={error}
+        />
+      )}
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
         <CardContent className="flex items-center gap-3 pt-6">
@@ -191,7 +196,9 @@ export default function BillingClient({
               <tbody>
                 {purchases.map((p) => (
                   <tr key={p.id} className="border-b border-zinc-800/50">
-                    <td className="py-2 text-zinc-300">{fmtDate(p.created_at)}</td>
+                    <td className="py-2 text-zinc-300">
+                      {fmtDate(p.created_at)}
+                    </td>
                     <td className="py-2 text-zinc-300">
                       {fmtMoney(p.cents, p.currency)}
                     </td>

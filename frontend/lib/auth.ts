@@ -15,8 +15,6 @@ export async function getAccessTokenOrLogin(returnTo: string): Promise<string> {
   try {
     return (await auth0.getAccessToken()).token;
   } catch {
-    redirect(
-      `/auth/logout?returnTo=${encodeURIComponent(`/auth/login?returnTo=${returnTo}`)}`,
-    );
+    redirect(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
   }
 }

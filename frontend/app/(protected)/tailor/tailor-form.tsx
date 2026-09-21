@@ -8,12 +8,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "cn";
 import ModelSelect from "@/components/model-select";
 import {
@@ -115,7 +110,10 @@ export default function TailorForm({
         body: JSON.stringify({ job_description: text, model: model || null }),
       })) as { run_id: string };
       try {
-        const status = (await apiFetch(`/${run_id}`)) as Omit<TailorRun, "run_id">;
+        const status = (await apiFetch(`/${run_id}`)) as Omit<
+          TailorRun,
+          "run_id"
+        >;
         setRun({ run_id, ...status });
       } catch {
         setRun({ run_id, status: "PROCESSING" });
@@ -311,15 +309,15 @@ export default function TailorForm({
                 <Button
                   onClick={start}
                   disabled={busy || !jd.trim()}
-                className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
-              >
-                {busy ? (
-                  <Loader2 className="animate-spin" />
-                ) : (
-                  <>
-                    <Sparkles /> Tailor
-                  </>
-                )}
+                  className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
+                >
+                  {busy ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <>
+                      <Sparkles /> Tailor
+                    </>
+                  )}
                 </Button>
               </div>
             </div>
@@ -407,8 +405,16 @@ export default function TailorForm({
       {gone && (
         <Card className="border-amber-500/30 bg-zinc-900/80 text-zinc-100">
           <CardContent className="flex flex-col gap-3 pt-6">
-            <p className="text-sm text-amber-400">This session no longer exists — start a new one.</p>
-            <Button variant="outline" onClick={reset} className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800">Start over</Button>
+            <p className="text-sm text-amber-400">
+              This session no longer exists — start a new one.
+            </p>
+            <Button
+              variant="outline"
+              onClick={reset}
+              className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            >
+              Start over
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -463,8 +469,7 @@ export default function TailorForm({
                       </span>
                       {meta && (
                         <span className="shrink-0 text-xs text-zinc-500">
-                          {fmtDate(meta.start_date)} —{" "}
-                          {fmtDate(meta.end_date)}
+                          {fmtDate(meta.start_date)} — {fmtDate(meta.end_date)}
                         </span>
                       )}
                     </div>
