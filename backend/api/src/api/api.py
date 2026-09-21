@@ -9,7 +9,7 @@ from shared.amqp import AmqpClient
 
 from . import deps
 from .admin.router import router as admin_router
-from .auth import is_site_admin_request
+from .auth import is_docs_request, is_site_admin_request
 from .billing.router import router as billing_router
 from .bullet_point_sugg.router import router as bullet_sugg_router
 from .env_vars import AMQP_URL, MAINTENANCE_MODE
@@ -32,7 +32,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.middleware("http")
 async def maintenance_mode(request: Request, call_next):
-    if MAINTENANCE_MODE and not await is_site_admin_request(request):
+    if MAINTENANCE_MODE and not await is_site_admin_request(request) and not is_docs_request(request):
         return JSONResponse(
             status_code=503,
             content={

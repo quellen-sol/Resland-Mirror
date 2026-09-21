@@ -65,6 +65,9 @@ async def is_site_admin_request(request: Request) -> bool:
     except Exception:
         return False
 
+def is_docs_request(request: Request) -> bool:
+    return request.url.path.startswith("/docs")
+
 
 async def require_site_admin(user_id: Auth0UserId, pg_conn: PgConnection) -> str:
     if not await _is_site_admin(pg_conn, user_id):

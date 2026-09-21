@@ -56,7 +56,7 @@ module "api" {
     STRIPE_SECRET_KEY     = var.stripe_secret_key
     STRIPE_WEBHOOK_SECRET = var.stripe_webhook_secret
     FRONTEND_BASE_URL     = "https://resland.org"
-    MAINTENANCE_MODE      = "0"
+    MAINTENANCE_MODE      = "1"
     PYTHONUNBUFFERED      = "1"
   }
 }
