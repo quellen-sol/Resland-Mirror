@@ -15,7 +15,6 @@ import { getAccessTokenOrLogin } from "@/lib/auth";
 import { getUser, getUserProfileData } from "@/lib/db";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
 import JobStatusPoller from "@/components/job-status-poller";
 import SuggestionDialog from "@/components/suggestion-dialog";
@@ -316,10 +315,6 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Separator className="bg-zinc-800" />
-        <p className="pb-6 text-center text-xs text-zinc-600">
-          AI-powered suggestions are coming soon.
-        </p>
       </main>
     </div>
   );
