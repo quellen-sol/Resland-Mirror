@@ -1,0 +1,21 @@
+import type { MetadataRoute } from "next";
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: {
+      userAgent: "*",
+      allow: "/",
+      disallow: [
+        "/dashboard",
+        "/onboarding",
+        "/edit-profile",
+        "/tailor",
+        "/billing",
+        "/admin",
+        "/test-upload",
+        "/auth/",
+      ],
+    },
+    sitemap: "https://resland.org/sitemap.xml",
+  };
+}

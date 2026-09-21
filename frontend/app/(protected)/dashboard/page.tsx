@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { Metadata } from "next";
 import Link from "next/link";
 import {
   Briefcase,
@@ -10,6 +11,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { auth0 } from "@/lib/auth0";
+import { getAccessTokenOrLogin } from "@/lib/auth";
 import { getUser, getUserProfileData } from "@/lib/db";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +21,8 @@ import JobStatusPoller from "@/components/job-status-poller";
 import SuggestionDialog from "@/components/suggestion-dialog";
 import BalanceChip from "@/components/balance-chip";
 import UploadResumeDialog from "./upload-resume-dialog";
+
+export const metadata: Metadata = { title: "Dashboard" };
 
 function fmtDate(date: string | null) {
   if (!date) return "Present";
@@ -43,7 +47,7 @@ function normalizeHref(url: string) {
 export default async function DashboardPage() {
   const [session, user] = await Promise.all([auth0.getSession(), getUser()]);
   if (!user) redirect("/auth/login");
-  const { token: accessToken } = await auth0.getAccessToken();
+  const accessToken = await getAccessTokenOrLogin("/dashboard");
 
   const {
     uploadJobs,

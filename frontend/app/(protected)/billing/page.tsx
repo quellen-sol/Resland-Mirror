@@ -1,7 +1,10 @@
 import { redirect } from "next/navigation";
-import { auth0 } from "@/lib/auth0";
+import type { Metadata } from "next";
+import { getAccessTokenOrLogin } from "@/lib/auth";
 import { getUser } from "@/lib/db";
 import BillingClient from "./billing-client";
+
+export const metadata: Metadata = { title: "Billing" };
 
 export default async function BillingPage({
   searchParams,
@@ -10,7 +13,7 @@ export default async function BillingPage({
 }) {
   const user = await getUser();
   if (!user) redirect("/auth/login");
-  const { token: accessToken } = await auth0.getAccessToken();
+  const accessToken = await getAccessTokenOrLogin("/billing");
   const { checkout } = await searchParams;
 
   return (
