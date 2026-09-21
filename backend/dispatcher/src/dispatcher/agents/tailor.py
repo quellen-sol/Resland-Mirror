@@ -11,14 +11,16 @@ from langchain.messages import (
     ToolMessage,
 )
 from langchain.tools import tool
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.errors import EmptyInputError
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from psycopg.rows import dict_row
 from pydantic import BaseModel
+from shared.pg import get_pg_client
 
-from ..pg import pg_pool
+from ..env_vars import PG_URL
 
 TAILOR_SYSTEM_PROMPT = """You tailor a user's resume to a specific job description.
 
@@ -275,33 +277,30 @@ def build_and_invoke_agent(
     agent_builder.add_conditional_edges("llm_call", should_continue, ["tool_node", END])
     agent_builder.add_conditional_edges("tool_node", after_tools, ["llm_call", END])
 
-    with pg_pool.connection() as conn:
-        # PostgresSaver uses pipeline mode, which requires autocommit.
-        conn.autocommit = True
-        conn.row_factory = dict_row
-        checkpointer = PostgresSaver(conn)
-        agent = agent_builder.compile(checkpointer=checkpointer)
+    conn = get_pg_client(PG_URL, row_factory=dict_row)
+    checkpointer = PostgresSaver(conn)
+    agent = agent_builder.compile(checkpointer=checkpointer)
 
-        config = {"configurable": {"thread_id": run_id}}
-        if answer is not None:
-            try:
-                agent.invoke(input=Command(resume=answer), config=config)
-            except EmptyInputError:
-                # A crashed run has pending nodes but no pending interrupt —
-                # Command(resume) has nothing to feed. None resumes the
-                # pending nodes from the checkpoint instead.
-                agent.invoke(input=None, config=config)
-        else:
-            invoke_param = {
-                "messages": [
-                    HumanMessage(
-                        content="Tailor my resume to the job description. Start "
-                        "by calling get_job_description, then get_user_profile."
-                    )
-                ]
-            }
-            agent.invoke(input=invoke_param, config=config)
-        snapshot = agent.get_state(config)
+    config: RunnableConfig = {"configurable": {"thread_id": run_id}}
+    if answer is not None:
+        try:
+            agent.invoke(input=Command(resume=answer), config=config)
+        except EmptyInputError:
+            # A crashed run has pending nodes but no pending interrupt —
+            # Command(resume) has nothing to feed. None resumes the
+            # pending nodes from the checkpoint instead.
+            agent.invoke(input=None, config=config)
+    else:
+        invoke_param = {
+            "messages": [
+                HumanMessage(
+                    content="Tailor my resume to the job description. Start "
+                    "by calling get_job_description, then get_user_profile."
+                )
+            ]
+        }
+        agent.invoke(input=invoke_param, config=config)
+    snapshot = agent.get_state(config)
 
     if snapshot.next:
         question = snapshot.interrupts[0].value if snapshot.interrupts else None

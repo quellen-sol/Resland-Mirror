@@ -27,4 +27,4 @@ class JobRunner(ABC):
 
     @abstractmethod
     def run(self) -> JobHandle:
-        return JobHandle(self.job_data)
+        pass

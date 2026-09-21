@@ -2,7 +2,6 @@ from collections.abc import Generator
 from contextlib import asynccontextmanager
 from typing import Any
 
-import psycopg_pool
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,7 +12,7 @@ from .admin.router import router as admin_router
 from .auth import is_site_admin_request
 from .billing.router import router as billing_router
 from .bullet_point_sugg.router import router as bullet_sugg_router
-from .env_vars import AMQP_URL, MAINTENANCE_MODE, PG_URL
+from .env_vars import AMQP_URL, MAINTENANCE_MODE
 from .resume_upload.router import router as resume_upload_router
 from .tailor.router import router as tailor_router
 
@@ -23,13 +22,7 @@ async def lifespan(app: FastAPI) -> Generator[None, Any, None]:
     # One shared client for the process — setup declares topology idempotently.
     deps.amqp_client = AmqpClient(AMQP_URL)
     await deps.amqp_client.setup()
-
-    deps.pg_pool = psycopg_pool.AsyncConnectionPool(conninfo=PG_URL, open=False)
-    await deps.pg_pool.open()
     yield
-    await deps.pg_pool.close()
-    deps.pg_pool = None
-
     await deps.amqp_client.close()
     deps.amqp_client = None
 
@@ -55,6 +48,7 @@ origins = [
     "http://localhost:3001",
     "http://192.168.1.8:3000",
     "http://192.168.1.8:3001",
+    "https://*.resland.org",
 ]
 
 app.add_middleware(
