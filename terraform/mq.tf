@@ -38,7 +38,7 @@ resource "aws_mq_broker" "rabbit" {
   auto_minor_version_upgrade = true
   publicly_accessible        = true
 
-  subnet_ids      = [data.aws_subnet.first_public.id]
+  subnet_ids = [data.aws_subnet.first_public.id]
 
   user {
     username = "admin"
