@@ -71,9 +71,7 @@ async def update_tailor_run(
         )
 
 
-async def delete_tailor_run(
-    conn: PgConnection, run_id: str, user_id: str
-) -> None:
+async def delete_tailor_run(conn: PgConnection, run_id: str, user_id: str) -> None:
     async with conn.cursor() as cursor:
         await cursor.execute(
             "DELETE FROM user_tailor_run WHERE id = %s AND user_id = %s",

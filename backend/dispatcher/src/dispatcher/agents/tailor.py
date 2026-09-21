@@ -205,9 +205,7 @@ def build_and_invoke_agent(
         if unknown:
             return f"Skills not present in the base profile: {unknown}"
 
-        return (
-            "All ids are valid. You may submit the tailored resume when ready."
-        )
+        return "All ids are valid. You may submit the tailored resume when ready."
 
     @tool
     def ask_clarifying_question(question: str):

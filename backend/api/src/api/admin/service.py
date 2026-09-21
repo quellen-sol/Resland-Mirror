@@ -101,14 +101,11 @@ async def get_usage(pg_conn: PgConnection) -> model.AdminUsageResponse:
             for r in by_model
         ],
         by_kind=[
-            model.UsageByKindRow(
-                job_kind=r[0], job_count=r[1], cents=float(r[2])
-            )
+            model.UsageByKindRow(job_kind=r[0], job_count=r[1], cents=float(r[2]))
             for r in by_kind
         ],
         by_day=[
-            model.UsageByDayRow(day=r[0].isoformat(), cents=float(r[1]))
-            for r in by_day
+            model.UsageByDayRow(day=r[0].isoformat(), cents=float(r[1])) for r in by_day
         ],
         recent=[
             model.RecentUsageRow(
@@ -120,9 +117,7 @@ async def get_usage(pg_conn: PgConnection) -> model.AdminUsageResponse:
                 input_tokens=r[5],
                 output_tokens=r[6],
                 amount_cents=float(r[7]),
-                actual_cost_cents=(
-                    float(r[8]) if r[8] is not None else None
-                ),
+                actual_cost_cents=(float(r[8]) if r[8] is not None else None),
                 created_at=r[9].isoformat(),
             )
             for r in recent
@@ -164,6 +159,7 @@ async def list_purchases(pg_conn: PgConnection) -> model.AdminPurchasesResponse:
         ],
     )
 
+
 async def list_models(pg_conn: PgConnection) -> model.AdminModelsResponse:
     async with pg_conn.cursor() as cursor:
         res = await cursor.execute(
@@ -202,15 +198,11 @@ async def upsert_model(
     if body.cents_per_1k_input < 0 or body.cents_per_1k_output < 0:
         raise HTTPException(status_code=400, detail="Rates can't be negative")
     if body.is_default and not body.enabled:
-        raise HTTPException(
-            status_code=400, detail="The default model must be enabled"
-        )
+        raise HTTPException(status_code=400, detail="The default model must be enabled")
     async with pg_conn.cursor() as cursor:
         # Single-winner flag — clear the rest in the same txn.
         if body.is_default:
-            await cursor.execute(
-                "UPDATE model_pricing SET is_default = false"
-            )
+            await cursor.execute("UPDATE model_pricing SET is_default = false")
         await cursor.execute(
             """
             INSERT INTO model_pricing

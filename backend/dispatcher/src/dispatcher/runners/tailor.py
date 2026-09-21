@@ -95,11 +95,7 @@ class TailorRunner(LocalThreadJobRunner):
             queue.put((threading.current_thread().name, e))
             return
         finally:
-            if (
-                user_id
-                and run_id
-                and (usage["input_tokens"] or usage["output_tokens"])
-            ):
+            if user_id and run_id and (usage["input_tokens"] or usage["output_tokens"]):
                 try:
                     with pg_pool.connection() as conn:
                         charged = record_token_usage(

@@ -40,9 +40,7 @@ async def require_auth0_id(
 Auth0UserId = Annotated[str, Depends(require_auth0_id)]
 
 
-async def require_site_admin(
-    user_id: Auth0UserId, pg_conn: PgConnection
-) -> str:
+async def require_site_admin(user_id: Auth0UserId, pg_conn: PgConnection) -> str:
     async with pg_conn.cursor() as cursor:
         res = await cursor.execute(
             'SELECT site_admin FROM "user" WHERE auth0_id = %s', (user_id,)

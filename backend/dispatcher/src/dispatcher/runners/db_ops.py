@@ -66,10 +66,7 @@ def fetch_generation_cost_cents(generation_ids: list[str]) -> float | None:
     if resolved != len(generation_ids):
         return None
     # total_cost is USD (dollars); store cents.
-    print(
-        f"OpenRouter actual cost: ${total:.6f} "
-        f"across {resolved} generation(s)"
-    )
+    print(f"OpenRouter actual cost: ${total:.6f} across {resolved} generation(s)")
     return total * 100
 
 
@@ -92,9 +89,7 @@ def record_token_usage(
     actual_cost_cents = fetch_generation_cost_cents(generation_ids)
     if actual_cost_cents is not None:
         # Round up to 1/10,000¢ so sub-cent charges never round down to free.
-        amount_cents = (
-            math.ceil(actual_cost_cents * COST_MARKUP * 10_000) / 10_000
-        )
+        amount_cents = math.ceil(actual_cost_cents * COST_MARKUP * 10_000) / 10_000
     else:
         row = pg_client.execute(
             """
@@ -105,9 +100,12 @@ def record_token_usage(
         ).fetchone()
         rate_in = float(row[0]) if row else FALLBACK_CENTS_PER_1K_INPUT
         rate_out = float(row[1]) if row else FALLBACK_CENTS_PER_1K_OUTPUT
-        amount_cents = math.ceil(
-            (input_tokens * rate_in + output_tokens * rate_out) / 1000 * 10_000
-        ) / 10_000
+        amount_cents = (
+            math.ceil(
+                (input_tokens * rate_in + output_tokens * rate_out) / 1000 * 10_000
+            )
+            / 10_000
+        )
 
     with pg_client.transaction():
         pg_client.execute(
@@ -211,9 +209,7 @@ def set_suggestion_result(
         )
 
 
-def fetch_tailor_run(
-    pg_client: Connection, run_id: str
-) -> FetchTailorRunRow | None:
+def fetch_tailor_run(pg_client: Connection, run_id: str) -> FetchTailorRunRow | None:
     with pg_client.cursor(row_factory=class_row(FetchTailorRunRow)) as cursor:
         return cursor.execute(
             """

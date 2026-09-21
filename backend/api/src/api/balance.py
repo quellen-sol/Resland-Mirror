@@ -21,9 +21,7 @@ async def require_balance(pg_conn: PgConnection, user_id: str) -> float:
     return balance
 
 
-async def validate_model_choice(
-    pg_conn: PgConnection, model: str | None
-) -> str | None:
+async def validate_model_choice(pg_conn: PgConnection, model: str | None) -> str | None:
     """A user-selected model must be an enabled row in model_pricing —
     never let a free-form model spec reach init_chat_model."""
     if model is None:

@@ -4,7 +4,7 @@ model User {
   auth0_id            String   @id
   has_onboarded       Boolean  @default(false)
   // USD cents, fractional — sub-cent charges from cheap models still count.
-  balance_cents       Decimal  @default("100")
+  balance_cents       Decimal  @default("0")
   site_admin          Boolean  @default(false)
   stripe_customer_id  String?
   created_at          DateTime @default(now())
