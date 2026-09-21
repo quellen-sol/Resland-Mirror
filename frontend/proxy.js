@@ -29,8 +29,8 @@ export async function proxy(request) {
   if (isMaintenanceMode()) {
     if (pathname === MAINTENANCE_PATH) return NextResponse.next();
     // Auth routes stay open so admins can sign in during maintenance.
-    if (pathname.startsWith("/auth/")) return auth0.middleware(request);
-    if (await isSiteAdmin(request)) return auth0.middleware(request);
+    if (pathname.startsWith("/auth/")) return await auth0.middleware(request);
+    if (await isSiteAdmin(request)) return await auth0.middleware(request);
     const url = request.nextUrl.clone();
     url.pathname = MAINTENANCE_PATH;
     url.search = "";
