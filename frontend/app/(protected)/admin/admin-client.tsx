@@ -10,7 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, describeApiError } from "@/lib/api";
+import ApiUnavailable from "@/components/api-unavailable";
 
 interface AdminUser {
   auth0_id: string;
@@ -188,17 +189,16 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
   const [purchasesQ, setPurchasesQ] = useState("");
   const [recentQ, setRecentQ] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
+  function loadAdmin() {
+    return Promise.all([
       apiFetch(accessToken, "/admin/users"),
       apiFetch(accessToken, "/admin/usage"),
       apiFetch(accessToken, "/admin/purchases"),
       apiFetch(accessToken, "/admin/models"),
     ])
       .then(([u, usage, p, m]) => {
-        if (cancelled) return;
         setUsers((u as { users: AdminUser[] }).users);
         setModels((m as { models: ModelPricing[] }).models);
         const us = usage as {
@@ -217,13 +217,15 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
         setLoaded(true);
       })
       .catch((e) => {
-        toast.error("Couldn't load admin stats", {
-          description: e instanceof Error ? e.message : String(e),
-        });
+        const message = describeApiError(e);
+        setError(message);
+        toast.error("Couldn't load admin stats", { description: message });
       });
-    return () => {
-      cancelled = true;
-    };
+  }
+
+  useEffect(() => {
+    void Promise.resolve().then(() => loadAdmin());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
   const numInput =
@@ -257,9 +259,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       const res = await apiFetch(accessToken, "/admin/models");
       setModels((res as { models: ModelPricing[] }).models);
     } catch (e) {
-      toast.error("Couldn't save model", {
-        description: e instanceof Error ? e.message : String(e),
-      });
+      toast.error("Couldn't save model", { description: describeApiError(e) });
     } finally {
       setSavingModel(null);
     }
@@ -276,9 +276,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       setModels((ms) => ms.filter((m) => m.id !== id));
       toast.success(`Deleted ${id}`);
     } catch (e) {
-      toast.error("Couldn't delete model", {
-        description: e instanceof Error ? e.message : String(e),
-      });
+      toast.error("Couldn't delete model", { description: describeApiError(e) });
     }
   }
 
@@ -355,6 +353,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
           <ArrowLeft className="size-3.5" /> Dashboard
         </Link>
       </header>
+      {error && <ApiUnavailable onRetry={() => { setError(null); void loadAdmin(); }} message={error} />}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
