@@ -30,7 +30,13 @@ class TailorRunner(LocalThreadJobRunner):
         super().__init__(job_data)
 
     def task(self, queue: queue.Queue):
-        usage = {"input_tokens": 0, "output_tokens": 0, "generation_ids": []}
+        usage = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "generation_ids": [],
+            "cost_usd": 0.0,
+            "all_costed": True,
+        }
         user_id: str | None = None
         model_spec = TAILOR_MODEL
         run_id: str | None = None
@@ -103,6 +109,9 @@ class TailorRunner(LocalThreadJobRunner):
                                 input_tokens=usage["input_tokens"],
                                 output_tokens=usage["output_tokens"],
                                 generation_ids=usage["generation_ids"],
+                                cost_usd=usage["cost_usd"]
+                                if usage["all_costed"]
+                                else None,
                             )
                             print(f"Charged {charged}¢ for {run_id}")
                         except Exception as e:
