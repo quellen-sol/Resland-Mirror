@@ -104,6 +104,10 @@
               {
                 "name": "EXPIRED",
                 "value": "EXPIRED"
+              },
+              {
+                "name": "REFUNDED",
+                "value": "REFUNDED"
               }
             ]
           },
@@ -214,6 +218,13 @@
                   "kind": "scalar"
                 }
               },
+              "payment_intent_id": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "status": {
                 "nullable": false,
                 "type": {
@@ -268,6 +279,9 @@
                 },
                 "id": {
                   "column": "id"
+                },
+                "payment_intent_id": {
+                  "column": "payment_intent_id"
                 },
                 "status": {
                   "column": "status"
@@ -1659,8 +1673,8 @@
             "balance_purchase": {
               "checks": [
                 {
-                  "expression": "\"status\" IN ('PENDING', 'COMPLETED', 'EXPIRED')",
-                  "name": "balance_purchase_status_check_37d7c798",
+                  "expression": "\"status\" IN ('PENDING', 'COMPLETED', 'EXPIRED', 'REFUNDED')",
+                  "name": "balance_purchase_status_check_e32ef9ef",
                   "prefix": "balance_purchase_status_check"
                 }
               ],
@@ -1693,6 +1707,11 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": false
+                },
+                "payment_intent_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 },
                 "status": {
                   "codecId": "pg/text@1",
@@ -1939,7 +1958,14 @@
                   "id"
                 ]
               },
-              "uniques": []
+              "uniques": [
+                {
+                  "columns": [
+                    "job_kind",
+                    "job_id"
+                  ]
+                }
+              ]
             },
             "user": {
               "columns": {
@@ -3006,7 +3032,8 @@
               "values": [
                 "PENDING",
                 "COMPLETED",
-                "EXPIRED"
+                "EXPIRED",
+                "REFUNDED"
               ]
             },
             "SocialLinkType": {
@@ -3047,7 +3074,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "52c09e09a5310da912e4bc92cf183f9239d0aed6244441bc9d9499ca4153a796"
+    "storageHash": "31540dd849f6e9c286da91907829aea32ce114a05372af52009b69d742dd4a43"
   },
   "capabilities": {
     "postgres": {

@@ -83,23 +83,24 @@ async def create_checkout(
     if not pack:
         raise HTTPException(status_code=400, detail="Unknown pack")
 
-    async with pg_conn.cursor() as cursor:
+    # FOR UPDATE serializes concurrent checkouts for this user: the second
+    # waits on the row lock, then sees the customer the first just created.
+    async with pg_conn.transaction(), pg_conn.cursor() as cursor:
         res = await cursor.execute(
-            'SELECT stripe_customer_id FROM "user" WHERE auth0_id = %s',
+            'SELECT stripe_customer_id FROM "user" WHERE auth0_id = %s FOR UPDATE',
             (user_id,),
         )
         row = await res.fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="User not found")
-    customer_id = row[0]
+        if not row:
+            raise HTTPException(status_code=404, detail="User not found")
+        customer_id = row[0]
 
-    if not customer_id:
-        customer = await asyncio.to_thread(
-            stripe.Customer.create,
-            metadata={"auth0_id": user_id},
-        )
-        customer_id = customer.id
-        async with pg_conn.transaction(), pg_conn.cursor() as cursor:
+        if not customer_id:
+            customer = await asyncio.to_thread(
+                stripe.Customer.create,
+                metadata={"auth0_id": user_id},
+            )
+            customer_id = customer.id
             await cursor.execute(
                 'UPDATE "user" SET stripe_customer_id = %s WHERE auth0_id = %s',
                 (customer_id, user_id),
@@ -170,15 +171,21 @@ async def handle_webhook(
         if not purchaser_id or not cents:
             # Not one of our token-pack sessions — acknowledge and move on.
             return {"ok": True}
+        payment_intent = session.get("payment_intent")
         async with pg_conn.transaction(), pg_conn.cursor() as cursor:
             # Stripe may deliver the event before the checkout endpoint's
             # INSERT commits — upsert from the session payload first.
             await cursor.execute(
                 """
                 INSERT INTO balance_purchase
-                  (id, user_id, cents, amount_cents, currency, status)
-                VALUES (%s, %s, %s, %s, %s, 'PENDING')
-                ON CONFLICT (id) DO NOTHING
+                  (id, user_id, cents, amount_cents, currency, status,
+                   payment_intent_id)
+                VALUES (%s, %s, %s, %s, %s, 'PENDING', %s)
+                ON CONFLICT (id) DO UPDATE SET
+                  payment_intent_id = COALESCE(
+                    balance_purchase.payment_intent_id,
+                    EXCLUDED.payment_intent_id
+                  )
                 """,
                 (
                     session["id"],
@@ -186,6 +193,7 @@ async def handle_webhook(
                     int(cents),
                     session["amount_total"],
                     session["currency"],
+                    payment_intent,
                 ),
             )
             # Only a PENDING row transitions — a redelivered event is a no-op.
@@ -216,5 +224,35 @@ async def handle_webhook(
                 """,
                 (session["id"],),
             )
+    elif event_type == "charge.refunded":
+        charge = event["data"]["object"]
+        payment_intent = charge.get("payment_intent")
+        # Only a full refund claws the credit back — a partial refund leaves
+        # the purchase COMPLETED.
+        if (
+            payment_intent
+            and charge.get("amount_refunded") == charge.get("amount")
+        ):
+            async with pg_conn.transaction(), pg_conn.cursor() as cursor:
+                # COMPLETED → REFUNDED transition is the idempotency guard:
+                # a redelivered event is a no-op.
+                res = await cursor.execute(
+                    """
+                    UPDATE balance_purchase SET status = 'REFUNDED'
+                    WHERE payment_intent_id = %s AND status = 'COMPLETED'
+                    RETURNING user_id, cents
+                    """,
+                    (payment_intent,),
+                )
+                purchase = await res.fetchone()
+                if purchase:
+                    await cursor.execute(
+                        """
+                        UPDATE "user"
+                        SET balance_cents = GREATEST(0, balance_cents - %s)
+                        WHERE auth0_id = %s
+                        """,
+                        (purchase[1], purchase[0]),
+                    )
 
     return {"ok": True}

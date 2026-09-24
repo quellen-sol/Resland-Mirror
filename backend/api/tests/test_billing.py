@@ -1,0 +1,302 @@
+"""Billing service tests — need a live Postgres (TEST_PG_URL).
+
+Stripe is never hit: `stripe.Webhook.construct_event` is patched to return
+crafted events, and `Customer.create`/`Session.create` are stubbed.
+"""
+
+from types import SimpleNamespace
+
+import pytest
+import stripe
+from fastapi import HTTPException
+
+from api.balance import require_balance, validate_model_choice
+from api.billing import model, service
+
+
+@pytest.fixture(autouse=True)
+def stripe_env(monkeypatch):
+    monkeypatch.setattr(service, "STRIPE_SECRET_KEY", "sk_test_x")
+    monkeypatch.setattr(service, "STRIPE_WEBHOOK_SECRET", "whsec_x")
+
+
+@pytest.fixture
+def stripe_events(monkeypatch):
+    """Makes handle_webhook see whatever event is stored under 'event'."""
+    holder = {}
+    monkeypatch.setattr(
+        stripe.Webhook,
+        "construct_event",
+        staticmethod(lambda *args, **kwargs: holder["event"]),
+    )
+    return holder
+
+
+def completed_event(
+    session_id="cs_1",
+    user_id="u1",
+    cents="500",
+    payment_intent="pi_1",
+    amount_total=500,
+):
+    return {
+        "type": "checkout.session.completed",
+        "data": {
+            "object": {
+                "id": session_id,
+                "client_reference_id": user_id,
+                "metadata": {"pack_id": "starter", "cents": cents},
+                "amount_total": amount_total,
+                "currency": "usd",
+                "payment_intent": payment_intent,
+            }
+        },
+    }
+
+
+def charge_refunded_event(payment_intent="pi_1", amount=500, amount_refunded=500):
+    return {
+        "type": "charge.refunded",
+        "data": {
+            "object": {
+                "id": "ch_1",
+                "payment_intent": payment_intent,
+                "amount": amount,
+                "amount_refunded": amount_refunded,
+            }
+        },
+    }
+
+
+async def send(pg, event):
+    return await service.handle_webhook(
+        pg_conn=pg, payload=b"{}", sig_header="sig"
+    )
+
+
+async def get_balance(pg, user_id="u1"):
+    cur = await pg.execute(
+        'SELECT balance_cents FROM "user" WHERE auth0_id = %s', (user_id,)
+    )
+    row = await cur.fetchone()
+    return float(row[0]) if row else None
+
+
+async def purchase_row(pg, purchase_id):
+    cur = await pg.execute(
+        "SELECT status, payment_intent_id FROM balance_purchase WHERE id = %s",
+        (purchase_id,),
+    )
+    return await cur.fetchone()
+
+
+async def test_completed_credits_once(pg, user, stripe_events):
+    stripe_events["event"] = completed_event()
+    assert await send(pg, stripe_events["event"]) == {"ok": True}
+    assert await get_balance(pg) == 500
+    row = await purchase_row(pg, "cs_1")
+    assert row[0] == "COMPLETED"
+    assert row[1] == "pi_1"
+
+    # Stripe redelivery must not double-credit.
+    await send(pg, stripe_events["event"])
+    assert await get_balance(pg) == 500
+
+
+async def test_late_pending_insert_does_not_reset_completed(
+    pg, user, stripe_events
+):
+    """The checkout endpoint's PENDING INSERT can commit *after* the webhook
+    already completed the row — DO NOTHING must not regress the status."""
+    stripe_events["event"] = completed_event()
+    await send(pg, stripe_events["event"])
+    await pg.execute(
+        """
+        INSERT INTO balance_purchase
+          (id, user_id, cents, amount_cents, currency, status)
+        VALUES ('cs_1', 'u1', 500, 500, 'usd', 'PENDING')
+        ON CONFLICT (id) DO NOTHING
+        """
+    )
+    row = await purchase_row(pg, "cs_1")
+    assert row[0] == "COMPLETED"
+    assert await get_balance(pg) == 500
+
+
+async def test_expired_marks_row_no_credit(pg, user, stripe_events):
+    await pg.execute(
+        """
+        INSERT INTO balance_purchase
+          (id, user_id, cents, amount_cents, currency, status)
+        VALUES ('cs_1', 'u1', 500, 500, 'usd', 'PENDING')
+        """
+    )
+    stripe_events["event"] = {
+        "type": "checkout.session.expired",
+        "data": {"object": {"id": "cs_1"}},
+    }
+    await send(pg, stripe_events["event"])
+    row = await purchase_row(pg, "cs_1")
+    assert row[0] == "EXPIRED"
+    assert await get_balance(pg) == 0
+
+
+async def test_bad_signature_rejected(pg, user, monkeypatch):
+    monkeypatch.setattr(
+        stripe.Webhook,
+        "construct_event",
+        staticmethod(
+            lambda *args, **kwargs: (_ for _ in ()).throw(ValueError("bad sig"))
+        ),
+    )
+    with pytest.raises(HTTPException) as exc:
+        await service.handle_webhook(pg_conn=pg, payload=b"{}", sig_header="s")
+    assert exc.value.status_code == 400
+    assert await get_balance(pg) == 0
+
+
+async def test_event_without_metadata_is_noop(pg, user, stripe_events):
+    stripe_events["event"] = {
+        "type": "checkout.session.completed",
+        "data": {"object": {"id": "cs_other", "amount_total": 1}},
+    }
+    assert await send(pg, stripe_events["event"]) == {"ok": True}
+    assert await purchase_row(pg, "cs_other") is None
+    assert await get_balance(pg) == 0
+
+
+async def test_full_refund_claws_back_credit(pg, user, stripe_events):
+    stripe_events["event"] = completed_event()
+    await send(pg, stripe_events["event"])
+    assert await get_balance(pg) == 500
+
+    stripe_events["event"] = charge_refunded_event()
+    await send(pg, stripe_events["event"])
+    row = await purchase_row(pg, "cs_1")
+    assert row[0] == "REFUNDED"
+    assert await get_balance(pg) == 0
+
+    # Redelivery must not claw back twice (floor at 0 anyway).
+    await send(pg, stripe_events["event"])
+    assert await get_balance(pg) == 0
+
+
+async def test_partial_refund_keeps_credit(pg, user, stripe_events):
+    stripe_events["event"] = completed_event()
+    await send(pg, stripe_events["event"])
+    stripe_events["event"] = charge_refunded_event(amount_refunded=100)
+    await send(pg, stripe_events["event"])
+    row = await purchase_row(pg, "cs_1")
+    assert row[0] == "COMPLETED"
+    assert await get_balance(pg) == 500
+
+
+async def test_refund_floors_at_zero(pg, user, stripe_events):
+    """Credit already spent can't be clawed back below zero."""
+    stripe_events["event"] = completed_event()
+    await send(pg, stripe_events["event"])
+    await pg.execute(
+        'UPDATE "user" SET balance_cents = 200 WHERE auth0_id = %s', ("u1",)
+    )
+    stripe_events["event"] = charge_refunded_event()
+    await send(pg, stripe_events["event"])
+    assert await get_balance(pg) == 0
+
+
+async def test_require_balance(pg, user):
+    with pytest.raises(HTTPException) as exc:
+        await require_balance(pg, "u1")
+    assert exc.value.status_code == 402
+
+    with pytest.raises(HTTPException):
+        await require_balance(pg, "nobody")
+
+    await pg.execute(
+        'UPDATE "user" SET balance_cents = 0.5 WHERE auth0_id = %s', ("u1",)
+    )
+    assert await require_balance(pg, "u1") == 0.5
+
+
+async def test_validate_model_choice(pg):
+    await pg.execute(
+        """
+        INSERT INTO model_pricing
+          (id, display_name, cents_per_1k_input, cents_per_1k_output, enabled)
+        VALUES ('openrouter:m', 'M', 0.16, 1.25, true),
+               ('openrouter:off', 'Off', 0.16, 1.25, false)
+        """
+    )
+    assert await validate_model_choice(pg, "openrouter:m") == "openrouter:m"
+    assert await validate_model_choice(pg, None) is None
+    for bad in ("openrouter:off", "openrouter:nope"):
+        with pytest.raises(HTTPException) as exc:
+            await validate_model_choice(pg, bad)
+        assert exc.value.status_code == 400
+
+
+async def test_create_checkout(pg, user, monkeypatch):
+    customer_calls = []
+    session_calls = []
+    monkeypatch.setattr(
+        stripe.Customer,
+        "create",
+        lambda **kwargs: (
+            customer_calls.append(kwargs) or SimpleNamespace(id="cus_1")
+        ),
+    )
+    monkeypatch.setattr(
+        stripe.checkout.Session,
+        "create",
+        lambda **kwargs: (
+            session_calls.append(kwargs)
+            or SimpleNamespace(
+                id=f"cs_{len(session_calls)}", url="https://checkout.test/pay"
+            )
+        ),
+    )
+
+    res = await service.create_checkout(
+        pg_conn=pg, user_id="u1", req=model.CheckoutRequest(pack_id="starter")
+    )
+    assert res.url == "https://checkout.test/pay"
+    assert customer_calls == [{"metadata": {"auth0_id": "u1"}}]
+
+    row = await purchase_row(pg, "cs_1")
+    assert row is not None and row[0] == "PENDING"
+
+    # Second checkout reuses the stored customer — no second Customer.create.
+    await service.create_checkout(
+        pg_conn=pg, user_id="u1", req=model.CheckoutRequest(pack_id="pro")
+    )
+    assert len(customer_calls) == 1
+
+
+async def test_checkout_unknown_pack(pg, user):
+    with pytest.raises(HTTPException) as exc:
+        await service.create_checkout(
+            pg_conn=pg,
+            user_id="u1",
+            req=model.CheckoutRequest(pack_id="nope"),
+        )
+    assert exc.value.status_code == 400
+
+
+async def test_checkout_missing_user(pg):
+    with pytest.raises(HTTPException) as exc:
+        await service.create_checkout(
+            pg_conn=pg,
+            user_id="ghost",
+            req=model.CheckoutRequest(pack_id="starter"),
+        )
+    assert exc.value.status_code == 404
+
+
+async def test_stripe_unconfigured(pg, user, monkeypatch):
+    monkeypatch.setattr(service, "STRIPE_SECRET_KEY", "")
+    with pytest.raises(HTTPException) as exc:
+        await service.create_checkout(
+            pg_conn=pg,
+            user_id="u1",
+            req=model.CheckoutRequest(pack_id="starter"),
+        )
+    assert exc.value.status_code == 503
