@@ -149,8 +149,15 @@ def build_and_invoke_agent(
         usage_meta = msg.usage_metadata or {}
         usage["input_tokens"] += usage_meta.get("input_tokens") or 0
         usage["output_tokens"] += usage_meta.get("output_tokens") or 0
-        # OpenRouter generation id — lets us pull actual billed cost after
-        # the run via the generation stats endpoint.
+        # OpenRouter reports the actual billed cost inline on every response
+        # (USD, already net of caching discounts). The stats endpoint is only
+        # a fallback for responses that lack it.
+        if (cost := msg.response_metadata.get("cost")) is None:
+            usage["all_costed"] = False
+        else:
+            usage["cost_usd"] += float(cost)
+        # Generation id — lets us pull billed cost via the stats endpoint when
+        # the inline cost is missing.
         if gen_id := msg.response_metadata.get("id"):
             usage["generation_ids"].append(gen_id)
         return {"messages": [msg]}
