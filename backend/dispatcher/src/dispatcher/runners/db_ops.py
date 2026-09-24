@@ -6,6 +6,7 @@ from dataclasses import asdict
 from openrouter import OpenRouter
 from psycopg import Connection
 from psycopg.rows import class_row
+from shared.docgen import FormatProfile
 
 from ..agents.docx_parser import UserDocxProfile
 from ..agents.suggestions import FetchSuggestionRow, SuggestionsResult
@@ -334,17 +335,37 @@ def set_tailor_failed(pg_client: Connection, run_id: str):
         )
 
 
+def upsert_resume_format(
+    pg_client: Connection, user_id: str, fmt: FormatProfile, source_job_id: str
+):
+    """Store the layout profile captured from the user's uploaded doc — the
+    renderer reads this back to regenerate a matching resume."""
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            INSERT INTO user_resume_format (user_id, format, source_job_id)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE SET
+                format = EXCLUDED.format,
+                source_job_id = EXCLUDED.source_job_id,
+                captured_at = now()
+            """,
+            [user_id, fmt.to_json(), source_job_id],
+        )
+
+
 def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxProfile):
     with pg_client.transaction():
         pg_client.execute(
             """
-            INSERT INTO "user" (auth0_id, full_name, email, phone, location)
-                VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO "user" (auth0_id, full_name, email, phone, location, summary)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (auth0_id) DO UPDATE SET
                     full_name = EXCLUDED.full_name,
                     email = EXCLUDED.email,
                     phone = EXCLUDED.phone,
-                    location = EXCLUDED.location
+                    location = EXCLUDED.location,
+                    summary = EXCLUDED.summary
             """,
             [
                 user_id,
@@ -352,6 +373,7 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
                 profile.basic_info.email,
                 profile.basic_info.phone,
                 profile.basic_info.location,
+                profile.summary or None,
             ],
         )
 

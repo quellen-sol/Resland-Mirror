@@ -19,6 +19,7 @@ import { cn } from "cn";
 import JobStatusPoller from "@/components/job-status-poller";
 import SuggestionDialog from "@/components/suggestion-dialog";
 import BalanceChip from "@/components/balance-chip";
+import ExportResumeButton from "./export-resume-button";
 import UploadResumeDialog from "./upload-resume-dialog";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -96,6 +97,7 @@ export default async function DashboardPage() {
             >
               <Sparkles /> Tailor resume
             </Link>
+            <ExportResumeButton accessToken={accessToken} />
             {user.site_admin && (
               <Link
                 href="/admin"

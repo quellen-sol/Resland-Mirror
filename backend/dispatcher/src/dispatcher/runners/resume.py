@@ -4,6 +4,7 @@ from typing import Any
 
 import puremagic
 from dispatcher.runners.local_threaded import LocalThreadJobRunner
+from shared.docgen import capture_format_profile
 from shared.pg import get_pg_client
 from shared.s3 import get_s3_client
 
@@ -15,7 +16,7 @@ from ..env_vars import (
     PG_URL,
     S3_RESUME_BUCKET,
 )
-from .db_ops import upsert_user_profile
+from .db_ops import upsert_resume_format, upsert_user_profile
 from .generic import RunnerError
 
 
@@ -70,12 +71,13 @@ class ResumeRunner(LocalThreadJobRunner):
                 file_type = puremagic.from_string(body_data)
                 print(f"File type: {file_type}")
                 profile_queue = None
+                source_doc = None
 
                 # Parse document based on file type
                 match file_type:
                     case ".docx":
-                        parsed_text = parse_docx(body_data)
-                        profile_queue = agent_parse_docx(parsed_text)
+                        source_doc = parse_docx(body_data)
+                        profile_queue = agent_parse_docx(source_doc)
                     case _:
                         raise RunnerError("Unsupported file type")
 
@@ -85,6 +87,13 @@ class ResumeRunner(LocalThreadJobRunner):
                 profile = profile_queue.get()
                 # Upsert all relevant info to pg
                 upsert_user_profile(pg_client, user_id, profile)
+
+                # Capture the layout so the resume can be regenerated later
+                if source_doc is not None:
+                    fmt = capture_format_profile(source_doc, profile)
+                    upsert_resume_format(
+                        pg_client, user_id, fmt, self.job_data["job_id"]
+                    )
 
         except Exception as e:
             print(f"Error in job runner: {e}")
