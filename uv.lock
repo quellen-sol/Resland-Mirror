@@ -1500,12 +1500,14 @@ version = "0.1.0"
 source = { editable = "backend/shared" }
 dependencies = [
     { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "python-docx" },
     { name = "rabbitmq-amqp-python-client" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.3.5" },
+    { name = "python-docx", specifier = ">=1.2.0" },
     { name = "rabbitmq-amqp-python-client", specifier = ">=1.0.1" },
 ]
 

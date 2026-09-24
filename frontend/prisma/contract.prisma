@@ -13,6 +13,9 @@ model User {
   email               String?
   phone               String?
   location            String?
+  // Professional summary parsed from the uploaded resume. Optional — not
+  // every resume has one.
+  summary             String?
 
   @@map("user")
   @@index([auth0_id])
@@ -179,6 +182,34 @@ model UserTailorRun {
   @@map("user_tailor_run")
 
   @@index([user_id])
+}
+
+// Resume layout captured from the user's uploaded doc at parse time.
+// `format` is the serialized FormatProfile JSON (see shared.docgen) used
+// to regenerate the docx — the "Original" template.
+model UserResumeFormat {
+  user_id       String   @id
+  user          User     @relation(fields: [user_id], references: [auth0_id])
+  format        String
+  source_job_id String?
+  captured_at   DateTime @default(now())
+
+  @@map("user_resume_format")
+}
+
+// The most recently generated resume per user — always stored at the
+// fixed s3 key resumes/<user_id>/generated.docx. `source_hash` covers
+// the content + template the doc was built from; export regenerates
+// lazily when it differs.
+model UserGeneratedResume {
+  user_id      String   @id
+  user         User     @relation(fields: [user_id], references: [auth0_id])
+  template     String   @default("original")
+  s3_key       String
+  source_hash  String
+  generated_at DateTime @default(now())
+
+  @@map("user_generated_resume")
 }
 
 // Whitelist of selectable models, priced in cents per 1K tokens.

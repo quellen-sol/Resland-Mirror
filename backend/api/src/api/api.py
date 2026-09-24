@@ -13,6 +13,7 @@ from .auth import is_docs_request, is_site_admin_request
 from .billing.router import router as billing_router
 from .bullet_point_sugg.router import router as bullet_sugg_router
 from .env_vars import AMQP_URL, MAINTENANCE_MODE
+from .resume_export.router import router as resume_export_router
 from .resume_upload.router import router as resume_upload_router
 from .tailor.router import router as tailor_router
 
@@ -59,6 +60,7 @@ app.add_middleware(
 )
 
 app.include_router(resume_upload_router)
+app.include_router(resume_export_router)
 app.include_router(bullet_sugg_router)
 app.include_router(tailor_router)
 app.include_router(billing_router)

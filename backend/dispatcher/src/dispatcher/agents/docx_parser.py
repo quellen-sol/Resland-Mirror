@@ -3,12 +3,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from docx.document import Document
-from docx.oxml.ns import qn
-from docx.table import Table
-from docx.text.paragraph import Paragraph
 from langchain.agents import create_agent
 from langchain.tools import tool
 
+from ..doc_parsers.docx import (
+    block_sequence,
+    column_counts,
+    raw_text,
+    whitespace_map,
+)
 from ..env_vars import RESUME_PARSER_MODEL
 
 DOCX_AGENT_PARSER_SYSTEM_PROMPT = """You extract structured profile data from a docx resume.
@@ -126,13 +129,19 @@ def agent_parse_docx(doc: Document):
 def build_resume_agent(doc: Document):
     profile_queue = queue.Queue[UserDocxProfile]()
 
+    # Extract once up front — the tools below just hand the agent the
+    # precomputed views instead of re-walking the document per call.
+    doc_raw_text = raw_text(doc)
+    doc_block_sequence = block_sequence(doc)
+    doc_whitespace_map = whitespace_map(doc)
+    doc_column_counts = column_counts(doc)
+
     @tool
     def get_raw_doc_text():
         """
         Returns the text of the document that was passed to this agent.
         """
-        raw_text = "\n".join([paragraph.text for paragraph in doc.paragraphs])
-        return raw_text
+        return doc_raw_text
 
     @tool
     def get_block_sequence():
@@ -142,33 +151,7 @@ def build_resume_agent(doc: Document):
         break), tables (as row/cell text), and section breaks. Use this to
         understand the document's visual layout and grouping.
         """
-        blocks = []
-        for child in doc.element.body.iterchildren():
-            if child.tag == qn("w:p"):
-                para = Paragraph(child, doc)
-                pPr = child.find(qn("w:pPr"))
-                ends_section = pPr is not None and pPr.find(qn("w:sectPr")) is not None
-                blocks.append(
-                    {
-                        "type": "paragraph",
-                        "text": para.text,
-                        "style": para.style.name if para.style else None,
-                        "ends_section": ends_section,
-                    }
-                )
-            elif child.tag == qn("w:tbl"):
-                table = Table(child, doc)
-                blocks.append(
-                    {
-                        "type": "table",
-                        "rows": [
-                            [cell.text for cell in row.cells] for row in table.rows
-                        ],
-                    }
-                )
-            elif child.tag == qn("w:sectPr"):
-                blocks.append({"type": "section_break"})
-        return blocks
+        return doc_block_sequence
 
     @tool
     def get_whitespace_map():
@@ -177,19 +160,7 @@ def build_resume_agent(doc: Document):
         before/after in points. Blank paragraphs and large spacing mark the
         visual boundaries between resume sections.
         """
-
-        def _pt(value) -> float:
-            return round(value.pt, 1) if value is not None else 0.0
-
-        return [
-            {
-                "index": i,
-                "empty": not p.text.strip(),
-                "space_before_pt": _pt(p.paragraph_format.space_before),
-                "space_after_pt": _pt(p.paragraph_format.space_after),
-            }
-            for i, p in enumerate(doc.paragraphs)
-        ]
+        return doc_whitespace_map
 
     @tool
     def get_columns():
@@ -198,12 +169,7 @@ def build_resume_agent(doc: Document):
         greater than 1 means the section uses a multi-column layout (common in
         resumes), where visual reading order does not follow text order.
         """
-        counts = []
-        for section in doc.sections:
-            cols = section._sectPr.find(qn("w:cols"))
-            num = cols.get(qn("w:num")) if cols is not None else None
-            counts.append(int(num) if num else 1)
-        return counts
+        return doc_column_counts
 
     @tool
     def submit_user_profile(profile: UserDocxProfile):

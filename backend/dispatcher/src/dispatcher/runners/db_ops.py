@@ -3,9 +3,10 @@ import math
 import time
 from dataclasses import asdict
 
-from openrouter import OpenRouter
+from openrouter import OpenRouter, errors
 from psycopg import Connection
 from psycopg.rows import class_row
+from shared.docgen import FormatProfile
 
 from ..agents.docx_parser import UserDocxProfile
 from ..agents.suggestions import FetchSuggestionRow, SuggestionsResult
@@ -37,27 +38,38 @@ FALLBACK_CENTS_PER_1K_OUTPUT = 1.25
 COST_MARKUP = 1.25
 
 
+# Generation stats are written asynchronously — a lookup right after the
+# response can 404 for ~15s — so poll on 404 until this shared deadline.
+STATS_LOOKUP_TIMEOUT_S = 30.0
+
+
 def fetch_generation_cost_cents(generation_ids: list[str]) -> float | None:
     """Sum OpenRouter's actual billed cost (in cents) for the given generation
-    ids. Returns None when no ids were captured, the key is unset, or every
+    ids. Returns None when no ids were captured, the key is unset, or any
     lookup failed — callers then fall back to the rate card."""
     if not generation_ids or not OPENROUTER_API_KEY:
         return None
     client = OpenRouter(api_key=OPENROUTER_API_KEY)
+    deadline = time.monotonic() + STATS_LOOKUP_TIMEOUT_S
     total = 0.0
     resolved = 0
     for gen_id in generation_ids:
         data = None
-        for attempt in range(2):
+        delay = 1.0
+        while True:
             try:
                 data = client.generations.get_generation(id=gen_id).data
                 break
+            except errors.NotFoundResponseError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    print(f"Generation stats lookup timed out for {gen_id}")
+                    break
+                time.sleep(min(delay, remaining))
+                delay = min(delay * 2, 8.0)
             except Exception as e:
-                # Stats can lag the response by a moment; retry once.
-                if attempt == 0:
-                    time.sleep(0.5)
-                else:
-                    print(f"Generation stats lookup failed for {gen_id}: {e}")
+                print(f"Generation stats lookup failed for {gen_id}: {e}")
+                break
         if data is not None:
             resolved += 1
             total += float(data.total_cost or 0)
@@ -80,13 +92,21 @@ def record_token_usage(
     input_tokens: int,
     output_tokens: int,
     generation_ids: list[str],
+    cost_usd: float | None = None,
 ) -> float:
     """Insert one token_usage row and deduct from the user's balance.
-    Floors at 0 — a job that overruns still finishes. Returns cents charged."""
+    Floors at 0 — a job that overruns still finishes. Returns cents charged.
+
+    cost_usd is the pre-markup USD cost summed from the inline `usage.cost`
+    field on each response, or None if any response lacked it — in that case
+    the generation stats endpoint is tried, then the rate card."""
     if not input_tokens and not output_tokens:
         return 0.0
 
-    actual_cost_cents = fetch_generation_cost_cents(generation_ids)
+    if cost_usd is not None:
+        actual_cost_cents = cost_usd * 100
+    else:
+        actual_cost_cents = fetch_generation_cost_cents(generation_ids)
     if actual_cost_cents is not None:
         # Round up to 1/10,000¢ so sub-cent charges never round down to free.
         amount_cents = math.ceil(actual_cost_cents * COST_MARKUP * 10_000) / 10_000
@@ -346,17 +366,37 @@ def set_tailor_failed(pg_client: Connection, run_id: str):
         )
 
 
+def upsert_resume_format(
+    pg_client: Connection, user_id: str, fmt: FormatProfile, source_job_id: str
+):
+    """Store the layout profile captured from the user's uploaded doc — the
+    renderer reads this back to regenerate a matching resume."""
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            INSERT INTO user_resume_format (user_id, format, source_job_id)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (user_id) DO UPDATE SET
+                format = EXCLUDED.format,
+                source_job_id = EXCLUDED.source_job_id,
+                captured_at = now()
+            """,
+            [user_id, fmt.to_json(), source_job_id],
+        )
+
+
 def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxProfile):
     with pg_client.transaction():
         pg_client.execute(
             """
-            INSERT INTO "user" (auth0_id, full_name, email, phone, location)
-                VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO "user" (auth0_id, full_name, email, phone, location, summary)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 ON CONFLICT (auth0_id) DO UPDATE SET
                     full_name = EXCLUDED.full_name,
                     email = EXCLUDED.email,
                     phone = EXCLUDED.phone,
-                    location = EXCLUDED.location
+                    location = EXCLUDED.location,
+                    summary = EXCLUDED.summary
             """,
             [
                 user_id,
@@ -364,6 +404,7 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
                 profile.basic_info.email,
                 profile.basic_info.phone,
                 profile.basic_info.location,
+                profile.summary or None,
             ],
         )
 
