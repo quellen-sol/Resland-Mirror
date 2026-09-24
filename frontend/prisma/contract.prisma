@@ -218,6 +218,8 @@ model TokenUsage {
   created_at                 DateTime     @default(now())
 
   @@map("token_usage")
+  // One ledger row per job — a redelivered AMQP message can't charge twice.
+  @@unique([job_kind, job_id])
   @@index([user_id])
   @@index([created_at])
 }
@@ -226,6 +228,7 @@ enum PurchaseStatus {
   PENDING
   COMPLETED
   EXPIRED
+  REFUNDED
 }
 
 // One row per Stripe Checkout session; `id` is the Stripe session id so the
@@ -237,6 +240,9 @@ model BalancePurchase {
   cents        Int
   amount_cents Int
   currency     String
+  // Links the purchase back to the Stripe PaymentIntent so a later
+  // charge.refunded event can find and claw back this credit.
+  payment_intent_id String?
   status       PurchaseStatus @default(PENDING)
   created_at   DateTime       @default(now())
 

@@ -108,13 +108,14 @@ def record_token_usage(
         )
 
     with pg_client.transaction():
-        pg_client.execute(
+        res = pg_client.execute(
             """
             INSERT INTO token_usage
               (user_id, job_kind, job_id, model,
                input_tokens, output_tokens, amount_cents,
                actual_cost_cents, openrouter_generation_ids)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (job_kind, job_id) DO NOTHING
             """,
             (
                 user_id,
@@ -128,6 +129,17 @@ def record_token_usage(
                 generation_ids,
             ),
         )
+        if res.rowcount == 0:
+            # A redelivered AMQP message re-ran this job and the first run
+            # already charged — return that charge without debiting again.
+            row = pg_client.execute(
+                """
+                SELECT amount_cents FROM token_usage
+                WHERE job_kind = %s AND job_id = %s
+                """,
+                (job_kind, job_id),
+            ).fetchone()
+            return float(row[0]) if row else 0.0
         pg_client.execute(
             """
             UPDATE "user"

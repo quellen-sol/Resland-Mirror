@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'3e9a42d2fd905c3637c075dd5becbe67d8d1f91664f7730e4a52bee23f4e8df6'>;
+  StorageHashBase<'6c965d78add90876118915d52bfe06493f780185ac3956db6d5054bf657441d2'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -246,7 +246,8 @@ export type FieldOutputTypes = {
       readonly cents: CodecTypes['pg/int4@1']['output'];
       readonly amount_cents: CodecTypes['pg/int4@1']['output'];
       readonly currency: CodecTypes['pg/text@1']['output'];
-      readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED';
+      readonly payment_intent_id: CodecTypes['pg/text@1']['output'] | null;
+      readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED' | 'REFUNDED';
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
     readonly ModelPricing: {
@@ -369,7 +370,8 @@ export type FieldInputTypes = {
       readonly cents: CodecTypes['pg/int4@1']['input'];
       readonly amount_cents: CodecTypes['pg/int4@1']['input'];
       readonly currency: CodecTypes['pg/text@1']['input'];
-      readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED';
+      readonly payment_intent_id: CodecTypes['pg/text@1']['input'] | null;
+      readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED' | 'REFUNDED';
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
     readonly ModelPricing: {
@@ -492,7 +494,8 @@ export type StorageColumnTypes = {
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly currency: CodecTypes['pg/text@1']['output'];
       readonly id: CodecTypes['pg/text@1']['output'];
-      readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED';
+      readonly payment_intent_id: CodecTypes['pg/text@1']['output'] | null;
+      readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED' | 'REFUNDED';
       readonly user_id: CodecTypes['pg/text@1']['output'];
     };
     readonly model_pricing: {
@@ -615,7 +618,8 @@ export type StorageColumnInputTypes = {
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
       readonly currency: CodecTypes['pg/text@1']['input'];
       readonly id: CodecTypes['pg/text@1']['input'];
-      readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED';
+      readonly payment_intent_id: CodecTypes['pg/text@1']['input'] | null;
+      readonly status: 'PENDING' | 'COMPLETED' | 'EXPIRED' | 'REFUNDED';
       readonly user_id: CodecTypes['pg/text@1']['input'];
     };
     readonly model_pricing: {
@@ -774,6 +778,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly payment_intent_id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly status: {
                   readonly nativeType: 'text';
@@ -939,7 +948,7 @@ type ContractBase = Omit<
                 };
               };
               primaryKey: { readonly columns: readonly ['id'] };
-              uniques: readonly [];
+              uniques: readonly [{ readonly columns: readonly ['job_kind', 'job_id'] }];
               indexes: readonly [
                 {
                   readonly name: 'token_usage_user_id_idx_6c952402';
@@ -1694,7 +1703,7 @@ type ContractBase = Omit<
             };
             readonly PurchaseStatus: {
               readonly kind: 'valueSet';
-              readonly values: readonly ['PENDING', 'COMPLETED', 'EXPIRED'];
+              readonly values: readonly ['PENDING', 'COMPLETED', 'EXPIRED', 'REFUNDED'];
             };
             readonly SocialLinkType: {
               readonly kind: 'valueSet';
@@ -1799,6 +1808,10 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly payment_intent_id: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly status: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -1830,6 +1843,7 @@ type ContractBase = Omit<
                 readonly cents: { readonly column: 'cents' };
                 readonly amount_cents: { readonly column: 'amount_cents' };
                 readonly currency: { readonly column: 'currency' };
+                readonly payment_intent_id: { readonly column: 'payment_intent_id' };
                 readonly status: { readonly column: 'status' };
                 readonly created_at: { readonly column: 'created_at' };
               };
@@ -2585,6 +2599,7 @@ type ContractBase = Omit<
               { readonly name: 'PENDING'; readonly value: 'PENDING' },
               { readonly name: 'COMPLETED'; readonly value: 'COMPLETED' },
               { readonly name: 'EXPIRED'; readonly value: 'EXPIRED' },
+              { readonly name: 'REFUNDED'; readonly value: 'REFUNDED' },
             ];
           };
         };

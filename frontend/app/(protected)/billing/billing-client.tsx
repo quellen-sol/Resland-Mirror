@@ -78,9 +78,18 @@ export default function BillingClient({
   useEffect(() => {
     if (checkoutResult === "success") {
       toast.success("Purchase complete — balance topped up");
+      // The Stripe webhook lands a moment after the redirect — poll so the
+      // new balance and purchase row show up without a manual refresh.
+      const interval = setInterval(() => void loadBilling(), 2000);
+      const stop = setTimeout(() => clearInterval(interval), 12000);
+      return () => {
+        clearInterval(interval);
+        clearTimeout(stop);
+      };
     } else if (checkoutResult === "cancelled") {
       toast.info("Checkout cancelled");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checkoutResult]);
 
   useEffect(() => {
