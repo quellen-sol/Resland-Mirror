@@ -40,6 +40,14 @@
       "model": "UserBaseSkill",
       "namespace": "public"
     },
+    "user_generated_resume": {
+      "model": "UserGeneratedResume",
+      "namespace": "public"
+    },
+    "user_resume_format": {
+      "model": "UserResumeFormat",
+      "namespace": "public"
+    },
     "user_social_link": {
       "model": "UserSocialLink",
       "namespace": "public"
@@ -568,6 +576,13 @@
                   "codecId": "pg/text@1",
                   "kind": "scalar"
                 }
+              },
+              "summary": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
               }
             },
             "relations": {},
@@ -602,6 +617,9 @@
                 },
                 "stripe_customer_id": {
                   "column": "stripe_customer_id"
+                },
+                "summary": {
+                  "column": "summary"
                 }
               },
               "namespaceId": "public",
@@ -1061,6 +1079,150 @@
               },
               "namespaceId": "public",
               "table": "user_base_skill"
+            }
+          },
+          "UserGeneratedResume": {
+            "fields": {
+              "generated_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "s3_key": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "source_hash": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "template": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "user_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "user_id"
+                  ],
+                  "targetFields": [
+                    "auth0_id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "generated_at": {
+                  "column": "generated_at"
+                },
+                "s3_key": {
+                  "column": "s3_key"
+                },
+                "source_hash": {
+                  "column": "source_hash"
+                },
+                "template": {
+                  "column": "template"
+                },
+                "user_id": {
+                  "column": "user_id"
+                }
+              },
+              "namespaceId": "public",
+              "table": "user_generated_resume"
+            }
+          },
+          "UserResumeFormat": {
+            "fields": {
+              "captured_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "format": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "source_job_id": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "user_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "user_id"
+                  ],
+                  "targetFields": [
+                    "auth0_id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "captured_at": {
+                  "column": "captured_at"
+                },
+                "format": {
+                  "column": "format"
+                },
+                "source_job_id": {
+                  "column": "source_job_id"
+                },
+                "user_id": {
+                  "column": "user_id"
+                }
+              },
+              "namespaceId": "public",
+              "table": "user_resume_format"
             }
           },
           "UserSocialLink": {
@@ -1846,6 +2008,11 @@
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
+                },
+                "summary": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
                 }
               },
               "foreignKeys": [],
@@ -2282,6 +2449,121 @@
                   ]
                 }
               ]
+            },
+            "user_generated_resume": {
+              "columns": {
+                "generated_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "s3_key": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "source_hash": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "template": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "original"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "user_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "user_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_generated_resume"
+                  },
+                  "target": {
+                    "columns": [
+                      "auth0_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "user_id"
+                ]
+              },
+              "uniques": []
+            },
+            "user_resume_format": {
+              "columns": {
+                "captured_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "format": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "source_job_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "user_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "user_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_resume_format"
+                  },
+                  "target": {
+                    "columns": [
+                      "auth0_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "user_id"
+                ]
+              },
+              "uniques": []
             },
             "user_social_link": {
               "checks": [
@@ -2765,7 +3047,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "3e9a42d2fd905c3637c075dd5becbe67d8d1f91664f7730e4a52bee23f4e8df6"
+    "storageHash": "52c09e09a5310da912e4bc92cf183f9239d0aed6244441bc9d9499ca4153a796"
   },
   "capabilities": {
     "postgres": {

@@ -47,7 +47,8 @@ async def upload_resume(
         ) from e
 
     job_id = uuid.uuid4()
-    obj_key = f"resumes/{user_id}/resume_doc.unknown"
+    # Keep the real extension — pdf uploads land here too once supported.
+    obj_key = f"resumes/{user_id}/resume_doc{file_type}"
     try:
         s3_client = get_s3_client(
             aws_access_key_id=AWS_ACCESS_KEY_ID,
