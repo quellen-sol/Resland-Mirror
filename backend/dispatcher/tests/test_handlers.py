@@ -139,6 +139,31 @@ class CleanupLoop(unittest.TestCase):
         handler.delivery_context.accept.assert_not_called()
         handler.delivery_context.discard.assert_not_called()
 
+    def test_repeated_status_writes_db_once(self):
+        handler = _Handler()
+        handler.delivery_context = MagicMock()
+        handler.running_jobs["j4"] = (_Handle("PROCESSING"), _event({}))
+        time.sleep(2.2)
+        self.assertIn("j4", handler.running_jobs)
+        self.assertEqual(
+            handler.status_updates.count(("j4", "PROCESSING")), 1
+        )
+
+    def test_status_change_writes_db_again(self):
+        handler = _Handler()
+        handler.delivery_context = MagicMock()
+        handle = _Handle("PROCESSING")
+        handler.running_jobs["j5"] = (handle, _event({}))
+        self.assertTrue(
+            _wait_for(lambda: ("j5", "PROCESSING") in handler.status_updates)
+        )
+        handle._result = "COMPLETED"
+        self.assertTrue(_wait_for(lambda: "j5" not in handler.running_jobs))
+        self.assertEqual(
+            handler.status_updates,
+            [("j5", "PROCESSING"), ("j5", "COMPLETED")],
+        )
+
 
 class ResumeHandlerMessages(unittest.TestCase):
     def setUp(self):
