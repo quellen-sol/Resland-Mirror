@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v7
 
       # pnpm 10.x — successor pnpm/setup only supports pnpm v11+.
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@v6.0.10
         with:
           version: 10.33.0
 
@@ -48,7 +48,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
 
