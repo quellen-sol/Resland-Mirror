@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   Briefcase,
   ClipboardCheck,
+  FileText,
   FolderGit2,
   GraduationCap,
   Link2,
@@ -169,6 +170,24 @@ export default async function DashboardPage() {
                   </a>
                 ))}
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Professional summary */}
+        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <FileText className="size-4 text-purple-400" /> Professional summary
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {user.summary ? (
+              <p className="text-sm whitespace-pre-wrap text-zinc-300">
+                {user.summary}
+              </p>
+            ) : (
+              <Empty text="No professional summary yet — upload a resume that includes one." />
             )}
           </CardContent>
         </Card>
