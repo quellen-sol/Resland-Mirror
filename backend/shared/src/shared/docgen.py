@@ -30,6 +30,8 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 from docx.text.paragraph import Paragraph
 
+from .pdfdoc import PdfDoc, PdfLine, page_columns
+
 FORMAT_PROFILE_VERSION = 1
 
 # Roles a FormatProfile carries a style for. `dates`/`contact` reuse
@@ -498,6 +500,246 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
     )
     # Any role the doc didn't reveal falls back to the generic defaults so
     # rendering never produces an unstyled paragraph.
+    defaults = default_format_profile()
+    for role in ALL_ROLES:
+        captured.roles.setdefault(role, defaults.roles[role])
+    return captured
+
+
+# ---------- pdf capture ----------
+#
+# Same pipeline as capture_format_profile, fed by the pdf IR
+# (shared.pdfdoc) instead of a python-docx document: lines play the role of
+# paragraphs, geometry replaces declared styles/spacing. Wrapped bullets may
+# not match their (longer) profile text against single lines — they just
+# degrade to defaults like any unmatched docx paragraph does.
+
+
+def _pdf_content_edges(doc: PdfDoc) -> tuple[float, float]:
+    lines = [line for line in doc.lines if not line.empty]
+    if not lines:
+        return 0.0, 612.0
+    return min(line.x0 for line in lines), max(line.x1 for line in lines)
+
+
+def _pdf_alignment(line: PdfLine, left: float, right: float) -> str | None:
+    """Infer alignment from where the line sits in the content column —
+    PDFs carry no declared alignment. Plain left is the default → None."""
+    width = line.x1 - line.x0
+    if width <= 0:
+        return None
+    center_x = (left + right) / 2
+    mid = (line.x0 + line.x1) / 2
+    if abs(mid - center_x) <= 12 and width < (right - left) * 0.6:
+        return "center"
+    if line.x1 >= right - 6 and line.x0 > left + 36:
+        return "right"
+    return None
+
+
+def _pdf_line_style(line: PdfLine, left: float, right: float) -> RoleStyle:
+    style = line.style
+    return RoleStyle(
+        font_name=style.font_name,
+        size_pt=style.size_pt,
+        bold=style.bold,
+        italic=style.italic,
+        color=style.color,
+        alignment=_pdf_alignment(line, left, right),
+        # The measured gap above the line is the pdf's effective "space
+        # before" — spacing after is indistinguishable, keep zero.
+        space_before_pt=line.gap_before_pt,
+    )
+
+
+def _pdf_margins(page, lines) -> dict[str, float]:
+    """Content bbox → page margins in inches, clamped to sane values."""
+    non_empty = [line for line in lines if not line.empty]
+    if page is None or not non_empty:
+        return {"top": 1.0, "right": 1.0, "bottom": 1.0, "left": 1.0}
+
+    def _in(pt: float) -> float:
+        return round(min(max(pt / 72.0, 0.25), 2.5), 2)
+
+    return {
+        "top": _in(min(line.top for line in non_empty)),
+        "right": _in(page.width - max(line.x1 for line in non_empty)),
+        "bottom": _in(page.height - max(line.bottom for line in non_empty)),
+        "left": _in(min(line.x0 for line in non_empty)),
+    }
+
+
+def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
+    """PDF analogue of capture_format_profile: locate the profile's content
+    in the pdf's line layout and record fonts, spacing, margins, columns,
+    section order/titles, and bullet style into a FormatProfile — what makes
+    a regenerated resume look like the user's own layout."""
+    lines = doc.lines
+    roles: dict[str, RoleStyle] = {}
+    section_titles: dict[str, str] = {}
+    left, right = _pdf_content_edges(doc)
+
+    def _style(line: PdfLine) -> RoleStyle:
+        return _pdf_line_style(line, left, right)
+
+    basic = profile.basic_info
+    name_idx = _match_idx(lines, basic.name)
+    if name_idx is None:
+        name_idx = next((i for i, line in enumerate(lines) if not line.empty), None)
+    contact_idx = _match_any_idx(lines, [basic.email, basic.phone])
+
+    # First content line per section — used for header detection, section
+    # order, and role capture.
+    summary_idx = _match_idx(lines, (profile.summary or "")[:48])
+    exp_idx = [
+        i
+        for i in (
+            _match_idx(lines, e.position) or _match_idx(lines, e.company)
+            for e in profile.experience
+        )
+        if i is not None
+    ]
+    skill_idx = [
+        i
+        for i in (
+            _match_idx(lines, s)
+            for cat in profile.skills
+            for s in cat.skills[:2]
+        )
+        if i is not None
+    ]
+    edu_idx = [
+        i
+        for i in (
+            _match_idx(lines, e.institution) or _match_idx(lines, e.degree)
+            for e in profile.education
+        )
+        if i is not None
+    ]
+    proj_idx = [
+        i
+        for i in (_match_idx(lines, p.name) for p in profile.projects)
+        if i is not None
+    ]
+    bullet_idx = [
+        i
+        for i in (
+            _match_idx(lines, b.text[:48])
+            for e in profile.experience
+            for b in e.bullets[:2]
+        )
+        if i is not None
+    ]
+
+    section_first: dict[str, int] = {}
+    if summary_idx is not None:
+        section_first[SECTION_SUMMARY] = summary_idx
+    if exp_idx:
+        section_first[SECTION_EXPERIENCE] = min(exp_idx)
+    if skill_idx:
+        section_first[SECTION_SKILLS] = min(skill_idx)
+    if edu_idx:
+        section_first[SECTION_EDUCATION] = min(edu_idx)
+    if proj_idx:
+        section_first[SECTION_PROJECTS] = min(proj_idx)
+
+    # Headers: nearest short line above each section's first content line.
+    claimed = {i for i in [name_idx, contact_idx] if i is not None}
+    for idxs in (exp_idx, skill_idx, edu_idx, proj_idx, bullet_idx):
+        claimed.update(idxs)
+    for section, first in section_first.items():
+        header_idx = _section_header_idx(lines, first, claimed)
+        if header_idx is None:
+            continue
+        claimed.add(header_idx)
+        section_titles[section] = lines[header_idx].text.strip()
+        if ROLE_SECTION_HEADER not in roles:
+            roles[ROLE_SECTION_HEADER] = _style(lines[header_idx])
+
+    section_order = [
+        s for s, _ in sorted(section_first.items(), key=lambda kv: kv[1])
+    ]
+    for section in ALL_SECTIONS:
+        if section not in section_order:
+            section_order.append(section)
+    for section, title in DEFAULT_SECTION_TITLES.items():
+        section_titles.setdefault(section, title)
+
+    # Dates on the title line vs their own line — decides entry layout.
+    first_exp = profile.experience[0] if profile.experience else None
+    dates_on_title_line = True
+    if first_exp is not None:
+        exp_line_idx = _match_any_idx(
+            lines, [first_exp.position, first_exp.company]
+        )
+        exp_line = lines[exp_line_idx].text if exp_line_idx is not None else ""
+        date_bits = _norm(first_exp.start_date)
+        dates_on_title_line = bool(
+            date_bits and date_bits.split()[0] in _norm(exp_line)
+        )
+
+    # Bullet glyph/indent from the first matched bullet line. PDFs only
+    # carry literal glyphs — no list numbering to fall back on.
+    bullet_glyph = None
+    bullet_indent_in = None
+    if bullet_idx:
+        bullet_line = lines[bullet_idx[0]]
+        literal = re.match(
+            r"^([•·\-\*►‣▪●○–])\s", bullet_line.text.lstrip()
+        )
+        if literal:
+            bullet_glyph = literal.group(1)
+        if exp_idx:
+            indent_pt = bullet_line.x0 - lines[exp_idx[0]].x0
+            if indent_pt > 4:
+                bullet_indent_in = round(indent_pt / 72.0, 2)
+
+    # Contact separator between the header fields.
+    separator = "|"
+    if contact_idx is not None:
+        contact_text = lines[contact_idx].text
+        for candidate in ("|", "•", "·", "-"):
+            if f" {candidate} " in contact_text:
+                separator = candidate
+                break
+
+    # Roles from matched lines (first hit wins per role).
+    if name_idx is not None:
+        roles.setdefault(ROLE_NAME, _style(lines[name_idx]))
+    if contact_idx is not None:
+        roles.setdefault(ROLE_CONTACT, _style(lines[contact_idx]))
+    if exp_idx:
+        roles.setdefault(ROLE_ENTRY_TITLE, _style(lines[exp_idx[0]]))
+    if summary_idx is not None:
+        roles.setdefault(ROLE_BODY, _style(lines[summary_idx]))
+    elif edu_idx:
+        roles.setdefault(ROLE_BODY, _style(lines[edu_idx[0]]))
+    if edu_idx:
+        roles.setdefault(ROLE_ENTRY_SUB, _style(lines[edu_idx[0]]))
+    if bullet_idx:
+        roles.setdefault(ROLE_BULLET, _style(lines[bullet_idx[0]]))
+
+    # Page setup from the first page.
+    page = doc.pages[0] if doc.pages else None
+    margins = _pdf_margins(page, lines)
+    columns = page_columns(page) if page is not None else 1
+
+    skills_layout = (
+        SKILLS_LAYOUT_GROUPED if len(profile.skills) > 1 else SKILLS_LAYOUT_FLAT
+    )
+
+    captured = FormatProfile(
+        page_margins_in=margins,
+        columns=columns,
+        contact_separator=separator,
+        dates_on_title_line=dates_on_title_line,
+        bullet_glyph=bullet_glyph,
+        bullet_left_indent_in=bullet_indent_in,
+        skills_layout=skills_layout,
+        section_order=section_order,
+        section_titles=section_titles,
+        roles=roles,
+    )
     defaults = default_format_profile()
     for role in ALL_ROLES:
         captured.roles.setdefault(role, defaults.roles[role])

@@ -37,7 +37,7 @@ async def upload_resume(
         if not file_type:
             raise HTTPException(status_code=400, detail="Failed to determine file type")
 
-        if file_type not in [".docx"]:
+        if file_type not in [".docx", ".pdf"]:
             raise HTTPException(status_code=400, detail="Unsupported file type")
     except HTTPException:
         raise

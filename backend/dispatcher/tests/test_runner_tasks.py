@@ -99,8 +99,11 @@ class ResumeRunnerTask(unittest.TestCase):
             patch.object(resume, "get_s3_client", return_value=kw.get("s3") or MagicMock()),
             patch.object(resume, "get_pg_client", return_value=kw.get("pg") or _pg_cm()),
             patch.object(resume, "agent_parse_docx", return_value=kw.get("agent_q") or queue.Queue()),
+            patch.object(resume, "agent_parse_pdf", return_value=kw.get("agent_q") or queue.Queue()),
             patch.object(resume, "parse_docx", return_value=kw.get("src") or MagicMock(name="src")),
+            patch.object(resume, "parse_pdf", return_value=kw.get("src") or MagicMock(name="src")),
             patch.object(resume, "capture_format_profile", return_value=kw.get("fmt") or "FMT"),
+            patch.object(resume, "capture_format_profile_pdf", return_value=kw.get("fmt") or "FMT"),
             patch.object(resume, "upsert_user_profile"),
             patch.object(resume, "upsert_resume_format"),
             patch.object(resume, "puremagic", kw.get("puremagic") or MagicMock(**{"from_string.return_value": ".docx"})),
@@ -187,6 +190,51 @@ class ResumeRunnerTask(unittest.TestCase):
         resume.upsert_user_profile.assert_called_once_with(conn, "u1", profile)
         resume.capture_format_profile.assert_called_once_with(src, profile)
         resume.upsert_resume_format.assert_called_once_with(conn, "u1", "FMT", "j1")
+
+    def test_pdf_happy_path_uses_pdf_pipeline(self):
+        conn = MagicMock()
+        conn.execute.return_value.fetchone.return_value = ("auth0|u1",)
+        s3 = MagicMock()
+        s3.get_object.return_value = {"Body": io.BytesIO(b"%PDF-1.4 fake")}
+        q = queue.Queue()
+        profile = MagicMock(name="profile")
+        q.put(profile)
+        src = MagicMock(name="pdf-src")
+        status, _ = self._run(
+            {"job_id": "j1", "user_id": "u1", "s3_key": "k"},
+            pg=_pg_cm(conn),
+            s3=s3,
+            agent_q=q,
+            src=src,
+            fmt="PDF-FMT",
+            puremagic=MagicMock(**{"from_string.return_value": ".pdf"}),
+        )
+        self.assertEqual(status, "COMPLETED")
+        resume.parse_pdf.assert_called_once()
+        resume.agent_parse_pdf.assert_called_once_with(src)
+        resume.agent_parse_docx.assert_not_called()
+        resume.upsert_user_profile.assert_called_once_with(conn, "u1", profile)
+        resume.capture_format_profile_pdf.assert_called_once_with(src, profile)
+        resume.capture_format_profile.assert_not_called()
+        resume.upsert_resume_format.assert_called_once_with(
+            conn, "u1", "PDF-FMT", "j1"
+        )
+
+    def test_pdf_with_no_extractable_text_fails(self):
+        conn = MagicMock()
+        conn.execute.return_value.fetchone.return_value = ("auth0|u1",)
+        s3 = MagicMock()
+        s3.get_object.return_value = {"Body": io.BytesIO(b"%PDF-1.4 fake")}
+        status, _ = self._run(
+            {"job_id": "j1", "user_id": "u1", "s3_key": "k"},
+            pg=_pg_cm(conn),
+            s3=s3,
+            src=MagicMock(name="pdf-src", lines=[]),
+            puremagic=MagicMock(**{"from_string.return_value": ".pdf"}),
+        )
+        self.assertEqual(status, "FAILED")
+        resume.agent_parse_pdf.assert_not_called()
+        resume.upsert_user_profile.assert_not_called()
 
 
 class SuggestionsRunnerTask(unittest.TestCase):
