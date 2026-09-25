@@ -24,7 +24,7 @@ class Lifespan(unittest.IsolatedAsyncioTestCase):
 
 
 class MaintenanceMode(unittest.IsolatedAsyncioTestCase):
-    async def _call(self, maint, admin, docs):
+    async def _call(self, maint, admin, docs, stripe_webhook=False):
         req = MagicMock()
         nxt = AsyncMock(return_value="response")
         with (
@@ -33,6 +33,11 @@ class MaintenanceMode(unittest.IsolatedAsyncioTestCase):
                 api, "is_site_admin_request", new=AsyncMock(return_value=admin)
             ),
             patch.object(api, "is_docs_request", return_value=docs),
+            patch.object(
+                api,
+                "is_stripe_webhook_request",
+                return_value=stripe_webhook,
+            ),
         ):
             return await api.maintenance_mode(req, nxt), nxt
 
@@ -56,6 +61,19 @@ class MaintenanceMode(unittest.IsolatedAsyncioTestCase):
         resp, nxt = await self._call(True, False, True)
         self.assertEqual(resp, "response")
         nxt.assert_awaited_once()
+
+    async def test_on_lets_stripe_webhook_through(self):
+        # Stripe calls unauthenticated — a 503 would strand paid checkouts.
+        resp, nxt = await self._call(True, False, False, stripe_webhook=True)
+        self.assertEqual(resp, "response")
+        nxt.assert_awaited_once()
+
+    def test_stripe_webhook_path_matches(self):
+        req = MagicMock()
+        req.url.path = "/stripe/webhook"
+        self.assertTrue(api.is_stripe_webhook_request(req))
+        req.url.path = "/billing/checkout"
+        self.assertFalse(api.is_stripe_webhook_request(req))
 
 
 if __name__ == "__main__":

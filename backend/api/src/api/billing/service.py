@@ -163,9 +163,22 @@ async def handle_webhook(
         raise HTTPException(status_code=400, detail="Invalid signature") from None
 
     event_type = event["type"]
-    session = event["data"]["object"]
+    obj = event["data"]["object"]
+    # stripe-python v15 objects aren't dicts — .get() doesn't exist on them.
+    # to_dict() so field access works for real events and the plain-dict
+    # events tests stub in alike.
+    if not isinstance(obj, dict):
+        obj = obj.to_dict()
 
-    if event_type == "checkout.session.completed":
+    if event_type in (
+        "checkout.session.completed",
+        "checkout.session.async_payment_succeeded",
+    ):
+        session = obj
+        if session.get("payment_status") == "unpaid":
+            # Async payment still in flight — the purchase stays PENDING until
+            # checkout.session.async_payment_succeeded lands.
+            return {"ok": True}
         purchaser_id = session.get("client_reference_id")
         cents = (session.get("metadata") or {}).get("cents")
         if not purchaser_id or not cents:
@@ -222,10 +235,10 @@ async def handle_webhook(
                 UPDATE balance_purchase SET status = 'EXPIRED'
                 WHERE id = %s AND status = 'PENDING'
                 """,
-                (session["id"],),
+                (obj["id"],),
             )
     elif event_type == "charge.refunded":
-        charge = event["data"]["object"]
+        charge = obj
         payment_intent = charge.get("payment_intent")
         # Only a full refund claws the credit back — a partial refund leaves
         # the purchase COMPLETED.
