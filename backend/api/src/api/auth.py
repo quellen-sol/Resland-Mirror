@@ -69,6 +69,12 @@ def is_docs_request(request: Request) -> bool:
     return request.url.path.startswith("/docs")
 
 
+def is_stripe_webhook_request(request: Request) -> bool:
+    """Stripe webhooks are unauthenticated machine calls — exempt like /docs
+    so maintenance mode can't strand a paid checkout in PENDING."""
+    return request.url.path == "/stripe/webhook"
+
+
 async def require_site_admin(user_id: Auth0UserId, pg_conn: PgConnection) -> str:
     if not await _is_site_admin(pg_conn, user_id):
         # 403 not 401 — the request IS authenticated, it just isn't admin.

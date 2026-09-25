@@ -36,25 +36,35 @@ def stripe_env(monkeypatch):
 
 @pytest.fixture
 def stripe_events(monkeypatch):
-    """Makes handle_webhook see whatever event is stored under 'event'."""
+    """Makes handle_webhook see whatever event is stored under 'event'.
+
+    The stub builds real Stripe objects, not plain dicts — stripe-python v15
+    objects have no .get(), which is exactly what production events deliver.
+    """
     holder = {}
     monkeypatch.setattr(
         stripe.Webhook,
         "construct_event",
-        staticmethod(lambda *args, **kwargs: holder["event"]),
+        staticmethod(
+            lambda *args, **kwargs: stripe.Event.construct_from(
+                holder["event"], key=None
+            )
+        ),
     )
     return holder
 
 
-def completed_event(
+def checkout_event(
+    event_type="checkout.session.completed",
     session_id="cs_1",
     user_id="u1",
     cents="500",
     payment_intent="pi_1",
     amount_total=500,
+    payment_status="paid",
 ):
     return {
-        "type": "checkout.session.completed",
+        "type": event_type,
         "data": {
             "object": {
                 "id": session_id,
@@ -63,9 +73,18 @@ def completed_event(
                 "amount_total": amount_total,
                 "currency": "usd",
                 "payment_intent": payment_intent,
+                "payment_status": payment_status,
             }
         },
     }
+
+
+def completed_event(**kwargs):
+    return checkout_event("checkout.session.completed", **kwargs)
+
+
+def async_succeeded_event(**kwargs):
+    return checkout_event("checkout.session.async_payment_succeeded", **kwargs)
 
 
 def charge_refunded_event(payment_intent="pi_1", amount=500, amount_refunded=500):
@@ -177,6 +196,26 @@ async def test_event_without_metadata_is_noop(pg, user, stripe_events):
     assert await send(pg, stripe_events["event"]) == {"ok": True}
     assert await purchase_row(pg, "cs_other") is None
     assert await get_balance(pg) == 0
+
+
+async def test_unpaid_completed_stays_pending(pg, user, stripe_events):
+    """Async payment methods complete checkout with payment_status='unpaid' —
+    crediting there would pay out on a payment that can still fail."""
+    stripe_events["event"] = completed_event(payment_status="unpaid")
+    assert await send(pg, stripe_events["event"]) == {"ok": True}
+    assert await purchase_row(pg, "cs_1") is None
+    assert await get_balance(pg) == 0
+
+
+async def test_async_payment_succeeded_credits(pg, user, stripe_events):
+    stripe_events["event"] = completed_event(payment_status="unpaid")
+    await send(pg, stripe_events["event"])
+    stripe_events["event"] = async_succeeded_event()
+    await send(pg, stripe_events["event"])
+    row = await purchase_row(pg, "cs_1")
+    assert row[0] == "COMPLETED"
+    assert row[1] == "pi_1"
+    assert await get_balance(pg) == 500
 
 
 async def test_full_refund_claws_back_credit(pg, user, stripe_events):
