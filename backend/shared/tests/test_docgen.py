@@ -16,7 +16,9 @@ from docx.shared import Pt
 from shared.docgen import (
     ALL_ROLES,
     ALL_SECTIONS,
+    ROLE_BODY,
     ROLE_NAME,
+    ROLE_SECTION_HEADER,
     SECTION_EDUCATION,
     SECTION_EXPERIENCE,
     SECTION_SKILLS,
@@ -29,10 +31,12 @@ from shared.docgen import (
     ResumeProject,
     ResumeSkillGroup,
     capture_format_profile,
+    capture_format_profile_pdf,
     content_source_hash,
     default_format_profile,
     render_docx,
 )
+from shared.pdfdoc import PdfDoc, PdfLine, PdfPage, PdfStyle
 
 
 # Duck-typed stand-in for the parser's UserDocxProfile — capture only reads
@@ -420,6 +424,168 @@ class CaptureEdgeCases(unittest.TestCase):
         for role in ALL_ROLES:
             self.assertIn(role, fmt.roles)
         self.assertEqual(fmt.columns, 1)
+
+
+def _pdf_line(
+    text,
+    *,
+    x0=72.0,
+    x1=300.0,
+    top=100.0,
+    font="Helvetica",
+    size=11.0,
+    bold=False,
+    color=None,
+    gap=0.0,
+):
+    return PdfLine(
+        text=text,
+        page=0,
+        x0=x0,
+        x1=x1,
+        top=top,
+        bottom=top + size + 2,
+        style=PdfStyle(font_name=font, size_pt=size, bold=bold, color=color),
+        gap_before_pt=gap,
+    )
+
+
+def _resume_pdf_doc() -> PdfDoc:
+    """Same resume as _resume_doc(), as pdf IR: Helvetica 11 body, bold 24
+    name, bold 14 headers — lines carry geometry instead of docx styles."""
+    top = 72.0
+
+    def advance(lines, text, *, size=11.0, gap=0.0, **kw):
+        nonlocal top
+        top += gap
+        lines.append(_pdf_line(text, top=top, size=size, gap=gap, **kw))
+        top += size + 4
+
+    lines = []
+    advance(lines, "Jane Doe", font="Helvetica-Bold", size=24, bold=True, x1=200)
+    advance(lines, "jane@x.com | 555-1 | NYC", x1=320)
+    advance(lines, "SUMMARY", font="Helvetica-Bold", size=14, bold=True, gap=18)
+    advance(lines, "Engineer who ships.", x1=400)
+    advance(lines, "EXPERIENCE", font="Helvetica-Bold", size=14, bold=True, gap=18)
+    advance(lines, "Senior Engineer — Acme    Jan 2020 – Present", x1=540)
+    advance(lines, "• Built the thing", x0=90)
+    advance(lines, "• Shipped it too", x0=90)
+    advance(lines, "SKILLS", font="Helvetica-Bold", size=14, bold=True, gap=18)
+    advance(lines, "Languages: Python, Go", x1=400)
+    advance(lines, "EDUCATION", font="Helvetica-Bold", size=14, bold=True, gap=18)
+    advance(lines, "BS — MIT    2016 – 2020", x1=500)
+    advance(lines, "CS")
+    return PdfDoc(
+        pages=[PdfPage(number=0, width=612.0, height=792.0, lines=lines)]
+    )
+
+
+class PdfCapture(unittest.TestCase):
+    def setUp(self):
+        self.fmt = capture_format_profile_pdf(_resume_pdf_doc(), _sample_profile())
+
+    def test_captures_all_roles(self):
+        for role in ALL_ROLES:
+            self.assertIn(role, self.fmt.roles, f"missing role {role}")
+
+    def test_captures_name_style(self):
+        self.assertEqual(self.fmt.roles[ROLE_NAME].size_pt, 24.0)
+        self.assertTrue(self.fmt.roles[ROLE_NAME].bold)
+        self.assertEqual(self.fmt.roles[ROLE_NAME].font_name, "Helvetica-Bold")
+
+    def test_captures_header_style_and_gap(self):
+        header = self.fmt.roles[ROLE_SECTION_HEADER]
+        self.assertEqual(header.size_pt, 14.0)
+        self.assertTrue(header.bold)
+        self.assertEqual(header.space_before_pt, 18.0)
+
+    def test_captures_body_style(self):
+        self.assertEqual(self.fmt.roles[ROLE_BODY].font_name, "Helvetica")
+        self.assertEqual(self.fmt.roles[ROLE_BODY].size_pt, 11.0)
+
+    def test_captures_section_order_and_titles(self):
+        self.assertEqual(
+            self.fmt.section_order[:4],
+            [
+                SECTION_SUMMARY,
+                SECTION_EXPERIENCE,
+                SECTION_SKILLS,
+                SECTION_EDUCATION,
+            ],
+        )
+        self.assertEqual(self.fmt.section_titles[SECTION_EXPERIENCE], "EXPERIENCE")
+
+    def test_captures_bullet_glyph_and_indent(self):
+        self.assertEqual(self.fmt.bullet_glyph, "•")
+        # Bullets sit 18pt right of the entry line → 0.25in.
+        self.assertAlmostEqual(self.fmt.bullet_left_indent_in, 0.25)
+
+    def test_captures_margins_from_geometry(self):
+        m = self.fmt.page_margins_in
+        self.assertEqual(m["left"], 1.0)
+        self.assertEqual(m["top"], 1.0)
+        # Content reaches x=540 on a 612pt page → 1.0in right margin.
+        self.assertEqual(m["right"], 1.0)
+
+    def test_captures_contact_separator(self):
+        self.assertEqual(self.fmt.contact_separator, "|")
+
+    def test_dates_on_title_line_detected(self):
+        self.assertTrue(self.fmt.dates_on_title_line)
+
+    def test_serializes_to_json(self):
+        self.assertEqual(FormatProfile.from_json(self.fmt.to_json()), self.fmt)
+
+
+class PdfCaptureEdgeCases(unittest.TestCase):
+    def test_dates_on_own_line_detected(self):
+        lines = [
+            _pdf_line("Jane Doe", top=72),
+            _pdf_line("jane@x.com", top=100),
+            _pdf_line("EXPERIENCE", top=140, gap=18, bold=True),
+            _pdf_line("Senior Engineer — Acme", top=170),
+            _pdf_line("Jan 2020 – Present", top=188),
+            _pdf_line("• Built the thing", top=206, x0=90),
+        ]
+        doc = PdfDoc(
+            pages=[PdfPage(number=0, width=612.0, height=792.0, lines=lines)]
+        )
+        fmt = capture_format_profile_pdf(doc, _sample_profile())
+        self.assertFalse(fmt.dates_on_title_line)
+
+    def test_two_column_page_detected(self):
+        lines = []
+        for i in range(6):
+            lines.append(_pdf_line(f"side {i}", x0=72, x1=200, top=100 + i * 20))
+            lines.append(_pdf_line(f"main {i}", x0=230, x1=540, top=100 + i * 20))
+        doc = PdfDoc(
+            pages=[PdfPage(number=0, width=612.0, height=792.0, lines=lines)]
+        )
+        fmt = capture_format_profile_pdf(doc, _sample_profile())
+        self.assertEqual(fmt.columns, 2)
+
+    def test_empty_pdf_produces_defaults(self):
+        fmt = capture_format_profile_pdf(PdfDoc(), _sample_profile())
+        for role in ALL_ROLES:
+            self.assertIn(role, fmt.roles)
+        self.assertEqual(fmt.columns, 1)
+        self.assertEqual(fmt.page_margins_in["left"], 1.0)
+
+    def test_centered_name_alignment(self):
+        # Name midpoint sits on the content column center; the wide body
+        # line below establishes the column's edges.
+        lines = [
+            _pdf_line("Jane Doe", x0=256, x1=356, top=72, bold=True, size=24),
+            _pdf_line("jane@x.com", x0=72, x1=200, top=110),
+            _pdf_line("Engineer who ships.", x0=72, x1=540, top=140),
+        ]
+        doc = PdfDoc(
+            pages=[PdfPage(number=0, width=612.0, height=792.0, lines=lines)]
+        )
+        fmt = capture_format_profile_pdf(
+            doc, _Profile(summary=None, basic_info=_Basic(name="Jane Doe", email="jane@x.com"))
+        )
+        self.assertEqual(fmt.roles[ROLE_NAME].alignment, "center")
 
 
 class RenderEdgeCases(unittest.TestCase):

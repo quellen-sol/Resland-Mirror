@@ -96,6 +96,20 @@ class UploadResume(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(params[1], "u1")
         self.assertEqual(params[3], "PENDING")
 
+    async def test_pdf_accepted_and_stored_as_pdf(self):
+        pg = _Pg([[], _Result()])
+        s3 = MagicMock()
+        amqp = _Amqp()
+        pdf = b"%PDF-1.4\n" + b"\x00" * 64
+        with patch.object(service, "get_s3_client", return_value=s3):
+            resp = await service.upload_resume(
+                _file(pdf, filename="resume.pdf"), "u1", amqp, pg
+            )
+        self.assertTrue(resp.job_id)
+        key = s3.upload_fileobj.call_args.args[2]
+        self.assertEqual(key, "resumes/u1/resume_doc.pdf")
+        self.assertEqual(amqp.calls, [(RESUME_EXCHANGE_NAME, "#")])
+
 
 class UploadRouterGuards(unittest.IsolatedAsyncioTestCase):
     async def test_missing_filename_400(self):

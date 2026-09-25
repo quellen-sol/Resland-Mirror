@@ -4,12 +4,14 @@ from typing import Any
 
 import puremagic
 from dispatcher.runners.local_threaded import LocalThreadJobRunner
-from shared.docgen import capture_format_profile
+from shared.docgen import capture_format_profile, capture_format_profile_pdf
 from shared.pg import get_pg_client
 from shared.s3 import get_s3_client
 
 from ..agents.docx_parser import agent_parse_docx
+from ..agents.pdf_parser import agent_parse_pdf
 from ..doc_parsers.docx import parse_docx
+from ..doc_parsers.pdf import parse_pdf
 from ..env_vars import (
     AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY,
@@ -72,12 +74,22 @@ class ResumeRunner(LocalThreadJobRunner):
                 print(f"File type: {file_type}")
                 profile_queue = None
                 source_doc = None
+                capture_fmt = None
 
                 # Parse document based on file type
                 match file_type:
                     case ".docx":
                         source_doc = parse_docx(body_data)
                         profile_queue = agent_parse_docx(source_doc)
+                        capture_fmt = capture_format_profile
+                    case ".pdf":
+                        source_doc = parse_pdf(body_data)
+                        if not source_doc.lines:
+                            raise RunnerError(
+                                "PDF has no extractable text (scanned or image-only?)"
+                            )
+                        profile_queue = agent_parse_pdf(source_doc)
+                        capture_fmt = capture_format_profile_pdf
                     case _:
                         raise RunnerError("Unsupported file type")
 
@@ -89,8 +101,8 @@ class ResumeRunner(LocalThreadJobRunner):
                 upsert_user_profile(pg_client, user_id, profile)
 
                 # Capture the layout so the resume can be regenerated later
-                if source_doc is not None:
-                    fmt = capture_format_profile(source_doc, profile)
+                if source_doc is not None and capture_fmt is not None:
+                    fmt = capture_fmt(source_doc, profile)
                     upsert_resume_format(
                         pg_client, user_id, fmt, self.job_data["job_id"]
                     )

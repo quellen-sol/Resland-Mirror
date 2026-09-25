@@ -1,0 +1,320 @@
+"""doc_parsers/pdf tests — the view functions run against a hand-built
+PdfDoc IR (no pdfminer needed); parse_pdf tests build a real PDF in memory
+with a small stdlib writer and skip when pdfminer.six isn't installed.
+
+Run: .venv/bin/python -m unittest backend.dispatcher.tests.test_pdf -v
+     (from the repo root with the workspace venv)
+"""
+
+import io
+import unittest
+from unittest.mock import MagicMock, patch
+
+from shared.pdfdoc import PdfDoc, PdfLine, PdfPage, PdfStyle
+
+from dispatcher.agents import docx_parser, pdf_parser
+from dispatcher.doc_parsers import pdf as pdfdoc
+
+try:
+    import pdfminer.layout  # noqa: F401
+
+    HAS_PDFMINER = True
+except ImportError:
+    HAS_PDFMINER = False
+
+
+def _line(
+    text,
+    *,
+    x0=72.0,
+    x1=300.0,
+    top=100.0,
+    height=12.0,
+    page=0,
+    font="Helvetica",
+    size=11.0,
+    bold=False,
+    italic=False,
+    color=None,
+    gap=0.0,
+    ends_page=False,
+):
+    return PdfLine(
+        text=text,
+        page=page,
+        x0=x0,
+        x1=x1,
+        top=top,
+        bottom=top + height,
+        style=PdfStyle(
+            font_name=font, size_pt=size, bold=bold, italic=italic, color=color
+        ),
+        gap_before_pt=gap,
+        ends_page=ends_page,
+    )
+
+
+def _doc(lines, hrules=(), number=0, width=612.0, height=792.0):
+    return PdfDoc(
+        pages=[
+            PdfPage(
+                number=number,
+                width=width,
+                height=height,
+                lines=list(lines),
+                hrules=list(hrules),
+            )
+        ]
+    )
+
+
+def _pdf_bytes(ops):
+    """Minimal single-page PDF — Type1 base fonts, no compression — that a
+    real extractor can parse. xref offsets are computed, not guessed."""
+    content = "\n".join(ops).encode()
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> >> "
+        b"/Contents 4 0 R >>",
+        b"<< /Length "
+        + str(len(content)).encode()
+        + b" >>\nstream\n"
+        + content
+        + b"\nendstream",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>",
+    ]
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objs, 1):
+        offsets.append(out.tell())
+        out.write(b"%d 0 obj\n" % i)
+        out.write(body)
+        out.write(b"\nendobj\n")
+    xref = out.tell()
+    out.write(b"xref\n0 %d\n" % (len(objs) + 1))
+    out.write(b"0000000000 65535 f \n")
+    for off in offsets:
+        out.write(b"%010d 00000 n \n" % off)
+    out.write(
+        b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n"
+        % (len(objs) + 1, xref)
+    )
+    return out.getvalue()
+
+
+def _text(x, y, text, font="F1", size=11):
+    return f"BT /{font} {size} Tf {x} {y} Td ({text}) Tj ET"
+
+
+def _resume_ops():
+    """A one-page resume: name (bold, big), contact, a rule, then a
+    section header + entry line — y measured from the bottom (PDF coords)."""
+    return [
+        _text(72, 720, "Jane Doe", font="F2", size=24),
+        _text(72, 700, "jane@x.com | 555-1 | NYC"),
+        # divider rule under the header area
+        "72 688 m 540 688 l S",
+        _text(72, 660, "EXPERIENCE", font="F2", size=14),
+        _text(72, 640, "Senior Engineer - Acme    Jan 2020 - Present"),
+        _text(90, 620, "- Built the thing"),
+        _text(72, 590, "SKILLS", font="F2", size=14),
+        _text(72, 570, "Languages: Python, Go"),
+    ]
+
+
+class Views(unittest.TestCase):
+    def test_raw_text_joins_lines(self):
+        doc = _doc([_line("one"), _line(""), _line("two")])
+        self.assertEqual(pdfdoc.raw_text(doc), "one\n\ntwo")
+
+    def test_block_sequence_lines_carry_style(self):
+        doc = _doc(
+            [
+                _line("Jane Doe", font="Helvetica-Bold", size=24, bold=True),
+                _line("plain"),
+            ]
+        )
+        blocks = pdfdoc.block_sequence(doc)
+        self.assertEqual(blocks[0]["type"], "line")
+        self.assertEqual(blocks[0]["text"], "Jane Doe")
+        self.assertEqual(blocks[0]["font_name"], "Helvetica-Bold")
+        self.assertEqual(blocks[0]["size_pt"], 24.0)
+        self.assertTrue(blocks[0]["bold"])
+
+    def test_block_sequence_rules_inserted_in_order(self):
+        doc = _doc(
+            [_line("above", top=100), _line("below", top=200)],
+            hrules=[150.0],
+        )
+        blocks = pdfdoc.block_sequence(doc)
+        types = [b["type"] for b in blocks]
+        self.assertEqual(types, ["line", "rule", "line"])
+        self.assertEqual(blocks[1]["page"], 0)
+
+    def test_block_sequence_flags_page_end(self):
+        doc = _doc([_line("last", ends_page=True)])
+        blocks = pdfdoc.block_sequence(doc)
+        self.assertTrue(blocks[-1]["ends_page"])
+
+    def test_whitespace_map_flags_gaps(self):
+        doc = _doc(
+            [
+                _line("title", top=100, gap=0.0),
+                _line("next", top=130, gap=18.0),
+                _line("   ", top=160, gap=0.0),
+            ]
+        )
+        m = pdfdoc.whitespace_map(doc)
+        self.assertEqual(len(m), 3)
+        self.assertFalse(m[0]["empty"])
+        self.assertEqual(m[1]["gap_before_pt"], 18.0)
+        self.assertTrue(m[2]["empty"])
+        self.assertEqual(m[0]["page"], 0)
+
+    def test_column_counts_single_column(self):
+        # One dominant left edge; right-aligned date-ish lines share the
+        # content column's right edge — not a column.
+        lines = [_line("content line " + str(i), x0=72, x1=540, top=100 + i * 15)
+                 for i in range(6)]
+        lines += [_line("2020", x0=500, x1=540, top=100)]
+        doc = _doc(lines)
+        self.assertEqual(pdfdoc.column_counts(doc), [1])
+
+    def test_column_counts_two_columns(self):
+        # Sidebar lines (x 72→200) + main column (x 230→540).
+        lines = []
+        for i in range(6):
+            lines.append(_line(f"side {i}", x0=72, x1=200, top=100 + i * 15))
+            lines.append(_line(f"main {i}", x0=230, x1=540, top=100 + i * 15))
+        doc = _doc(lines)
+        self.assertEqual(pdfdoc.column_counts(doc), [2])
+
+
+class FontHelpers(unittest.TestCase):
+    def test_font_family_splits_style(self):
+        self.assertEqual(pdfdoc._font_family("ABCDEF+Inter-Bold"), "Inter")
+        self.assertEqual(pdfdoc._font_family("Helvetica"), "Helvetica")
+        self.assertEqual(pdfdoc._font_family("TimesNewRomanPS-BoldMT"), "TimesNewRomanPS")
+
+    def test_font_flags(self):
+        self.assertEqual(pdfdoc._font_flags("Helvetica-Bold"), (True, False))
+        self.assertEqual(pdfdoc._font_flags("Times-Italic"), (False, True))
+        self.assertEqual(pdfdoc._font_flags("Inter"), (False, False))
+
+    def test_color_hex(self):
+        self.assertIsNone(pdfdoc._color_hex((0.0, 0.0, 0.0)))
+        self.assertIsNone(pdfdoc._color_hex(0.0))
+        self.assertEqual(pdfdoc._color_hex((0.5, 0.0, 1.0)), "8000FF")
+        self.assertIsNone(pdfdoc._color_hex("weird"))
+
+
+class PdfAgent(unittest.TestCase):
+    def _build(self):
+        agent = MagicMock()
+        with patch.object(
+            docx_parser, "create_agent", return_value=agent
+        ) as create:
+            out = pdf_parser.build_pdf_resume_agent(
+                _doc([_line("Jane Doe"), _line("Engineer")])
+            )
+        _, kwargs = create.call_args
+        tools = {t.name: t for t in kwargs["tools"]}
+        return out, agent, kwargs, tools
+
+    def test_wired_like_docx_agent(self):
+        _, _, kwargs, tools = self._build()
+        self.assertEqual(kwargs["model"], docx_parser.RESUME_PARSER_MODEL)
+        self.assertEqual(
+            kwargs["system_prompt"], docx_parser.PDF_AGENT_PARSER_SYSTEM_PROMPT
+        )
+        self.assertEqual(
+            set(tools),
+            {
+                "get_raw_doc_text",
+                "get_block_sequence",
+                "get_whitespace_map",
+                "get_columns",
+                "submit_user_profile",
+            },
+        )
+
+    def test_tools_return_pdf_views(self):
+        _, _, _, tools = self._build()
+        self.assertIn("Jane Doe", tools["get_raw_doc_text"].invoke({}))
+        blocks = tools["get_block_sequence"].invoke({})
+        self.assertEqual(blocks[0]["type"], "line")
+        self.assertIsInstance(tools["get_whitespace_map"].invoke({}), list)
+        self.assertEqual(tools["get_columns"].invoke({}), [1])
+
+    def test_submit_fills_queue(self):
+        out, _, _, tools = self._build()
+        profile = docx_parser.UserDocxProfile(
+            summary="s",
+            basic_info=docx_parser.UserProfileBasicInfo(
+                name="Jane", email="", phone="", location=""
+            ),
+            experience=[],
+            skills=[],
+            education=[],
+            projects=[],
+        )
+        tools["submit_user_profile"].invoke({"profile": profile})
+        self.assertIs(out.profile_queue.get_nowait(), profile)
+
+    def test_agent_parse_pdf_invokes_and_returns_queue(self):
+        out, agent, _, _ = self._build()
+        with patch.object(
+            pdf_parser, "build_pdf_resume_agent", return_value=out
+        ):
+            q = pdf_parser.agent_parse_pdf(MagicMock(name="pdf"))
+        agent.invoke.assert_called_once()
+        self.assertIs(q, out.profile_queue)
+
+
+@unittest.skipUnless(HAS_PDFMINER, "pdfminer.six not installed")
+class ParsePdf(unittest.TestCase):
+    def test_parses_real_pdf_lines_and_styles(self):
+        doc = pdfdoc.parse_pdf(_pdf_bytes(_resume_ops()))
+        self.assertEqual(len(doc.pages), 1)
+        lines = {line.text: line for line in doc.lines}
+        self.assertIn("Jane Doe", lines)
+        name = lines["Jane Doe"]
+        self.assertEqual(name.style.font_name, "Helvetica")
+        self.assertEqual(name.style.size_pt, 24.0)
+        self.assertTrue(name.style.bold)
+        contact = lines["jane@x.com | 555-1 | NYC"]
+        self.assertEqual(contact.style.size_pt, 11.0)
+        self.assertFalse(contact.style.bold)
+        # y coords flipped: the name is near the top of the page.
+        self.assertLess(name.top, contact.top)
+
+    def test_detects_horizontal_rule(self):
+        doc = pdfdoc.parse_pdf(_pdf_bytes(_resume_ops()))
+        self.assertTrue(doc.pages[0].hrules)
+        blocks = pdfdoc.block_sequence(doc)
+        self.assertIn("rule", [b["type"] for b in blocks])
+
+    def test_gaps_and_page_end(self):
+        doc = pdfdoc.parse_pdf(_pdf_bytes(_resume_ops()))
+        last = doc.lines[-1]
+        self.assertTrue(last.ends_page)
+        header = next(l for l in doc.lines if l.text == "EXPERIENCE")
+        # 28pt gap above the section header (rule + spacing).
+        self.assertGreater(header.gap_before_pt, 10.0)
+
+    def test_single_line_document(self):
+        doc = pdfdoc.parse_pdf(_pdf_bytes([_text(72, 720, "Page two")]))
+        self.assertEqual([l.text for l in doc.lines], ["Page two"])
+
+    def test_empty_content_stream(self):
+        doc = pdfdoc.parse_pdf(_pdf_bytes([]))
+        self.assertEqual(doc.lines, [])
+
+
+if __name__ == "__main__":
+    unittest.main()
