@@ -6,7 +6,21 @@ crafted events, and `Customer.create`/`Session.create` are stubbed.
 
 from types import SimpleNamespace
 
-import pytest
+try:
+    import pytest
+except ImportError:
+    # unittest discovery has no pytest — this module is all pytest-function
+    # tests, so it collects zero tests under unittest; the stub just keeps
+    # the module importable.
+    class _PytestStub:
+        @staticmethod
+        def fixture(*_a, **_kw):
+            return lambda g: g
+
+        def __getattr__(self, name):
+            raise ImportError("pytest is required to run this test")
+
+    pytest = _PytestStub()
 import stripe
 from fastapi import HTTPException
 

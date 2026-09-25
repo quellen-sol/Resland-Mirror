@@ -24,10 +24,22 @@ dispatcher = "dispatcher:main"
 [dependency-groups]
 dev = [
     "pytest>=8.4,<9",
+    "pytest-cov>=6.2,<7",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.13,<0.13.0"]
