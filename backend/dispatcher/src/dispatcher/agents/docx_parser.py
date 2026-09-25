@@ -1,5 +1,5 @@
 import queue
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from docx.document import Document
@@ -39,7 +39,9 @@ def _system_prompt(kind: str) -> str:
 
 Extract:
 - professional summary
-- basic_info: name, email, phone, location
+- basic_info: name, email, phone, location, links
+  (github, linkedin, personal site — every URL in the header block, as
+  written, without https:// unless printed that way)
 - experience: company, position, start_date, end_date, bullets
 - skills: grouped by category
 - education: institution, degree, field_of_study, dates, description
@@ -62,7 +64,7 @@ Rules:
   ("Languages", "Frameworks"); otherwise group under a single
   "General" category.
 - If a field is absent, leave it empty — never fabricate a phone, email,
-  link, or date.
+  link, or date. When no links exist, use an empty list.
 - Right-side text in a row (dates, locations) belongs to the entry on
   that same line — check column counts before assuming top-to-bottom order.
 
@@ -81,6 +83,7 @@ class UserProfileBasicInfo:
     email: str
     phone: str
     location: str
+    links: list[str] = field(default_factory=list)
 
 
 @dataclass

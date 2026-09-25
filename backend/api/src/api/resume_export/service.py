@@ -57,7 +57,7 @@ async def _fetch_resume_content(pg_conn: PgConnection, user_id: str) -> ResumeCo
     )
     links = await _fetch_all(
         pg_conn,
-        "SELECT link FROM user_social_link WHERE user_id = %s",
+        "SELECT link FROM user_social_link WHERE user_id = %s ORDER BY id",
         (user_id,),
     )
     exp_rows = await _fetch_all(
