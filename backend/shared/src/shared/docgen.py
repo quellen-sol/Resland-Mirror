@@ -220,13 +220,20 @@ class ResumeContent:
     source: str = "base"
 
 
-def content_source_hash(content: ResumeContent, template: str = "original") -> str:
+def content_source_hash(
+    content: ResumeContent,
+    template: str = "original",
+    fmt: "FormatProfile | None" = None,
+) -> str:
     """Stable hash of what the generated docx depends on. Recomputed at
-    export time; a mismatch with the stored hash means regenerate."""
+    export time; a mismatch with the stored hash means regenerate. The
+    effective format belongs in the key too — a fresh upload that only
+    changes layout must still invalidate the cached docx."""
     payload = json.dumps(
         {
             "template": template,
             "format_version": FORMAT_PROFILE_VERSION,
+            "format": json.loads(fmt.to_json()) if fmt is not None else None,
             "content": asdict(content),
         },
         sort_keys=True,
@@ -396,7 +403,10 @@ def _title_separator(text: str, head: str, tail: str) -> str | None:
     return None
 
 
-_DATE_RANGE = re.compile(r"\d{4}\s*([-–—])\s*(?:\w{3,9}\s*\d{4}|Present|Current|Now)", re.IGNORECASE)
+_DATE_RANGE = re.compile(
+    r"\d{4}\s*([-–—])\s*(?:\d{4}|\w{3,9}\s*\d{4}|Present|Current|Now)",
+    re.IGNORECASE,
+)
 _OPEN_LABEL = re.compile(r"\b(Present|Current|Now)\b")
 
 
@@ -705,10 +715,13 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
             dates_on_title_line = True
 
     # Dates style: separator between start/end and the open-ended label.
+    # Entries that print dates on their own line put them right after the
+    # title, so look at each matched entry and the two paragraphs below it.
+    entry_idxs = sorted(i for i in (exp_idx + edu_idx + proj_idx))
     date_texts = [
-        paras[i].text
-        for i in (exp_idx + edu_idx + proj_idx)
-        if i is not None
+        paras[j].text
+        for i in entry_idxs
+        for j in range(i, min(i + 3, len(paras)))
     ]
     dates_separator = _dates_separator(date_texts) or " – "
     dates_open_label = _dates_open_label(date_texts)
@@ -794,6 +807,15 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
             project_dates_inline = _dates_inline(
                 proj_text, first_proj.start_date
             )
+            if first_exp is None or not _title_separator(
+                exp_text, first_exp.position, first_exp.company
+            ):
+                # No experience line to learn the separator from — the
+                # project line's own chain is the next best witness.
+                anchor = first_proj.link or first_proj.start_date
+                proj_sep = _title_separator(proj_text, first_proj.name, anchor)
+                if proj_sep:
+                    entry_title_separator = proj_sep
 
     # Roles from matched paragraphs (first hit wins per role).
     if name_idx is not None:
@@ -1076,8 +1098,12 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
             )
 
     # Dates style: separator between start/end and the open-ended label.
+    # Same rule as docx — separate date lines sit right under the title.
+    entry_idxs = sorted(i for i in (exp_idx + edu_idx + proj_idx))
     date_texts = [
-        lines[i].text for i in (exp_idx + edu_idx + proj_idx) if i is not None
+        lines[j].text
+        for i in entry_idxs
+        for j in range(i, min(i + 3, len(lines)))
     ]
     dates_separator = _dates_separator(date_texts) or " – "
     dates_open_label = _dates_open_label(date_texts)
@@ -1147,6 +1173,11 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
             project_dates_inline = _dates_inline(
                 proj_text, first_proj.start_date
             )
+            if first_exp is None or exp_line_idx is None:
+                anchor = first_proj.link or first_proj.start_date
+                proj_sep = _title_separator(proj_text, first_proj.name, anchor)
+                if proj_sep:
+                    entry_title_separator = proj_sep
 
     # Roles from matched lines (first hit wins per role).
     if name_idx is not None:
@@ -1449,8 +1480,14 @@ def render_docx(content: ResumeContent, fmt: FormatProfile) -> bytes:
                 dates = _dates(proj.start_date, proj.end_date, fmt)
                 if fmt.project_dates_inline:
                     # Dates join the title line's separator chain —
-                    # "Name | stack | 2026".
-                    _entry_header(doc, proj.name, dates, "", fmt)
+                    # "Name | stack | 2026". A link on that same line joins
+                    # the chain too rather than moving to its own line.
+                    tail = (
+                        f"{proj.link}{fmt.entry_title_separator}{dates}"
+                        if proj.link and not fmt.project_link_on_own_line
+                        else dates
+                    )
+                    _entry_header(doc, proj.name, tail, "", fmt)
                 else:
                     tail = (
                         proj.link if not fmt.project_link_on_own_line else None

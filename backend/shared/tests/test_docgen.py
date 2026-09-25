@@ -307,6 +307,20 @@ class SourceHash(unittest.TestCase):
             content_source_hash(_sample_content()),
         )
 
+    def test_changes_when_format_profile_changes(self):
+        # A re-upload that only changes layout must invalidate the export.
+        fmt_a = default_format_profile()
+        fmt_b = default_format_profile()
+        fmt_b.section_blank_lines = {"skills": 4}
+        self.assertNotEqual(
+            content_source_hash(_sample_content(), fmt=fmt_a),
+            content_source_hash(_sample_content(), fmt=fmt_b),
+        )
+        self.assertNotEqual(
+            content_source_hash(_sample_content()),
+            content_source_hash(_sample_content(), fmt=fmt_a),
+        )
+
     def test_changes_when_content_changes(self):
         a = _sample_content()
         b = _sample_content()
@@ -383,6 +397,66 @@ class CaptureEdgeCases(unittest.TestCase):
 
         fmt = capture_format_profile(doc, _sample_profile())
         self.assertFalse(fmt.dates_on_title_line)
+        # The separate date line still tells capture its separator and the
+        # open-ended label — exports must keep "– Present".
+        self.assertEqual(fmt.dates_separator, " – ")
+        self.assertEqual(fmt.dates_open_label, "Present")
+
+    def test_year_only_dates_separator(self):
+        doc = Document()
+        doc.add_paragraph("Jane Doe")
+        doc.add_paragraph("jane@x.com")
+        doc.add_paragraph("EDUCATION")
+        doc.add_paragraph("BS — MIT    2016 - 2020")
+
+        profile = _Profile(
+            summary=None,
+            basic_info=_Basic(name="Jane Doe", email="jane@x.com"),
+            education=[
+                _Edu(
+                    institution="MIT", degree="BS", field_of_study="CS",
+                    start_date="2016", end_date="2020",
+                )
+            ],
+        )
+        fmt = capture_format_profile(doc, profile)
+        self.assertEqual(fmt.dates_separator, " - ")
+
+    def test_inline_project_dates_keep_inline_link(self):
+        # "Name | link | dates" — both tail segments on the title line.
+        doc = Document()
+        doc.add_paragraph("Jane Doe")
+        doc.add_paragraph("jane@x.com")
+        doc.add_paragraph("PROJECTS")
+        doc.add_paragraph("Demo | demo.dev | 2026")
+
+        profile = _Profile(
+            summary=None,
+            basic_info=_Basic(name="Jane Doe", email="jane@x.com"),
+            projects=[
+                _Proj(
+                    name="Demo", link="demo.dev", description="d",
+                    start_date="2026", end_date=None,
+                )
+            ],
+        )
+        fmt = capture_format_profile(doc, profile)
+        self.assertTrue(fmt.project_dates_inline)
+        self.assertFalse(fmt.project_link_on_own_line)
+
+        content = _sample_content()
+        content.projects = [
+            ResumeProject(
+                name="Demo", link="demo.dev", description="d",
+                start_date="2026", end_date=None,
+            )
+        ]
+        texts = "\n".join(
+            p.text
+            for p in docx.Document(io.BytesIO(render_docx(content, fmt))).paragraphs
+            if p.text.strip()
+        )
+        self.assertIn("Demo | demo.dev | 2026", texts)
 
     def test_numbered_list_bullet_detected(self):
         doc = Document()

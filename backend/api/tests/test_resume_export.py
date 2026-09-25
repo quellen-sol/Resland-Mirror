@@ -134,8 +134,11 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
 
     async def test_same_hash_and_object_skips_render(self):
         content = await service._fetch_resume_content(_content_pg(), "u1")
-        hash_now = service.content_source_hash(content, template="original")
+        hash_now = service.content_source_hash(
+            content, template="original", fmt=default_format_profile()
+        )
         pg = _content_pg()
+        pg.results.put(_Result([]))  # no stored format → default profile
         pg.results.put(_Result([(hash_now, datetime.datetime(2025, 1, 1))]))
         s3 = self._s3()  # head_object succeeds → object exists
         with (
@@ -148,13 +151,37 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
         s3.upload_fileobj.assert_not_called()
         self.assertEqual(resp.generated_at, "2025-01-01T00:00:00")
 
+    async def test_changed_format_regenerates_despite_content_hash(self):
+        # Same resume content, but a re-upload changed the effective
+        # format profile — the export must re-render under the new look.
+        content = await service._fetch_resume_content(_content_pg(), "u1")
+        stored = default_format_profile()
+        stored.section_blank_lines = {"skills": 4}
+        hash_now = service.content_source_hash(
+            content, template="original", fmt=default_format_profile()
+        )
+        pg = _content_pg()
+        pg.results.put(_Result([(stored.to_json(),)]))  # stored fmt differs
+        pg.results.put(_Result([(hash_now, datetime.datetime.now(datetime.timezone.utc))]))
+        pg.results.put(_Result([(datetime.datetime.now(datetime.timezone.utc),)]))
+        s3 = self._s3()
+        with (
+            patch.object(service, "get_s3_client", return_value=s3),
+            patch.object(service, "render_docx", return_value=b"docx"),
+        ):
+            resp = await service.export_resume(pg, "u1")
+        self.assertTrue(resp.regenerated)
+        s3.upload_fileobj.assert_called_once()
+
     async def test_missing_object_regenerates_despite_hash(self):
         content = await service._fetch_resume_content(_content_pg(), "u1")
-        hash_now = service.content_source_hash(content, template="original")
+        hash_now = service.content_source_hash(
+            content, template="original", fmt=default_format_profile()
+        )
         pg = _content_pg()
-        pg.results.put(_Result([(hash_now, datetime.datetime.now())]))
-        pg.results.put(_Result([]))
-        pg.results.put(_Result([(datetime.datetime.now(),)]))
+        pg.results.put(_Result([]))  # no stored format → default profile
+        pg.results.put(_Result([(hash_now, datetime.datetime.now(datetime.timezone.utc))]))
+        pg.results.put(_Result([(datetime.datetime.now(datetime.timezone.utc),)]))
         s3 = self._s3()
         s3.head_object.side_effect = ClientError(
             {"Error": {"Code": "404"}}, "HeadObject"

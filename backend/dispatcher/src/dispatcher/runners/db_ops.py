@@ -424,14 +424,25 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
         pg_client.execute(
             "DELETE FROM user_social_link WHERE user_id = %s", [user_id]
         )
+        # unique(user_id, type) holds one row per type — keep the first
+        # link of each in header order and log whatever is dropped.
+        seen_types: set[str] = set()
         for link in getattr(profile.basic_info, "links", None) or []:
+            link_type = _social_link_type(link)
+            if link_type in seen_types:
+                print(
+                    f"user_social_link: dropping extra {link_type} link "
+                    f"for {user_id}: {link}"
+                )
+                continue
+            seen_types.add(link_type)
             pg_client.execute(
                 """
                 INSERT INTO user_social_link (user_id, link, type)
                 VALUES (%s, %s, %s)
                 ON CONFLICT (user_id, type) DO NOTHING
                 """,
-                [user_id, link, _social_link_type(link)],
+                [user_id, link, link_type],
             )
 
         # Bullets FK to experiences — delete children before parents.

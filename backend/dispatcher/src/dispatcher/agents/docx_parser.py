@@ -41,7 +41,8 @@ Extract:
 - professional summary
 - basic_info: name, email, phone, location, links
   (github, linkedin, personal site — every URL in the header block, as
-  written, without https:// unless printed that way)
+  written, without https:// unless printed that way; at most one link of
+  each type — if several sites appear, keep the first)
 - experience: company, position, start_date, end_date, bullets
 - skills: grouped by category
 - education: institution, degree, field_of_study, dates, description

@@ -196,7 +196,10 @@ async def export_resume(pg_conn: PgConnection, user_id: str):
         )
 
     s3_key = GENERATED_KEY_TEMPLATE.format(user_id=user_id)
-    source_hash = content_source_hash(content, template=TEMPLATE_ORIGINAL)
+    fmt = await _fetch_format_profile(pg_conn, user_id)
+    source_hash = content_source_hash(
+        content, template=TEMPLATE_ORIGINAL, fmt=fmt
+    )
 
     existing = await _fetch_one(
         pg_conn,
@@ -220,7 +223,6 @@ async def export_resume(pg_conn: PgConnection, user_id: str):
         or not _object_exists(s3_client, s3_key)
     )
     if stale:
-        fmt = await _fetch_format_profile(pg_conn, user_id)
         docx_bytes = render_docx(content, fmt)
         s3_client.upload_fileobj(
             io.BytesIO(docx_bytes), S3_RESUME_BUCKET, s3_key
