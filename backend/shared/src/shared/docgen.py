@@ -29,6 +29,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 from docx.text.paragraph import Paragraph
+from docx.text.run import Run
 
 from .pdfdoc import PdfDoc, PdfLine, page_columns
 
@@ -44,6 +45,13 @@ ROLE_ENTRY_TITLE = "entry_title"
 ROLE_ENTRY_SUB = "entry_sub"
 ROLE_BODY = "body"
 ROLE_BULLET = "bullet"
+# Optional roles — present only when the source shows them: hyperlinks
+# (contact line links, own-line project links) and project block styles,
+# which often differ from the experience look.
+ROLE_LINK = "link"
+ROLE_PROJECT_TITLE = "project_title"
+ROLE_PROJECT_SUB = "project_sub"
+ROLE_PROJECT_BODY = "project_body"
 ALL_ROLES = (
     ROLE_NAME,
     ROLE_CONTACT,
@@ -99,6 +107,7 @@ class RoleStyle:
     bold: bool = False
     italic: bool = False
     color: str | None = None  # "RRGGBB"
+    underline: bool = False
     alignment: str | None = None  # left|center|right|justify
     space_before_pt: float = 0.0
     space_after_pt: float = 0.0
@@ -135,6 +144,10 @@ class FormatProfile:
     project_dates_inline: bool = False
     # Empty paragraphs the source puts directly above each section header.
     section_blank_lines: dict[str, int] = field(default_factory=dict)
+    # Per-section header styles — sources often size SKILLS/PROJECTS
+    # headers differently from EXPERIENCE. Falls back to
+    # roles[ROLE_SECTION_HEADER] for sections not captured.
+    section_header_roles: dict[str, RoleStyle] = field(default_factory=dict)
     section_order: list[str] = field(default_factory=lambda: list(ALL_SECTIONS))
     section_titles: dict[str, str] = field(
         default_factory=lambda: dict(DEFAULT_SECTION_TITLES)
@@ -149,6 +162,10 @@ class FormatProfile:
         data = dict(data)
         data["roles"] = {
             role: RoleStyle(**style) for role, style in data.get("roles", {}).items()
+        }
+        data["section_header_roles"] = {
+            section: RoleStyle(**style)
+            for section, style in data.get("section_header_roles", {}).items()
         }
         return FormatProfile(**data)
 
@@ -304,6 +321,10 @@ def _run_style(run, para: Paragraph) -> RoleStyle:
     italic = _pick(
         run.font.italic if run else None, getattr(style_font, "italic", None)
     )
+    underline = _pick(
+        run.font.underline if run else None,
+        getattr(style_font, "underline", None),
+    )
     color_rgb = _pick(
         run.font.color.rgb if run and run.font.color is not None else None,
         getattr(getattr(style_font, "color", None), "rgb", None),
@@ -320,6 +341,7 @@ def _run_style(run, para: Paragraph) -> RoleStyle:
         bold=bool(bold) if bold is not None else False,
         italic=bool(italic) if italic is not None else False,
         color=str(color_rgb) if color_rgb is not None else None,
+        underline=bool(underline) if underline is not None else False,
         alignment=alignment.name.lower() if alignment is not None else None,
         space_before_pt=_pt_or_zero(pf.space_before),
         space_after_pt=_pt_or_zero(pf.space_after),
@@ -654,12 +676,14 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
     for idxs in (exp_idx, skill_idx, edu_idx, proj_idx, bullet_idx):
         claimed.update(idxs)
     section_blank_lines: dict[str, int] = {}
+    section_header_roles: dict[str, RoleStyle] = {}
     for section, first in section_first.items():
         header_idx = _section_header_idx(paras, first, claimed)
         if header_idx is None:
             continue
         claimed.add(header_idx)
         section_titles[section] = paras[header_idx].text.strip()
+        section_header_roles[section] = _para_style(paras[header_idx])
         blank = _blank_lines_above(paras, header_idx)
         if blank:
             section_blank_lines[section] = blank
@@ -765,6 +789,17 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
         location_idx is not None and location_idx != contact_idx
     )
 
+    # Hyperlinks carry their own look (blue, underlined) distinct from
+    # the contact text around them — capture the first hyperlink run.
+    if contact_idx is not None and ROLE_LINK not in roles:
+        for hlink in paras[contact_idx]._p.findall(qn("w:hyperlink")):
+            r = hlink.find(qn("w:r"))
+            if r is not None:
+                roles[ROLE_LINK] = _run_style(
+                    Run(r, paras[contact_idx]), paras[contact_idx]
+                )
+                break
+
     # Skills: how the source separates category from items, and whether the
     # category label is bolded.
     skills_category_separator = ": "
@@ -816,6 +851,40 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
                 proj_sep = _title_separator(proj_text, first_proj.name, anchor)
                 if proj_sep:
                     entry_title_separator = proj_sep
+            # Projects often style name/tail/link differently from
+            # experience entries — capture dedicated roles from the first
+            # matched project block.
+            proj_para = paras[proj_name_idx]
+            roles.setdefault(
+                ROLE_PROJECT_TITLE,
+                _run_style(_first_text_run(proj_para), proj_para),
+            )
+            proj_tail_run = _last_text_run(proj_para)
+            if proj_tail_run is not None and proj_tail_run is not _first_text_run(
+                proj_para
+            ):
+                roles.setdefault(
+                    ROLE_PROJECT_SUB, _run_style(proj_tail_run, proj_para)
+                )
+            if first_proj.description:
+                desc_idx = _match_idx(paras, first_proj.description[:48])
+                if desc_idx is not None:
+                    roles.setdefault(
+                        ROLE_PROJECT_BODY, _para_style(paras[desc_idx])
+                    )
+            if project_link_on_own_line and first_proj.link:
+                link_para = paras[link_idx]
+                for hlink in link_para._p.findall(qn("w:hyperlink")):
+                    r = hlink.find(qn("w:r"))
+                    if r is not None:
+                        roles.setdefault(
+                            ROLE_LINK, _run_style(Run(r, link_para), link_para)
+                        )
+                        break
+                if ROLE_LINK not in roles:
+                    link_style = _para_style(link_para)
+                    if link_style.color or link_style.underline:
+                        roles[ROLE_LINK] = link_style
 
     # Roles from matched paragraphs (first hit wins per role).
     if name_idx is not None:
@@ -888,6 +957,7 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
         project_link_on_own_line=project_link_on_own_line,
         project_dates_inline=project_dates_inline,
         section_blank_lines=section_blank_lines,
+        section_header_roles=section_header_roles,
         section_order=section_order,
         section_titles=section_titles,
         roles=roles,
@@ -1058,12 +1128,14 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
     claimed = {i for i in [name_idx, contact_idx] if i is not None}
     for idxs in (exp_idx, skill_idx, edu_idx, proj_idx, bullet_idx):
         claimed.update(idxs)
+    section_header_roles: dict[str, RoleStyle] = {}
     for section, first in section_first.items():
         header_idx = _section_header_idx(lines, first, claimed)
         if header_idx is None:
             continue
         claimed.add(header_idx)
         section_titles[section] = lines[header_idx].text.strip()
+        section_header_roles[section] = _style(lines[header_idx])
         if ROLE_SECTION_HEADER not in roles:
             roles[ROLE_SECTION_HEADER] = _style(lines[header_idx])
 
@@ -1178,6 +1250,19 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
                 proj_sep = _title_separator(proj_text, first_proj.name, anchor)
                 if proj_sep:
                     entry_title_separator = proj_sep
+            # Same optional project roles as the docx path — pdf lines
+            # carry one dominant style each, so head/tail can't split.
+            roles.setdefault(ROLE_PROJECT_TITLE, _style(lines[proj_name_idx]))
+            if first_proj.description:
+                desc_idx = _match_idx(lines, first_proj.description[:48])
+                if desc_idx is not None:
+                    roles.setdefault(
+                        ROLE_PROJECT_BODY, _style(lines[desc_idx])
+                    )
+            if project_link_on_own_line and first_proj.link:
+                link_style = _style(lines[link_idx])
+                if link_style.color:
+                    roles.setdefault(ROLE_LINK, link_style)
 
     # Roles from matched lines (first hit wins per role).
     if name_idx is not None:
@@ -1231,6 +1316,7 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
         skills_category_bold=skills_category_bold,
         project_link_on_own_line=project_link_on_own_line,
         project_dates_inline=project_dates_inline,
+        section_header_roles=section_header_roles,
         section_order=section_order,
         section_titles=section_titles,
         roles=roles,
@@ -1288,6 +1374,8 @@ def _write_run(para: Paragraph, text: str, style: RoleStyle):
         font.size = Pt(style.size_pt)
     font.bold = style.bold
     font.italic = style.italic
+    if style.underline:
+        font.underline = True
     if style.color:
         font.color.rgb = RGBColor.from_string(style.color)
     return run
@@ -1298,6 +1386,18 @@ def _role_para(doc: _Document, text: str, style: RoleStyle) -> Paragraph:
     _apply_role(para, style)
     _write_run(para, text, style)
     return para
+
+
+def _overlay_link(base: RoleStyle, link: RoleStyle) -> RoleStyle:
+    """Link look on top of the surrounding text's style: inherit font and
+    size from the base so an 8.5pt link run inside a 12pt contact line
+    doesn't snap the line to 8.5pt."""
+    merged = RoleStyle(**asdict(link))
+    if merged.font_name is None:
+        merged.font_name = base.font_name
+    if merged.size_pt is None:
+        merged.size_pt = base.size_pt
+    return merged
 
 
 def _set_columns(section, count: int):
@@ -1323,14 +1423,20 @@ def _dates(start: str, end: str | None, fmt: FormatProfile) -> str:
 
 
 def _entry_header(
-    doc: _Document, title: str, tail: str | None, dates: str, fmt: FormatProfile
+    doc: _Document,
+    title: str,
+    tail: str | None,
+    dates: str,
+    fmt: FormatProfile,
+    title_role: str = ROLE_ENTRY_TITLE,
+    sub_role: str = ROLE_ENTRY_SUB,
 ):
     """One entry heading: title + optional tail (company) joined by the
     captured separator, dates floated right through a tab stop. When the
     source styles the tail lighter than the title (entry_title_tail_sub),
-    the tail and dates run in entry_sub."""
-    title_style = fmt.role(ROLE_ENTRY_TITLE)
-    sub_style = fmt.role(ROLE_ENTRY_SUB)
+    the tail and dates run in the sub role."""
+    title_style = fmt.roles.get(title_role, fmt.role(ROLE_ENTRY_TITLE))
+    sub_style = fmt.roles.get(sub_role, fmt.role(ROLE_ENTRY_SUB))
     sep = fmt.entry_title_separator
 
     def _title_runs(para: Paragraph):
@@ -1365,7 +1471,11 @@ def _section_header(doc: _Document, section: str, fmt: FormatProfile):
         blank = doc.add_paragraph()
         _apply_role(blank, fmt.role(ROLE_BODY))
     title = fmt.section_titles.get(section) or DEFAULT_SECTION_TITLES[section]
-    _role_para(doc, title, fmt.role(ROLE_SECTION_HEADER))
+    _role_para(
+        doc,
+        title,
+        fmt.section_header_roles.get(section, fmt.role(ROLE_SECTION_HEADER)),
+    )
 
 
 def _bullet_para(doc: _Document, text: str, fmt: FormatProfile):
@@ -1415,7 +1525,20 @@ def render_docx(content: ResumeContent, fmt: FormatProfile) -> bytes:
     contact_bits.extend(bit for bit in header.links if bit)
     if contact_bits:
         sep = f" {fmt.contact_separator} "
-        _role_para(doc, sep.join(contact_bits), fmt.role(ROLE_CONTACT))
+        contact_style = fmt.role(ROLE_CONTACT)
+        link_style = fmt.roles.get(ROLE_LINK)
+        para = doc.add_paragraph()
+        _apply_role(para, contact_style)
+        link_set = set(header.links)
+        for i, bit in enumerate(contact_bits):
+            if i:
+                _write_run(para, sep, contact_style)
+            style = (
+                _overlay_link(contact_style, link_style)
+                if link_style and bit in link_set
+                else contact_style
+            )
+            _write_run(para, bit, style)
     if fmt.location_on_own_line and header.location:
         _role_para(doc, header.location, fmt.role(ROLE_LOCATION))
 
@@ -1476,6 +1599,7 @@ def render_docx(content: ResumeContent, fmt: FormatProfile) -> bytes:
 
         elif section_key == SECTION_PROJECTS and content.projects:
             _section_header(doc, section_key, fmt)
+            proj_body_style = fmt.roles.get(ROLE_PROJECT_BODY, body_style)
             for proj in content.projects:
                 dates = _dates(proj.start_date, proj.end_date, fmt)
                 if fmt.project_dates_inline:
@@ -1487,16 +1611,39 @@ def render_docx(content: ResumeContent, fmt: FormatProfile) -> bytes:
                         if proj.link and not fmt.project_link_on_own_line
                         else dates
                     )
-                    _entry_header(doc, proj.name, tail, "", fmt)
+                    _entry_header(
+                        doc,
+                        proj.name,
+                        tail,
+                        "",
+                        fmt,
+                        title_role=ROLE_PROJECT_TITLE,
+                        sub_role=ROLE_PROJECT_SUB,
+                    )
                 else:
                     tail = (
                         proj.link if not fmt.project_link_on_own_line else None
                     )
-                    _entry_header(doc, proj.name, tail, dates, fmt)
+                    _entry_header(
+                        doc,
+                        proj.name,
+                        tail,
+                        dates,
+                        fmt,
+                        title_role=ROLE_PROJECT_TITLE,
+                        sub_role=ROLE_PROJECT_SUB,
+                    )
                 if fmt.project_link_on_own_line and proj.link:
-                    _role_para(doc, proj.link, sub_style)
+                    link_style = fmt.roles.get(ROLE_LINK)
+                    _role_para(
+                        doc,
+                        proj.link,
+                        _overlay_link(sub_style, link_style)
+                        if link_style
+                        else sub_style,
+                    )
                 if proj.description:
-                    _role_para(doc, proj.description, body_style)
+                    _role_para(doc, proj.description, proj_body_style)
 
     buf = io.BytesIO()
     doc.save(buf)

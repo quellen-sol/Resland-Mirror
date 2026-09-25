@@ -292,6 +292,20 @@ class FixtureCapture(unittest.TestCase):
             self.fmt.section_blank_lines.get(SECTION_PROJECTS), 1
         )
 
+    def test_per_section_header_and_optional_roles(self):
+        # SKILLS/PROJECTS headers run larger than EXPERIENCE's 10.5.
+        self.assertEqual(self.fmt.section_header_roles["skills"].size_pt, 11.0)
+        self.assertEqual(self.fmt.section_header_roles["projects"].size_pt, 11.0)
+        link = self.fmt.roles["link"]
+        self.assertTrue(link.underline)
+        self.assertEqual(link.color, "1155CC")
+        proj_title = self.fmt.roles["project_title"]
+        self.assertEqual(proj_title.size_pt, 10.0)
+        self.assertTrue(proj_title.bold)
+        self.assertFalse(proj_title.italic)
+        self.assertEqual(self.fmt.roles["project_sub"].size_pt, 9.0)
+        self.assertEqual(self.fmt.roles["project_body"].size_pt, 10.0)
+
     def test_body_style_from_items_not_label(self):
         # Skills lines split into a bold label and plain items — the body
         # look comes from the items run (9.5pt, not bold).
@@ -341,6 +355,26 @@ class FixtureRender(unittest.TestCase):
         self.assertIn("github.com/quellen-sol", contact.text)
         self.assertIn("linkedin.com/in/quellen", contact.text)
         self.assertEqual(str(contact.runs[0].font.color.rgb), "444444")
+        # Link segments keep the source's hyperlink look; the rest stays
+        # contact-gray.
+        link_runs = [
+            r for r in contact.runs if "github.com" in r.text
+        ]
+        self.assertTrue(link_runs[0].font.underline)
+        self.assertEqual(str(link_runs[0].font.color.rgb), "1155CC")
+
+    def test_section_header_sizes(self):
+        skills = next(p for p in self.paras if p.text == "SKILLS")
+        projects = next(p for p in self.paras if p.text == "PROJECTS")
+        self.assertEqual(_size(skills.runs[0]), 11.0)
+        self.assertEqual(_size(projects.runs[0]), 11.0)
+
+    def test_project_title_uses_project_roles(self):
+        title = self._by_text("VATMissions")
+        head = title.runs[0]
+        self.assertEqual(_size(head), 10.0)
+        self.assertTrue(head.font.bold)
+        self.assertFalse(head.font.italic)
 
     def test_location_own_line(self):
         loc = self.paras[2]
