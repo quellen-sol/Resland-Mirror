@@ -385,6 +385,16 @@ def upsert_resume_format(
         )
 
 
+def _social_link_type(link: str) -> str:
+    """Map a profile link onto the SocialLinkType enum (contract.prisma)."""
+    low = link.lower()
+    if "linkedin.com" in low:
+        return "LINKEDIN"
+    if "github.com" in low:
+        return "GITHUB"
+    return "WEBSITE"
+
+
 def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxProfile):
     with pg_client.transaction():
         pg_client.execute(
@@ -407,6 +417,33 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
                 profile.summary or None,
             ],
         )
+
+        # Header links feed the exported resume's contact line — replace the
+        # set wholesale like the other profile-owned rows. The table is
+        # unique on (user_id, type), so the first link per type wins.
+        pg_client.execute(
+            "DELETE FROM user_social_link WHERE user_id = %s", [user_id]
+        )
+        # unique(user_id, type) holds one row per type — keep the first
+        # link of each in header order and log whatever is dropped.
+        seen_types: set[str] = set()
+        for link in getattr(profile.basic_info, "links", None) or []:
+            link_type = _social_link_type(link)
+            if link_type in seen_types:
+                print(
+                    f"user_social_link: dropping extra {link_type} link "
+                    f"for {user_id}: {link}"
+                )
+                continue
+            seen_types.add(link_type)
+            pg_client.execute(
+                """
+                INSERT INTO user_social_link (user_id, link, type)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (user_id, type) DO NOTHING
+                """,
+                [user_id, link, link_type],
+            )
 
         # Bullets FK to experiences — delete children before parents.
         # Also from suggestions
