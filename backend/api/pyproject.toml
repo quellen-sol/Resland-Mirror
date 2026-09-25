@@ -27,11 +27,24 @@ api = "api:main"
 dev = [
     "pytest>=8.4,<9",
     "pytest-asyncio>=1.0,<2",
+    "pytest-cov>=6.2,<7",
+    "python-docx>=1.2.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]

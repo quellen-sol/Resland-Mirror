@@ -4,7 +4,21 @@ generation_ids=[] always takes the rate-card path (fetch_generation_cost_cents
 returns None before touching OpenRouter); the actual-cost path is stubbed.
 """
 
-import pytest
+try:
+    import pytest
+except ImportError:
+    # unittest discovery has no pytest — the pytest-function tests are
+    # ignored by unittest anyway, so a decorator stub is all the module
+    # needs to stay importable for its TestCase classes.
+    class _PytestStub:
+        @staticmethod
+        def fixture(f=None, **_kw):
+            return f if f is not None else (lambda g: g)
+
+        def __getattr__(self, name):
+            raise ImportError("pytest is required to run this test")
+
+    pytest = _PytestStub()
 
 from dispatcher.runners import db_ops
 

@@ -8,9 +8,30 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "boto3>=1.43.93",
     "psycopg[binary,pool]>=3.3.5",
     "python-docx>=1.2.0",
     "rabbitmq-amqp-python-client>=1.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4,<9",
+    "pytest-cov>=6.2,<7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
 ]
 
 [build-system]

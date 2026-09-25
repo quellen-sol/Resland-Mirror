@@ -20,16 +20,17 @@ try:
 except Exception:
     pass
 
-if _conn is None:
-    pytest.skip(
-        f"billing tests need Postgres at TEST_PG_URL ({TEST_PG_URL})",
-        allow_module_level=True,
-    )
-_conn.close()
+# Lazy skip inside the fixture so unit tests that don't need Postgres still
+# run when no database is reachable.
+PG_AVAILABLE = _conn is not None
+if _conn is not None:
+    _conn.close()
 
 
 @pytest.fixture
 async def pg():
+    if not PG_AVAILABLE:
+        pytest.skip(f"needs Postgres at TEST_PG_URL ({TEST_PG_URL})")
     conn = await psycopg.AsyncConnection.connect(TEST_PG_URL, autocommit=True)
     await conn.execute(
         'TRUNCATE balance_purchase, token_usage, model_pricing, "user" CASCADE'

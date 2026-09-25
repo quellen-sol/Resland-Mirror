@@ -1,0 +1,86 @@
+name: pr-ci
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TEST_PG_URL: postgres://resland:resland@localhost:5432/resland
+  DATABASE_URL: postgres://resland:resland@localhost:5432/resland
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: resland
+          POSTGRES_PASSWORD: resland
+          POSTGRES_DB: resland
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U resland -d resland"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm 10.x — successor pnpm/setup only supports pnpm v11+.
+      - uses: pnpm/action-setup@v6.0.10
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # The schema lives in the Prisma-Next contract (frontend/prisma),
+      # applied with `prisma db init`. The frontend install only exists to
+      # provide the CLI.
+      - name: Install frontend deps for the Prisma CLI
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Create database schema
+        working-directory: frontend
+        run: pnpm prisma db init
+
+      # pytest/pytest-cov were added to the dev groups without a re-locked
+      # uv.lock (PyPI was unreachable); refresh the lock here until it's
+      # committed.
+      - name: Resolve and lock dependencies
+        run: uv lock
+
+      - name: Test backend/shared
+        working-directory: backend/shared
+        run: uv run --frozen pytest --cov
+
+      - name: Test backend/api
+        working-directory: backend/api
+        run: uv run --frozen pytest --cov
+
+      - name: Test backend/dispatcher
+        working-directory: backend/dispatcher
+        run: uv run --frozen pytest --cov
