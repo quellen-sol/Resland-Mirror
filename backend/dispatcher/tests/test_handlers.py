@@ -220,6 +220,19 @@ class SuggestionHandlerMessages(unittest.TestCase):
             self.handler.on_amqp_message(_event({"session_id": "s1"}))
         self.assertIn("s1", self.handler.running_jobs)
 
+    def test_update_db_status_only_acts_on_failed(self):
+        with patch(
+            "dispatcher.handlers.suggestion_handler.set_suggestion_failed"
+        ) as failed, patch(
+            "dispatcher.handlers.suggestion_handler.get_pg_client"
+        ) as get_pg:
+            self.handler.update_db_status("s1", "COMPLETED")
+            failed.assert_not_called()
+            get_pg.assert_not_called()
+
+            self.handler.update_db_status("s1", "FAILED")
+            failed.assert_called_once()
+
 
 class TailorHandlerMessages(unittest.TestCase):
     def setUp(self):

@@ -60,6 +60,16 @@ async def start_suggestion(
             if not bullet:
                 raise HTTPException(status_code=404, detail="Bullet not found")
 
+    # Dead rows (e.g. FAILED) don't resume, but the unique index on
+    # (user_id, experience_id, bullet_id) would still block a fresh insert —
+    # sweep them first so "start over" always works.
+    await db.delete_inactive_sugg_sessions(
+        pg_conn,
+        user_id=user_id,
+        experience_id=req.experience_id,
+        bullet_id=req.bullet_id,
+    )
+
     # If all good, make the suggestion, then frontend will poll for status updates
     session_id = str(uuid.uuid4())
     await db.create_sugg_session(
@@ -75,7 +85,7 @@ async def start_suggestion(
     # the job below.
     await pg_conn.commit()
 
-    job = AmqpSuggestionJob(session_id=session_id)
+    job = AmqpSuggestionJob(session_id=session_id, prompt=req.prompt)
     publisher = await amqp_client.get_publisher(BULLET_SUGG_EXCHANGE_NAME, "#")
     await publisher.publish(job.to_message())
     # Dispatch a job for the agent to begin parsing
@@ -121,6 +131,43 @@ async def answer_suggestion(
     await pg_conn.commit()
 
     job = AmqpSuggestionJob(session_id=session_id, answer=req.text)
+    publisher = await amqp_client.get_publisher(BULLET_SUGG_EXCHANGE_NAME, "#")
+    await publisher.publish(job.to_message())
+
+    return {"ok": True}
+
+
+async def retry_suggestion(
+    user_id: str,
+    session_id: str,
+    pg_conn: PgConnection,
+    amqp_client: AmqpClientDep,
+) -> dict:
+    """Requeue a FAILED session. The dispatcher resumes the checkpointed
+    graph, so the user never has to re-answer anything."""
+    session = await db.get_sugg_session(
+        pg_conn=pg_conn, session_id=session_id, user_id=user_id
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="Suggestion session not found")
+    if session.status != "FAILED":
+        raise HTTPException(
+            status_code=409, detail="Only a failed suggestion can be retried"
+        )
+
+    # Retrying burns tokens again — apply the same balance gate as start.
+    await require_balance(pg_conn, user_id)
+
+    await db.update_sugg_session(
+        pg_conn, session_id, status="PROCESSING", pending_question=None, result=None
+    )
+    # Commit before publishing — the pooled connection otherwise commits at
+    # teardown and could overwrite the dispatcher's result write.
+    await pg_conn.commit()
+
+    # No answer and no prompt — the runner sees the checkpointed graph still
+    # has pending nodes and resumes it where it crashed.
+    job = AmqpSuggestionJob(session_id=session_id)
     publisher = await amqp_client.get_publisher(BULLET_SUGG_EXCHANGE_NAME, "#")
     await publisher.publish(job.to_message())
 

@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'31540dd849f6e9c286da91907829aea32ce114a05372af52009b69d742dd4a43'>;
+  StorageHashBase<'2d9e997e862ea3eb741cd87eb5ed1798cf439c142125663097f849b14b26463b'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -354,7 +354,7 @@ export type FieldOutputTypes = {
       readonly model: CodecTypes['pg/text@1']['output'] | null;
       readonly pending_question: CodecTypes['pg/text@1']['output'] | null;
       readonly result: CodecTypes['pg/text@1']['output'] | null;
-      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED';
+      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
     readonly UserTailorRun: {
@@ -492,7 +492,7 @@ export type FieldInputTypes = {
       readonly model: CodecTypes['pg/text@1']['input'] | null;
       readonly pending_question: CodecTypes['pg/text@1']['input'] | null;
       readonly result: CodecTypes['pg/text@1']['input'] | null;
-      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED';
+      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
     readonly UserTailorRun: {
@@ -630,7 +630,7 @@ export type StorageColumnTypes = {
       readonly model: CodecTypes['pg/text@1']['output'] | null;
       readonly pending_question: CodecTypes['pg/text@1']['output'] | null;
       readonly result: CodecTypes['pg/text@1']['output'] | null;
-      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED';
+      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
       readonly user_id: CodecTypes['pg/text@1']['output'];
     };
     readonly user_tailor_run: {
@@ -768,7 +768,7 @@ export type StorageColumnInputTypes = {
       readonly model: CodecTypes['pg/text@1']['input'] | null;
       readonly pending_question: CodecTypes['pg/text@1']['input'] | null;
       readonly result: CodecTypes['pg/text@1']['input'] | null;
-      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED';
+      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
       readonly user_id: CodecTypes['pg/text@1']['input'];
     };
     readonly user_tailor_run: {
@@ -1865,7 +1865,7 @@ type ContractBase = Omit<
             };
             readonly SuggestionStatus: {
               readonly kind: 'valueSet';
-              readonly values: readonly ['PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED'];
+              readonly values: readonly ['PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED', 'FAILED'];
             };
             readonly TailorStatus: {
               readonly kind: 'valueSet';
@@ -2833,6 +2833,7 @@ type ContractBase = Omit<
               { readonly name: 'PROCESSING'; readonly value: 'PROCESSING' },
               { readonly name: 'WAITING_FOR_INPUT'; readonly value: 'WAITING_FOR_INPUT' },
               { readonly name: 'COMPLETED'; readonly value: 'COMPLETED' },
+              { readonly name: 'FAILED'; readonly value: 'FAILED' },
             ];
           };
           readonly TailorStatus: {
