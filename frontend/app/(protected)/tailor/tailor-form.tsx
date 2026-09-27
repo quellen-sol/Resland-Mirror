@@ -130,7 +130,7 @@ export default function TailorForm({
     consecutiveFailuresRef.current = 0;
     try {
       startedAtRef.current = Date.now();
-      const { run_id } = (await apiFetch("", {
+      const { run_id, resumed } = (await apiFetch("", {
         method: "POST",
         body: JSON.stringify({
           job_description: text,
@@ -138,7 +138,15 @@ export default function TailorForm({
           role: roleName,
           model: model || null,
         }),
-      })) as { run_id: string };
+      })) as { run_id: string; resumed?: boolean };
+      if (resumed) {
+        // The API hands back an unfinished run — its credits weren't lost;
+        // the user still has to finish or cancel it.
+        toast.info("Resumed your in-progress tailoring", {
+          description:
+            "An unfinished session is still open — continue it here, or Cancel to discard it.",
+        });
+      }
       try {
         const status = (await apiFetch(`/${run_id}`)) as Omit<
           TailorRun,

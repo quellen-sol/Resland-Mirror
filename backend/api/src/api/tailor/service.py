@@ -34,7 +34,7 @@ async def start_tailor(
         )
         active = await active.fetchone()
         if active:
-            return model.StartTailorResponse(run_id=active[0])
+            return model.StartTailorResponse(run_id=active[0], resumed=True)
 
     await db.clear_finished_tailor_runs(pg_conn, user_id)
     await require_balance(pg_conn, user_id)

@@ -46,6 +46,7 @@ class StartTailor(unittest.IsolatedAsyncioTestCase):
                 pg, amqp, model.StartTailorRequest(job_description="JD"), "u1"
             )
         self.assertEqual(resp.run_id, "r-existing")
+        self.assertTrue(resp.resumed)
         bal.assert_not_called()
         self.assertEqual(amqp.publisher.published, [])
 

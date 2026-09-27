@@ -20,6 +20,7 @@ class AnswerRequest(BaseModel):
 
 class StartTailorResponse(BaseModel):
     run_id: str
+    resumed: bool = False
 
 
 class TailorStatusResponse(BaseModel):
