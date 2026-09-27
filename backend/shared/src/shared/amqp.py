@@ -1,18 +1,15 @@
 import json
-from contextlib import suppress
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any
 
-from rabbitmq_amqp_python_client import (
-    AddressHelper,
-    AMQPMessagingHandler,
-    AsyncConnection,
-    AsyncEnvironment,
-    ClassicQueueSpecification,
-    ConnectionClosed,
-    ExchangeSpecification,
-    ExchangeToQueueBindingSpecification,
-    ExchangeType,
-    Message,
+import aio_pika
+from aio_pika import ExchangeType
+from aio_pika.abc import (
+    AbstractChannel,
+    AbstractExchange,
+    AbstractIncomingMessage,
+    AbstractRobustConnection,
 )
 
 RESUME_QUEUE_NAME = "resume-parser-queue"
@@ -30,14 +27,37 @@ TAILOR_QUEUE_NAME = "tailor-queue"
 TAILOR_DLQ_NAME = "tailor-dlq"
 TAILOR_DLX_NAME = "tailor-dlx"
 
+# Every (exchange, queue) pair is declared and bound with "#" (topic).
+_TOPOLOGY_PAIRS = (
+    (RESUME_DLX_NAME, RESUME_DLQ_NAME),
+    (RESUME_EXCHANGE_NAME, RESUME_QUEUE_NAME),
+    (BULLET_SUGG_EXCHANGE_NAME, BULLET_SUGG_QUEUE_NAME),
+    (BULLET_SUGG_DLX_NAME, BULLET_SUGG_DLQ_NAME),
+    (TAILOR_DLX_NAME, TAILOR_DLQ_NAME),
+    (TAILOR_EXCHANGE_NAME, TAILOR_QUEUE_NAME),
+)
+
+_WORK_QUEUE_DLX = {
+    RESUME_QUEUE_NAME: RESUME_DLX_NAME,
+    BULLET_SUGG_QUEUE_NAME: BULLET_SUGG_DLX_NAME,
+    TAILOR_QUEUE_NAME: TAILOR_DLX_NAME,
+}
+
+
+def _queue_arguments(queue_name: str) -> dict | None:
+    dlx = _WORK_QUEUE_DLX.get(queue_name)
+    return {"x-dead-letter-exchange": dlx} if dlx else None
+
 
 class BaseAmqpJob:
     def to_bytes(self) -> bytes:
         as_json = json.dumps(self.__dict__)
         return as_json.encode()
 
-    def to_message(self) -> Message:
-        return Message(body=self.to_bytes())
+    def to_message(self) -> aio_pika.Message:
+        return aio_pika.Message(
+            body=self.to_bytes(), delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+        )
 
 
 @dataclass
@@ -66,13 +86,24 @@ class AmqpClientException(Exception):
     pass
 
 
+class AmqpPublisher:
+    def __init__(self, exchange: AbstractExchange, routing_key: str):
+        self._exchange = exchange
+        self._routing_key = routing_key
+
+    async def publish(self, message: aio_pika.Message):
+        await self._exchange.publish(
+            message, routing_key=self._routing_key, mandatory=False
+        )
+
+
 class AmqpClient:
-    async_env: AsyncEnvironment
-    amqp_connection: AsyncConnection | None = None
+    amqp_connection: AbstractRobustConnection | None = None
 
     def __init__(self, uri: str):
-        self.async_env = AsyncEnvironment(uri=uri)
-        self._publishers: dict = {}
+        self._uri = uri
+        self._publishers: dict[tuple[str, str], AmqpPublisher] = {}
+        self._channel: AbstractChannel | None = None
 
     async def setup(self, declare_topology=True):
         await self.connect()
@@ -80,11 +111,12 @@ class AmqpClient:
             await self.declare_topology()
 
     async def connect(self):
-        # A fresh connection invalidates any previously opened senders.
+        # A fresh connection invalidates any channels/exchanges opened on it.
         self._publishers.clear()
+        self._channel = None
         try:
-            self.amqp_connection = await self.async_env.connection()
-            await self.amqp_connection.dial()
+            # Robust connections re-dial and restore channels on drops.
+            self.amqp_connection = await aio_pika.connect_robust(self._uri)
         except Exception as e:
             raise AmqpClientException("Failed to connect to AMQP") from e
 
@@ -92,168 +124,62 @@ class AmqpClient:
         if self.amqp_connection:
             await self.amqp_connection.close()
             self.amqp_connection = None
+            self._channel = None
 
-    async def get_publisher(self, exchange_name: str, routing_key: str = "#"):
+    def _require_connection(self) -> AbstractRobustConnection:
         if not self.amqp_connection:
             raise AmqpClientException("AMQPClient not connected")
-        exchange_addr = AddressHelper.exchange_address(exchange_name, routing_key)
-        # Reuse senders — a second link with the same address gets the same
-        # link name, and the broker kills the connection (amqp:invalid-field).
-        if exchange_addr in self._publishers:
-            return self._publishers[exchange_addr]
-        try:
-            publisher = await self.amqp_connection.publisher(exchange_addr)
-        except ConnectionClosed:
-            # The broker may have dropped an idle connection; re-dial and retry once.
-            with suppress(Exception):
-                await self.amqp_connection.close()
-            await self.connect()
-            publisher = await self.amqp_connection.publisher(exchange_addr)
-        self._publishers[exchange_addr] = publisher
+        return self.amqp_connection
+
+    async def _get_channel(self) -> AbstractChannel:
+        conn = self._require_connection()
+        if self._channel is None or self._channel.is_closed:
+            # Cached publishers hold exchanges from the old channel — invalid.
+            self._channel = await conn.channel()
+            self._publishers.clear()
+        return self._channel
+
+    async def get_publisher(
+        self, exchange_name: str, routing_key: str = "#"
+    ) -> AmqpPublisher:
+        channel = await self._get_channel()
+        key = (exchange_name, routing_key)
+        publisher = self._publishers.get(key)
+        if publisher is None:
+            exchange = await channel.declare_exchange(
+                exchange_name,
+                ExchangeType.TOPIC,
+                durable=True,
+            )
+            publisher = AmqpPublisher(exchange, routing_key)
+            self._publishers[key] = publisher
         return publisher
 
-    async def get_consumer(self, queue_name: str, handler: AMQPMessagingHandler):
-        if not self.amqp_connection:
-            raise AmqpClientException("AMQPClient not connected")
-        queue_addr = AddressHelper.queue_address(queue_name)
-        return await self.amqp_connection.consumer(
-            destination=queue_addr, message_handler=handler
+    async def consume(
+        self,
+        queue_name: str,
+        on_message: Callable[[AbstractIncomingMessage], Awaitable[Any]],
+    ) -> AbstractChannel:
+        conn = self._require_connection()
+        # Each consumer gets its own channel so channel errors stay isolated.
+        channel = await conn.channel()
+        queue = await channel.declare_queue(
+            queue_name, durable=True, arguments=_queue_arguments(queue_name)
         )
-
-    async def get_manager(self):
-        if not self.amqp_connection:
-            raise AmqpClientException("AMQPClient not connected")
-        return await self.amqp_connection.management()
+        await queue.consume(on_message)
+        return channel
 
     async def declare_topology(self):
-        if not self.amqp_connection:
-            raise AmqpClientException("AMQPClient not connected")
-        manager = await self.get_manager()
-
-        # DLQs/DLXs
-        await manager.declare_exchange(
-            ExchangeSpecification(
-                name=RESUME_DLX_NAME,
-                exchange_type=ExchangeType.topic,
-                is_auto_delete=True,
-                is_durable=False,
+        channel = await self._get_channel()
+        for exchange_name, queue_name in _TOPOLOGY_PAIRS:
+            exchange = await channel.declare_exchange(
+                exchange_name,
+                ExchangeType.TOPIC,
+                durable=True,
             )
-        )
-        await manager.declare_queue(
-            ClassicQueueSpecification(name=RESUME_DLQ_NAME, is_durable=True)
-        )
-        await manager.bind(
-            ExchangeToQueueBindingSpecification(
-                source_exchange=RESUME_DLX_NAME,
-                destination_queue=RESUME_DLQ_NAME,
-                binding_key="#",
+            queue = await channel.declare_queue(
+                queue_name,
+                durable=True,
+                arguments=_queue_arguments(queue_name),
             )
-        )
-
-        # Declare exchanges, queues, bindings here
-        await manager.declare_exchange(
-            ExchangeSpecification(
-                name=RESUME_EXCHANGE_NAME,
-                exchange_type=ExchangeType.topic,
-                is_auto_delete=True,
-                is_durable=False,
-            )
-        )
-        await manager.declare_queue(
-            ClassicQueueSpecification(
-                name=RESUME_QUEUE_NAME,
-                is_durable=True,
-                dead_letter_exchange=RESUME_DLX_NAME,
-            )
-        )
-        await manager.bind(
-            ExchangeToQueueBindingSpecification(
-                source_exchange=RESUME_EXCHANGE_NAME,
-                destination_queue=RESUME_QUEUE_NAME,
-                binding_key="#",
-            )
-        )
-
-        # Bullet Sugg
-        await manager.declare_exchange(
-            ExchangeSpecification(
-                name=BULLET_SUGG_EXCHANGE_NAME,
-                exchange_type=ExchangeType.topic,
-                is_auto_delete=True,
-                is_durable=False,
-            )
-        )
-        await manager.declare_queue(
-            ClassicQueueSpecification(
-                name=BULLET_SUGG_QUEUE_NAME,
-                is_durable=True,
-                dead_letter_exchange=BULLET_SUGG_DLX_NAME,
-            )
-        )
-        await manager.bind(
-            ExchangeToQueueBindingSpecification(
-                source_exchange=BULLET_SUGG_EXCHANGE_NAME,
-                destination_queue=BULLET_SUGG_QUEUE_NAME,
-                binding_key="#",
-            )
-        )
-        await manager.declare_exchange(
-            ExchangeSpecification(
-                name=BULLET_SUGG_DLX_NAME,
-                exchange_type=ExchangeType.topic,
-                is_auto_delete=True,
-                is_durable=False,
-            )
-        )
-        await manager.declare_queue(
-            ClassicQueueSpecification(name=BULLET_SUGG_DLQ_NAME, is_durable=True)
-        )
-        await manager.bind(
-            ExchangeToQueueBindingSpecification(
-                source_exchange=BULLET_SUGG_DLX_NAME,
-                destination_queue=BULLET_SUGG_DLQ_NAME,
-                binding_key="#",
-            )
-        )
-
-        # Tailor
-        await manager.declare_exchange(
-            ExchangeSpecification(
-                name=TAILOR_DLX_NAME,
-                exchange_type=ExchangeType.topic,
-                is_auto_delete=True,
-                is_durable=False,
-            )
-        )
-        await manager.declare_queue(
-            ClassicQueueSpecification(name=TAILOR_DLQ_NAME, is_durable=True)
-        )
-        await manager.bind(
-            ExchangeToQueueBindingSpecification(
-                source_exchange=TAILOR_DLX_NAME,
-                destination_queue=TAILOR_DLQ_NAME,
-                binding_key="#",
-            )
-        )
-        await manager.declare_exchange(
-            ExchangeSpecification(
-                name=TAILOR_EXCHANGE_NAME,
-                exchange_type=ExchangeType.topic,
-                is_auto_delete=True,
-                is_durable=False,
-            )
-        )
-        await manager.declare_queue(
-            ClassicQueueSpecification(
-                name=TAILOR_QUEUE_NAME,
-                is_durable=True,
-                dead_letter_exchange=TAILOR_DLX_NAME,
-            )
-        )
-        await manager.bind(
-            ExchangeToQueueBindingSpecification(
-                source_exchange=TAILOR_EXCHANGE_NAME,
-                destination_queue=TAILOR_QUEUE_NAME,
-                binding_key="#",
-            )
-        )
+            await queue.bind(exchange, routing_key="#")
