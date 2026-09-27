@@ -412,13 +412,19 @@ _SEPARATORS = (" | ", " — ", " – ", " - ", " · ", " @ ", " at ")
 
 def _title_separator(text: str, head: str, tail: str) -> str | None:
     """The separator joining title and company on an entry line — "|" or
-    "—" etc. Detected from what actually sits between them in the source."""
-    i = text.find(head)
-    j = text.find(tail, i + len(head)) if i >= 0 else -1
-    if i >= 0 and j > i:
-        between = text[i + len(head) : j]
-        if between.strip():
-            return f" {between.strip()} "
+    "—" etc. Detected from what actually sits between them in the source,
+    whether the source orders them head-tail or tail-head."""
+    for first, second in ((head, tail), (tail, head)):
+        i = text.find(first)
+        j = text.find(second, i + len(first)) if i >= 0 else -1
+        if i >= 0 and j > i:
+            between = " ".join(text[i + len(first) : j].split())
+            if between:
+                # Punctuation joins take no leading space:
+                # "Title, Company", not "Title , Company".
+                if between[0] in ",;:.":
+                    return f"{between} "
+                return f" {between} "
     for candidate in _SEPARATORS:
         if candidate in text:
             return candidate
@@ -587,12 +593,16 @@ def _section_header_idx(
     paras: list[Paragraph], content_idx: int, claimed: set[int]
 ) -> int | None:
     """Nearest short, non-empty paragraph right above a section's first
-    matched content — treated as that section's header line."""
+    matched content — treated as that section's header line. A line ending
+    in sentence punctuation is content (e.g. a wrapped bullet tail), never
+    a header."""
     j = content_idx - 1
     while j >= 0 and content_idx - j <= 6:
         text = paras[j].text.strip()
         if text and len(text) <= 48 and j not in claimed:
-            return j
+            if not text.endswith((".", ",", ";")):
+                return j
+            return None
         if text:
             # Hit another section's content — stop looking.
             return None

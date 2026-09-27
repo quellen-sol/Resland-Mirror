@@ -68,16 +68,22 @@ def _doc(lines, hrules=(), number=0, width=612.0, height=792.0):
     )
 
 
-def _pdf_bytes(ops):
+def _pdf_bytes(ops, extra_objs=(), extra_resources=b""):
     """Minimal single-page PDF — Type1 base fonts, no compression — that a
-    real extractor can parse. xref offsets are computed, not guessed."""
+    real extractor can parse. xref offsets are computed, not guessed.
+    extra_objs are appended after the three font objects (8 0 obj on)."""
     content = "\n".join(ops).encode()
+    resources = (
+        b"/Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >>"
+        + (b" " + extra_resources if extra_resources else b"")
+        + b" >>"
+    )
     objs = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
         b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        b"/Resources << /Font << /F1 5 0 R /F2 6 0 R /F3 7 0 R >> >> "
-        b"/Contents 4 0 R >>",
+        + resources
+        + b" /Contents 4 0 R >>",
         b"<< /Length "
         + str(len(content)).encode()
         + b" >>\nstream\n"
@@ -86,6 +92,7 @@ def _pdf_bytes(ops):
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>",
+        *extra_objs,
     ]
     out = io.BytesIO()
     out.write(b"%PDF-1.4\n")
@@ -314,6 +321,87 @@ class ParsePdf(unittest.TestCase):
     def test_empty_content_stream(self):
         doc = pdfdoc.parse_pdf(_pdf_bytes([]))
         self.assertEqual(doc.lines, [])
+
+    def _fig_xobject(self, ops, w=300, h=100):
+        """A Form XObject (obj 8) — pdfminer surfaces it as LTFigure, and
+        real exporters (Canva, Word) wrap most page content in them."""
+        body = "\n".join(ops).encode()
+        return (
+            b"<< /Type /XObject /Subtype /Form /FormType 1 "
+            + f"/BBox [0 0 {w} {h}] ".encode()
+            + b"/Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> "
+            + b"/Length "
+            + str(len(body)).encode()
+            + b" >>\nstream\n"
+            + body
+            + b"\nendstream"
+        )
+
+    def test_text_inside_figures(self):
+        """Text drawn inside a Form XObject still lands in the IR —
+        the bug that emptied the issue-49 resume's header."""
+        fig = self._fig_xobject([_text(10, 50, "HIDDEN NAME", font="F2", size=16)])
+        ops = [
+            _text(72, 720, "before fig"),
+            "q 1 0 0 1 300 500 cm /Fm1 Do Q",
+            _text(72, 680, "after fig"),
+        ]
+        doc = pdfdoc.parse_pdf(
+            _pdf_bytes(
+                ops,
+                extra_objs=[fig],
+                extra_resources=b"/XObject << /Fm1 8 0 R >>",
+            )
+        )
+        texts = [l.text for l in doc.lines]
+        self.assertIn("HIDDEN NAME", texts)
+        self.assertIn("before fig", texts)
+        self.assertIn("after fig", texts)
+        fig_line = next(l for l in doc.lines if l.text == "HIDDEN NAME")
+        self.assertTrue(fig_line.style.bold)
+        self.assertEqual(fig_line.style.size_pt, 16.0)
+        # Absolute position — page x ≈ 300+10, baseline y = 500+50.
+        self.assertAlmostEqual(fig_line.x0, 310.0, delta=2.0)
+
+    def test_same_row_fragments_merge(self):
+        """A title at the left edge and right-floated dates at the same
+        baseline merge into one line."""
+        ops = [
+            _text(72, 640, "Acme - Engineer", font="F2", size=11),
+            _text(450, 640, "Jan 2020 - Present", font="F3", size=11),
+        ]
+        doc = pdfdoc.parse_pdf(_pdf_bytes(ops))
+        self.assertEqual(len(doc.lines), 1)
+        line = doc.lines[0]
+        self.assertIn("Acme - Engineer", line.text)
+        self.assertIn("Jan 2020 - Present", line.text)
+
+    def test_curve_dot_becomes_bullet_glyph(self):
+        """A tiny filled square right before the text on the same row is
+        a bullet dot — it becomes a '• ' prefix."""
+        ops = [
+            "63 640 3 3 re f",
+            _text(75, 640, "Did a thing"),
+            _text(75, 624, "Not a bullet"),
+        ]
+        doc = pdfdoc.parse_pdf(_pdf_bytes(ops))
+        self.assertEqual(doc.lines[0].text, "• Did a thing")
+        self.assertEqual(doc.lines[1].text, "Not a bullet")
+
+    def test_localized_two_column_region_is_not_page_columns(self):
+        """A small 2-col grid (skills) surrounded by full-width lines must
+        not mark the whole page two-column."""
+        ops = [_text(72, 740, "DANA PRESCOTT", font="F2", size=18)]
+        for i in range(4):
+            ops.append(_text(72, 640 - i * 14, f"wide content line {i}"))
+        # Localized grid: ~3 rows in the middle of the page.
+        for i in range(3):
+            ops.append(_text(72, 560 - i * 14, f"skill {i}"))
+            ops.append(_text(320, 560 - i * 14, f"skill right {i}"))
+        for i in range(4):
+            ops.append(_text(72, 440 - i * 14, f"more wide content {i}"))
+        doc = pdfdoc.parse_pdf(_pdf_bytes(ops))
+        self.assertEqual(pdfdoc.column_counts(doc), [1])
 
 
 if __name__ == "__main__":

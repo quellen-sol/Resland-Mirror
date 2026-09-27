@@ -16,6 +16,7 @@ from shared.docgen import (
     default_format_profile,
     render_docx,
 )
+from shared.pdfgen import render_pdf
 from shared.s3 import get_s3_client
 
 from ..deps import PgConnection
@@ -26,7 +27,8 @@ from ..env_vars import (
 )
 from . import model
 
-GENERATED_KEY_TEMPLATE = "resumes/{user_id}/generated.docx"
+GENERATED_DOCX_KEY = "resumes/{user_id}/generated.docx"
+GENERATED_PDF_KEY = "resumes/{user_id}/generated.pdf"
 TEMPLATE_ORIGINAL = "original"
 # Short-lived — long enough to start the download, useless after.
 PRESIGN_EXPIRY_SECONDS = 300
@@ -158,19 +160,30 @@ async def _fetch_resume_content(pg_conn: PgConnection, user_id: str) -> ResumeCo
     )
 
 
-async def _fetch_format_profile(pg_conn: PgConnection, user_id: str) -> FormatProfile:
+async def _fetch_format_profile(
+    pg_conn: PgConnection, user_id: str
+) -> tuple[FormatProfile, bool]:
+    """The stored layout profile plus whether it was captured from a pdf
+    upload (via the upload job that produced it) — pdf sources get pdf
+    output."""
     row = await _fetch_one(
         pg_conn,
-        "SELECT format FROM user_resume_format WHERE user_id = %s",
+        """
+        SELECT urf.format, uj.s3_key
+        FROM user_resume_format urf
+        LEFT JOIN user_upload_job uj ON uj.id = urf.source_job_id
+        WHERE urf.user_id = %s
+        """,
         (user_id,),
     )
     if not row:
-        return default_format_profile()
+        return default_format_profile(), False
+    was_pdf = bool(row[1] and str(row[1]).lower().endswith(".pdf"))
     try:
-        return FormatProfile.from_json(row[0])
+        return FormatProfile.from_json(row[0]), was_pdf
     except Exception:
         # A malformed stored profile shouldn't block export.
-        return default_format_profile()
+        return default_format_profile(), was_pdf
 
 
 def _object_exists(s3_client, key: str) -> bool:
@@ -198,8 +211,10 @@ async def export_resume(pg_conn: PgConnection, user_id: str):
             status_code=409, detail="Upload and parse a resume before exporting"
         )
 
-    s3_key = GENERATED_KEY_TEMPLATE.format(user_id=user_id)
-    fmt = await _fetch_format_profile(pg_conn, user_id)
+    fmt, was_pdf = await _fetch_format_profile(pg_conn, user_id)
+    s3_key = (GENERATED_PDF_KEY if was_pdf else GENERATED_DOCX_KEY).format(
+        user_id=user_id
+    )
     source_hash = content_source_hash(
         content, template=TEMPLATE_ORIGINAL, fmt=fmt
     )
@@ -207,7 +222,7 @@ async def export_resume(pg_conn: PgConnection, user_id: str):
     existing = await _fetch_one(
         pg_conn,
         """
-        SELECT source_hash, generated_at FROM user_generated_resume
+        SELECT source_hash, generated_at, s3_key FROM user_generated_resume
         WHERE user_id = %s
         """,
         (user_id,),
@@ -223,12 +238,15 @@ async def export_resume(pg_conn: PgConnection, user_id: str):
     stale = (
         not existing
         or existing[0] != source_hash
+        or existing[2] != s3_key
         or not _object_exists(s3_client, s3_key)
     )
     if stale:
-        docx_bytes = render_docx(content, fmt)
+        rendered = (
+            render_pdf(content, fmt) if was_pdf else render_docx(content, fmt)
+        )
         s3_client.upload_fileobj(
-            io.BytesIO(docx_bytes), S3_RESUME_BUCKET, s3_key
+            io.BytesIO(rendered), S3_RESUME_BUCKET, s3_key
         )
         row = await _fetch_one(
             pg_conn,

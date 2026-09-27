@@ -66,21 +66,37 @@ class PdfDoc:
         return [line for page in self.pages for line in page.lines]
 
 
-def page_columns(page: PdfPage) -> int:
-    """Estimated text-column count for a page. A second column exists when a
+def column_gutter(lines: list[PdfLine]) -> float | None:
+    """x position of a real second column's left edge, or None when the
+    lines form a single-column page. A second column exists when a
     substantial group of lines starts right of where the bulk of lines end —
     a gutter of white space no text crosses. Right-aligned dates share the
-    main column's right edge, so they don't count as a column."""
-    non_empty = [line for line in page.lines if not line.empty]
+    main column's right edge, so they don't count as a column, and neither
+    does a localized two-column grid (e.g. a skills block) on an otherwise
+    single-column page — both columns must run for a real vertical stretch."""
+    non_empty = [line for line in lines if not line.empty]
     if len(non_empty) < 6:
-        return 1
+        return None
     lefts = sorted(line.x0 for line in non_empty)
     gutter = lefts[int(len(lefts) * 0.75)]
     left_col = [line for line in non_empty if line.x1 <= gutter - 12]
     right_col = [line for line in non_empty if line.x0 >= gutter - 4]
-    if (
-        len(left_col) >= max(3, len(non_empty) * 0.25)
-        and len(right_col) >= max(3, len(non_empty) * 0.25)
+    if len(left_col) < max(3, len(non_empty) * 0.25) or len(right_col) < max(
+        3, len(non_empty) * 0.25
     ):
-        return 2
-    return 1
+        return None
+    span = max(line.bottom for line in non_empty) - min(
+        line.top for line in non_empty
+    )
+    for col in (left_col, right_col):
+        col_span = max(line.bottom for line in col) - min(
+            line.top for line in col
+        )
+        if span > 0 and col_span < span * 0.35:
+            return None
+    return gutter
+
+
+def page_columns(page: PdfPage) -> int:
+    """Estimated text-column count for a page (see column_gutter)."""
+    return 2 if column_gutter(page.lines) is not None else 1

@@ -84,22 +84,39 @@ class FetchResumeContent(unittest.IsolatedAsyncioTestCase):
 
 class FetchFormatProfile(unittest.IsolatedAsyncioTestCase):
     async def test_no_row_defaults(self):
-        fmt = await service._fetch_format_profile(_Pg([[]]), "u1")
+        fmt, was_pdf = await service._fetch_format_profile(_Pg([[]]), "u1")
         self.assertEqual(fmt, default_format_profile())
+        self.assertFalse(was_pdf)
 
     async def test_valid_row_parsed(self):
         stored = default_format_profile()
         stored.contact_separator = "·"
         stored.columns = 2
-        pg = _Pg([[(stored.to_json(),)]])
-        fmt = await service._fetch_format_profile(pg, "u1")
+        pg = _Pg([[(stored.to_json(), "resumes/u1/resume_doc.docx")]])
+        fmt, was_pdf = await service._fetch_format_profile(pg, "u1")
         self.assertEqual(fmt.contact_separator, "·")
         self.assertEqual(fmt.columns, 2)
+        self.assertFalse(was_pdf)
+
+    async def test_pdf_source_flags_pdf(self):
+        stored = default_format_profile()
+        pg = _Pg([[(stored.to_json(), "resumes/u1/resume_doc.pdf")]])
+        _, was_pdf = await service._fetch_format_profile(pg, "u1")
+        self.assertTrue(was_pdf)
+
+    async def test_no_source_job_is_docx(self):
+        # Format profiles captured before source_job_id existed have no
+        # upload join — they keep the docx path.
+        stored = default_format_profile()
+        pg = _Pg([[(stored.to_json(), None)]])
+        _, was_pdf = await service._fetch_format_profile(pg, "u1")
+        self.assertFalse(was_pdf)
 
     async def test_malformed_row_defaults(self):
-        pg = _Pg([[("not-json{",)]])
-        fmt = await service._fetch_format_profile(pg, "u1")
+        pg = _Pg([[("not-json{", None)]])
+        fmt, was_pdf = await service._fetch_format_profile(pg, "u1")
         self.assertEqual(fmt, default_format_profile())
+        self.assertFalse(was_pdf)
 
 
 class ObjectExists(unittest.TestCase):
@@ -128,8 +145,8 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
 
     async def test_fresh_upload_renders_and_presigns(self):
         pg = _content_pg()
-        pg.results.put(_Result([]))  # no existing generated row
         pg.results.put(_Result([]))  # no stored format → default
+        pg.results.put(_Result([]))  # no existing generated row
         pg.results.put(_Result([(datetime.datetime(2025, 1, 2),)]))  # RETURNING
         s3 = self._s3()
         with (
@@ -147,8 +164,10 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
 
     async def test_stale_hash_regenerates(self):
         pg = _content_pg()
-        pg.results.put(_Result([("old-hash", datetime.datetime.now())]))
-        pg.results.put(_Result([]))
+        pg.results.put(_Result([]))  # no stored format → default
+        pg.results.put(
+            _Result([("old-hash", datetime.datetime.now(), "resumes/u1/generated.docx")])
+        )
         pg.results.put(_Result([(datetime.datetime.now(),)]))
         s3 = self._s3()
         with (
@@ -166,7 +185,9 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
         )
         pg = _content_pg()
         pg.results.put(_Result([]))  # no stored format → default profile
-        pg.results.put(_Result([(hash_now, datetime.datetime(2025, 1, 1))]))
+        pg.results.put(
+            _Result([(hash_now, datetime.datetime(2025, 1, 1), "resumes/u1/generated.docx")])
+        )
         s3 = self._s3()  # head_object succeeds → object exists
         with (
             patch.object(service, "get_s3_client", return_value=s3),
@@ -188,8 +209,10 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
             content, template="original", fmt=default_format_profile()
         )
         pg = _content_pg()
-        pg.results.put(_Result([(stored.to_json(),)]))  # stored fmt differs
-        pg.results.put(_Result([(hash_now, datetime.datetime.now(datetime.timezone.utc))]))
+        pg.results.put(_Result([(stored.to_json(), "resumes/u1/resume_doc.docx")]))
+        pg.results.put(
+            _Result([(hash_now, datetime.datetime.now(datetime.timezone.utc), "resumes/u1/generated.docx")])
+        )
         pg.results.put(_Result([(datetime.datetime.now(datetime.timezone.utc),)]))
         s3 = self._s3()
         with (
@@ -207,7 +230,9 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
         )
         pg = _content_pg()
         pg.results.put(_Result([]))  # no stored format → default profile
-        pg.results.put(_Result([(hash_now, datetime.datetime.now(datetime.timezone.utc))]))
+        pg.results.put(
+            _Result([(hash_now, datetime.datetime.now(datetime.timezone.utc), "resumes/u1/generated.docx")])
+        )
         pg.results.put(_Result([(datetime.datetime.now(datetime.timezone.utc),)]))
         s3 = self._s3()
         s3.head_object.side_effect = ClientError(
@@ -219,6 +244,53 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
         ):
             resp = await service.export_resume(pg, "u1")
         self.assertTrue(resp.regenerated)
+
+    async def test_pdf_source_writes_pdf_key(self):
+        """A profile captured from a pdf upload renders pdf output and
+        stores it under generated.pdf — not the docx key."""
+        stored = default_format_profile()
+        pg = _content_pg()
+        pg.results.put(_Result([(stored.to_json(), "resumes/u1/resume_doc.pdf")]))
+        pg.results.put(_Result([]))  # no existing generated row
+        pg.results.put(_Result([(datetime.datetime(2025, 1, 2),)]))  # RETURNING
+        s3 = self._s3()
+        with (
+            patch.object(service, "get_s3_client", return_value=s3),
+            patch.object(service, "render_docx") as render_docx,
+            patch.object(service, "render_pdf", return_value=b"pdf") as render_pdf,
+        ):
+            resp = await service.export_resume(pg, "u1")
+        self.assertTrue(resp.regenerated)
+        render_docx.assert_not_called()
+        render_pdf.assert_called_once()
+        self.assertEqual(
+            s3.upload_fileobj.call_args.args[2], "resumes/u1/generated.pdf"
+        )
+        _, p_kwargs = s3.generate_presigned_url.call_args
+        self.assertEqual(p_kwargs["Params"]["Key"], "resumes/u1/generated.pdf")
+
+    async def test_key_switch_regenerates_despite_hash(self):
+        """Source hash unchanged but the target key flipped docx → pdf
+        (user re-uploaded a pdf) — the export must re-render."""
+        content = await service._fetch_resume_content(_content_pg(), "u1")
+        stored = default_format_profile()
+        hash_now = service.content_source_hash(
+            content, template="original", fmt=stored
+        )
+        pg = _content_pg()
+        pg.results.put(_Result([(stored.to_json(), "resumes/u1/resume_doc.pdf")]))
+        pg.results.put(
+            _Result([(hash_now, datetime.datetime.now(datetime.timezone.utc), "resumes/u1/generated.docx")])
+        )
+        pg.results.put(_Result([(datetime.datetime.now(datetime.timezone.utc),)]))
+        s3 = self._s3()
+        with (
+            patch.object(service, "get_s3_client", return_value=s3),
+            patch.object(service, "render_pdf", return_value=b"pdf"),
+        ):
+            resp = await service.export_resume(pg, "u1")
+        self.assertTrue(resp.regenerated)
+        s3.upload_fileobj.assert_called_once()
 
 
 if __name__ == "__main__":
