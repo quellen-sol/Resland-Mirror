@@ -345,16 +345,40 @@ def fetch_tailor_profile(pg_client: Connection, user_id: str) -> TailorProfile:
     )
 
 
-def set_tailor_question(pg_client: Connection, run_id: str, question: str | None):
+def set_tailor_question(
+    pg_client: Connection,
+    run_id: str,
+    question: str | None,
+    result: TailoredResume | None = None,
+):
+    # `result` is set when the post-submit feedback interrupt fired — the
+    # resume is reviewable while the run still waits for the user's reply.
+    payload = result.model_dump_json() if result else None
     with pg_client.transaction():
         pg_client.execute(
             """
             UPDATE user_tailor_run
-            SET pending_question = %s, status = 'WAITING_FOR_INPUT'
+            SET pending_question = %s, status = 'WAITING_FOR_INPUT',
+                result = COALESCE(%s, result)
             WHERE id = %s
             """,
-            (question, run_id),
+            (question, payload, run_id),
         )
+
+
+def complete_tailor_run(pg_client: Connection, run_id: str) -> bool:
+    """Mark the run finished — only valid once a result exists (the agent can
+    end without a fresh submit when the user accepts the resume)."""
+    with pg_client.transaction():
+        res = pg_client.execute(
+            """
+            UPDATE user_tailor_run
+            SET status = 'COMPLETED', pending_question = NULL
+            WHERE id = %s AND result IS NOT NULL
+            """,
+            (run_id,),
+        )
+        return res.rowcount > 0
 
 
 def set_tailor_result(pg_client: Connection, run_id: str, result: TailoredResume):

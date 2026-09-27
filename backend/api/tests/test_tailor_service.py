@@ -86,12 +86,16 @@ class GetTailorStatus(unittest.IsolatedAsyncioTestCase):
 
     async def test_fields_mapped(self):
         resp = await service.get_tailor_status(
-            _Pg([_Result(fetchone=_row(status="WAITING_FOR_INPUT", pending_question="Q"))]),
+            _Pg([_Result(fetchone=_row(status="WAITING_FOR_INPUT", pending_question="Q",
+                                       company_name="Acme", role="Engineer"))]),
             "u1",
             "r1",
         )
         self.assertEqual(resp.status, "WAITING_FOR_INPUT")
         self.assertEqual(resp.pending_question, "Q")
+        self.assertEqual(resp.job_description, "JD")
+        self.assertEqual(resp.company_name, "Acme")
+        self.assertEqual(resp.role, "Engineer")
 
 
 class AnswerTailor(unittest.IsolatedAsyncioTestCase):
@@ -123,6 +127,26 @@ class AnswerTailor(unittest.IsolatedAsyncioTestCase):
         body = json.loads(amqp.publisher.published[0].body)
         self.assertEqual(body["answer"], "yes please")
         self.assertEqual(body["run_id"], "r1")
+
+    async def test_answer_keeps_stored_result(self):
+        # Feedback on a submitted resume resumes the run — the stored result
+        # must survive the PROCESSING transition so it stays on screen.
+        pg = _Pg(
+            [
+                _Result(
+                    fetchone=_row(status="WAITING_FOR_INPUT", result='{"x":1}')
+                ),
+                _Result(),
+            ]
+        )
+        out = await service.answer_tailor(
+            "u1", "r1", model.AnswerRequest(text="tweak"), pg, _Amqp()
+        )
+        self.assertEqual(out, {"ok": True})
+        update = next(q for q, _ in pg.queries if "UPDATE user_tailor_run" in q)
+        self.assertNotIn("result", update)
+        params = next(p for q, p in pg.queries if "UPDATE user_tailor_run" in q)
+        self.assertEqual(params, ("PROCESSING", None, "r1"))
 
 
 class DismissTailor(unittest.IsolatedAsyncioTestCase):

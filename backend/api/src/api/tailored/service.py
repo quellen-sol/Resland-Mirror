@@ -78,9 +78,10 @@ def _group_skills(
 
 
 async def save_from_run(pg_conn: PgConnection, user_id: str, run_id: str) -> str:
-    """Snapshot a COMPLETED tailor run into a board entry. The snapshot stores
-    display-ready content (experience metadata + skill categories resolved)
-    so it survives base-profile re-uploads that rebuild the base tables."""
+    """Snapshot a tailor run's stored result into a board entry. The snapshot
+    stores display-ready content (experience metadata + skill categories
+    resolved) so it survives base-profile re-uploads that rebuild the base
+    tables."""
     # A repeat save of the same run returns the existing board entry — a
     # reload drops the client's savedId, so the UI can't be the guard.
     existing_id = await db.get_tailored_by_run(pg_conn, user_id, run_id)
@@ -90,7 +91,9 @@ async def save_from_run(pg_conn: PgConnection, user_id: str, run_id: str) -> str
     run = await tailor_db.get_tailor_run(pg_conn, user_id=user_id, run_id=run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Tailor run not found")
-    if run.status != "COMPLETED" or not run.result:
+    # A run still in the post-submit feedback loop (WAITING_FOR_INPUT) is
+    # savable — the result is already stored while it waits for the user.
+    if not run.result:
         raise HTTPException(status_code=409, detail="Tailor run is not finished")
     try:
         result = model.TailorRunResult.model_validate_json(run.result)

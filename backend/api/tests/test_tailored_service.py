@@ -99,6 +99,21 @@ class SaveFromRun(unittest.IsolatedAsyncioTestCase):
             await service.save_from_run(pg, "u1", "r1")
         self.assertEqual(ctx.exception.status_code, 409)
 
+    async def test_waiting_feedback_run_is_savable(self):
+        # Post-submit review loop — result is stored while the run still
+        # waits for the user's reply, and that snapshot is savable.
+        pg = _Pg(
+            [
+                _Result(),  # get_tailored_by_run
+                one(_run_row(status="WAITING_FOR_INPUT")),
+                _Result([(1, "Acme", "Engineer", "2020", "2023")]),
+                _Result([("Python", "Languages"), ("Go", "Languages")]),
+                _Result(rowcount=1),
+            ]
+        )
+        tailored_id = await service.save_from_run(pg, "u1", "r1")
+        self.assertTrue(tailored_id)
+
     async def test_unreadable_result_409(self):
         pg = _Pg([_Result(), one(_run_row(result="{not json"))])
         with self.assertRaises(HTTPException) as ctx:

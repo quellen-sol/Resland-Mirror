@@ -399,7 +399,7 @@ class TailorAgent(unittest.TestCase):
     def _verify_call(self, resume):
         return tc("verify_tailored_resume", {"resume": resume})
 
-    def test_completed_flow_submits_resume(self):
+    def test_submit_waits_for_feedback_then_done_completes(self):
         resume = {
             "summary": None,
             "experiences": [
@@ -415,9 +415,38 @@ class TailorAgent(unittest.TestCase):
                 tc("submit_tailored_resume", {"resume": resume}, tc_id="tc-4"),
             ]
         )
-        self.assertEqual(outcome.status, "completed")
+        # A submitted resume pauses on the review interrupt — the result
+        # rides along so the runner can store it while waiting.
+        self.assertEqual(outcome.status, "waiting")
         self.assertEqual(outcome.result.skills, ["Python"])
         self.assertEqual(outcome.result.experiences[0].experience_id, 1)
+
+        # Revision feedback resumes the checkpointed graph — the agent sees
+        # the reply as a user message and resubmits, pausing again.
+        revised = {
+            "summary": None,
+            "experiences": [
+                {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "Shipped x"}]}
+            ],
+            "skills": ["Python"],
+        }
+        outcome, model = self._run(
+            [
+                self._verify_call(revised),
+                tc("submit_tailored_resume", {"resume": revised}),
+            ],
+            answer="stronger verbs",
+        )
+        self.assertEqual(outcome.status, "waiting")
+        self.assertEqual(outcome.result.experiences[0].bullets[0].text, "Shipped x")
+        self.assertEqual(model.calls[0][-1].content, "stronger verbs")
+
+        # "done" lets the agent end the conversation — no fresh submit, so
+        # the outcome carries no result and the runner completes the run.
+        outcome, model = self._run([ai("All set!")], answer="done")
+        self.assertEqual(outcome.status, "completed")
+        self.assertIsNone(outcome.result)
+        self.assertEqual(model.calls[0][-1].content, "done")
 
     def test_tools_hand_back_job_description_and_profile(self):
         _, model = self._run(
@@ -447,7 +476,9 @@ class TailorAgent(unittest.TestCase):
             run=run,
             profile=profile,
         )
-        self.assertEqual(outcome.status, "completed")
+        # Submit now pauses on the review interrupt instead of ending.
+        self.assertEqual(outcome.status, "waiting")
+        self.assertIsNotNone(outcome.result)
         self.assertEqual(model.calls[0][-1].content, "yes, write one")
 
     def test_usage_accumulates(self):

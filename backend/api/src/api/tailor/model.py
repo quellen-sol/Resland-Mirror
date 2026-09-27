@@ -24,6 +24,9 @@ class StartTailorResponse(BaseModel):
 
 class TailorStatusResponse(BaseModel):
     status: str
+    job_description: str
+    company_name: str | None = None
+    role: str | None = None
     pending_question: str | None = None
     result: str | None = None
 

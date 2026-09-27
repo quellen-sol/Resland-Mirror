@@ -7,6 +7,7 @@ from shared.pg import get_pg_client
 from ..agents.tailor import build_and_invoke_agent
 from ..env_vars import PG_URL, TAILOR_MODEL
 from .db_ops import (
+    complete_tailor_run,
     default_model_spec,
     fetch_tailor_profile,
     fetch_tailor_run,
@@ -86,13 +87,16 @@ class TailorRunner(LocalThreadJobRunner):
                         return
 
                     if outcome.status == "waiting":
-                        set_tailor_question(pg_conn, run_id, outcome.question)
+                        set_tailor_question(
+                            pg_conn, run_id, outcome.question, outcome.result
+                        )
                     else:
-                        if not outcome.result:
+                        if outcome.result:
+                            set_tailor_result(pg_conn, run_id, outcome.result)
+                        elif not complete_tailor_run(pg_conn, run_id):
                             raise RunnerError(
                                 "Agent finished without submitting a tailored resume"
                             )
-                        set_tailor_result(pg_conn, run_id, outcome.result)
                 finally:
                     if (
                         user_id

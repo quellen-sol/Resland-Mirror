@@ -63,16 +63,18 @@ async def update_tailor_run(
     *,
     status: str,
     pending_question: str | None,
-    result: str | None,
 ) -> None:
+    # `result` is intentionally untouched — a feedback answer resumes a run
+    # that already has a submitted resume, and it stays visible during the
+    # refinement pass.
     async with conn.cursor() as cursor:
         await cursor.execute(
             """
             UPDATE user_tailor_run
-            SET status = %s, pending_question = %s, result = %s
+            SET status = %s, pending_question = %s
             WHERE id = %s
             """,
-            (status, pending_question, result, run_id),
+            (status, pending_question, run_id),
         )
 
 

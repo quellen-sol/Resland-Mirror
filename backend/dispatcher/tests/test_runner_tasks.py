@@ -366,7 +366,7 @@ class SuggestionsRunnerTask(unittest.TestCase):
 
 
 class TailorRunnerTask(unittest.TestCase):
-    def _run(self, job_data, run=None, profile=None, outcome=None, agent_exc=None, agent_fn=None):
+    def _run(self, job_data, run=None, profile=None, outcome=None, agent_exc=None, agent_fn=None, complete_ret=True):
         conn = MagicMock()
         agent = MagicMock()
         if agent_exc is not None:
@@ -383,11 +383,12 @@ class TailorRunnerTask(unittest.TestCase):
             patch.object(tailor, "build_and_invoke_agent", agent),
             patch.object(tailor, "set_tailor_question") as set_q,
             patch.object(tailor, "set_tailor_result") as set_r,
+            patch.object(tailor, "complete_tailor_run", return_value=complete_ret) as complete,
             patch.object(tailor, "record_token_usage") as record,
         ):
             handle = tailor.TailorRunner(job_data).run()
             status = _poll_until(handle, "COMPLETED")
-        return status, set_q, set_r, record
+        return status, set_q, set_r, complete, record
 
     def test_missing_run_id_fails(self):
         status, *_ = self._run({})
@@ -415,7 +416,7 @@ class TailorRunnerTask(unittest.TestCase):
 
     def test_waiting_outcome_sets_question(self):
         outcome = tailor_agents.TailorRunOutcome(status="waiting", question="Summary?")
-        status, set_q, set_r, _ = self._run(
+        status, set_q, set_r, _, _ = self._run(
             {"run_id": "r1"}, run=_tailor_run(), profile=_tailor_profile(), outcome=outcome
         )
         self.assertEqual(status, "COMPLETED")
@@ -434,14 +435,62 @@ class TailorRunnerTask(unittest.TestCase):
             skills=[],
         )
         outcome = tailor_agents.TailorRunOutcome(status="completed", result=result)
-        status, _, set_r, _ = self._run(
+        status, _, set_r, complete, _ = self._run(
             {"run_id": "r1"}, run=_tailor_run(), profile=_tailor_profile(), outcome=outcome
         )
         self.assertEqual(status, "COMPLETED")
         set_r.assert_called_once()
+        complete.assert_not_called()
+
+    def test_waiting_with_result_stores_both(self):
+        # Post-submit review interrupt — the resume is stored while the run
+        # waits for feedback.
+        result = tailor_agents.TailoredResume(
+            summary=None,
+            experiences=[
+                tailor_agents.TailoredExperience(
+                    experience_id=1,
+                    bullets=[tailor_agents.TailoredBullet(bullet_id=10, text="x")],
+                )
+            ],
+            skills=[],
+        )
+        outcome = tailor_agents.TailorRunOutcome(
+            status="waiting", question="Review it", result=result
+        )
+        status, set_q, set_r, _, _ = self._run(
+            {"run_id": "r1"}, run=_tailor_run(), profile=_tailor_profile(), outcome=outcome
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.assertEqual(set_q.call_args.args[2:], ("Review it", result))
+        set_r.assert_not_called()
+
+    def test_completed_without_result_marks_existing_done(self):
+        # The user accepted the resume — the agent ended without resubmitting.
+        outcome = tailor_agents.TailorRunOutcome(status="completed")
+        status, _, set_r, complete, _ = self._run(
+            {"run_id": "r1"}, run=_tailor_run(), profile=_tailor_profile(), outcome=outcome
+        )
+        self.assertEqual(status, "COMPLETED")
+        complete.assert_called_once()
+        set_r.assert_not_called()
+
+    def test_completed_without_any_result_fails(self):
+        # Agent ended having never submitted — nothing to complete, so the
+        # run errors out.
+        outcome = tailor_agents.TailorRunOutcome(status="completed")
+        status, _, _, complete, _ = self._run(
+            {"run_id": "r1"},
+            run=_tailor_run(),
+            profile=_tailor_profile(),
+            outcome=outcome,
+            complete_ret=False,
+        )
+        self.assertEqual(status, "FAILED")
+        complete.assert_called_once()
 
     def test_agent_crash_sets_resume_question(self):
-        status, set_q, _, _ = self._run(
+        status, set_q, _, _, _ = self._run(
             {"run_id": "r1"},
             run=_tailor_run(),
             profile=_tailor_profile(),
@@ -459,7 +508,7 @@ class TailorRunnerTask(unittest.TestCase):
             usage["all_costed"] = True
             return tailor_agents.TailorRunOutcome(status="waiting", question="Q")
 
-        status, _, _, record = self._run(
+        status, _, _, _, record = self._run(
             {"run_id": "r1"},
             run=_tailor_run(),
             profile=_tailor_profile(),
@@ -473,7 +522,7 @@ class TailorRunnerTask(unittest.TestCase):
         self.assertEqual(kw["generation_ids"], ["gen-1"])
 
     def test_zero_usage_skips_billing_record(self):
-        status, _, _, record = self._run(
+        status, _, _, _, record = self._run(
             {"run_id": "r1"},
             run=_tailor_run(),
             profile=_tailor_profile(),

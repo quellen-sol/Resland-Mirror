@@ -66,6 +66,9 @@ async def get_tailor_status(
 
     return model.TailorStatusResponse(
         status=res.status,
+        job_description=res.job_description,
+        company_name=res.company_name,
+        role=res.role,
         pending_question=res.pending_question,
         result=res.result,
     )
@@ -85,7 +88,7 @@ async def answer_tailor(
         raise HTTPException(status_code=409, detail="Run is not awaiting input")
 
     await db.update_tailor_run(
-        pg_conn, run_id, status="PROCESSING", pending_question=None, result=None
+        pg_conn, run_id, status="PROCESSING", pending_question=None
     )
     # Commit before publishing — the pooled connection otherwise commits at
     # teardown and could overwrite the dispatcher's result write.
