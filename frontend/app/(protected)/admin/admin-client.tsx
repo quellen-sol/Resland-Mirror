@@ -71,6 +71,12 @@ interface AdminPurchase {
   created_at: string;
 }
 
+interface SiteSettings {
+  maintenance_mode: boolean;
+  payments_paused: boolean;
+  updated_at?: string | null;
+}
+
 function fmtDate(iso: string) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime())
@@ -185,6 +191,8 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
   const [recentQ, setRecentQ] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<SiteSettings | null>(null);
+  const [savingSetting, setSavingSetting] = useState<string | null>(null);
 
   function loadAdmin() {
     return Promise.all([
@@ -192,8 +200,13 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       apiFetch(accessToken, "/admin/usage"),
       apiFetch(accessToken, "/admin/purchases"),
       apiFetch(accessToken, "/admin/models"),
+      fetch("/api/admin/settings").then((r) => {
+        if (!r.ok) throw new Error(`settings ${r.status}`);
+        return r.json();
+      }),
     ])
-      .then(([u, usage, p, m]) => {
+      .then(([u, usage, p, m, s]) => {
+        setSettings(s as SiteSettings);
         setUsers((u as { users: AdminUser[] }).users);
         setModels((m as { models: ModelPricing[] }).models);
         const us = usage as {
@@ -222,6 +235,31 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
     void loadAdmin();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  async function saveSettings(patch: Partial<SiteSettings>) {
+    if (!settings) return;
+    const prev = settings;
+    const key = Object.keys(patch)[0];
+    setSavingSetting(key);
+    setSettings({ ...settings, ...patch });
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setSettings((await res.json()) as SiteSettings);
+      toast.success("Settings saved");
+    } catch (e) {
+      setSettings(prev);
+      toast.error("Couldn't save settings", {
+        description: describeApiError(e),
+      });
+    } finally {
+      setSavingSetting(null);
+    }
+  }
 
   const numInput =
     "w-24 rounded border border-zinc-700 bg-zinc-800 px-1.5 py-1 text-xs";
@@ -385,6 +423,54 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <CardHeader>
+          <CardTitle className="text-lg">Site settings</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          {(
+            [
+              {
+                key: "maintenance_mode",
+                label: "Maintenance mode",
+                desc: "Serve the 503 maintenance page to everyone but site admins. API requests get a 503; docs and the Stripe webhook stay up.",
+              },
+              {
+                key: "payments_paused",
+                label: "Pause payments",
+                desc: "Block new checkouts. Balances, history, and Stripe webhooks are unaffected, so in-flight purchases still settle.",
+              },
+            ] as const
+          ).map((row) => (
+            <label
+              key={row.key}
+              className="flex cursor-pointer items-start gap-3"
+            >
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 cursor-pointer accent-purple-500"
+                checked={settings?.[row.key] ?? false}
+                disabled={!settings || savingSetting === row.key}
+                onChange={(e) =>
+                  void saveSettings({ [row.key]: e.target.checked })
+                }
+              />
+              <span>
+                <span className="block text-sm font-medium text-zinc-200">
+                  {row.label}
+                </span>
+                <span className="block text-xs text-zinc-500">{row.desc}</span>
+              </span>
+            </label>
+          ))}
+          {settings?.updated_at && (
+            <p className="text-xs text-zinc-600">
+              Last changed {fmtDate(settings.updated_at)}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
         <CardHeader className="flex-row items-center justify-between gap-2">

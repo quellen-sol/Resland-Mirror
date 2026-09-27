@@ -122,8 +122,10 @@ Production (`terraform/api.tf`): `stripe_secret_key` and
 in Stripe → Developers → Webhooks: `https://<api-host>/stripe/webhook`,
 events `checkout.session.completed`, `checkout.session.expired`,
 `charge.refunded`. `FRONTEND_BASE_URL` is `https://resland.org` in terraform —
-verify. `MAINTENANCE_MODE` is currently `"1"` in `api.tf` — confirm that's
-intentional before launch. Restricted keys are preferable to secret keys if
+verify. `MAINTENANCE_MODE` in `api.tf` only seeds the
+`site_settings.maintenance_mode` row on first read — afterwards the flag is
+toggled from `/admin` (Site settings). Confirm the seed value is intentional
+before launch. Restricted keys are preferable to secret keys if
 the API only needs Customer + Checkout write.
 
 ## 5. Testing
@@ -255,7 +257,8 @@ dashboard (payments minus refunds) each release cycle.
 - [ ] Live webhook endpoint registered with `checkout.session.completed`,
       `checkout.session.expired`, `charge.refunded`.
 - [ ] Live keys set via terraform vars; test keys nowhere near prod env.
-- [ ] `MAINTENANCE_MODE` flag reviewed.
+- [ ] `site_settings` flags reviewed in `/admin` (maintenance mode + payments
+      paused).
 - [ ] `TOKEN_PACKS` pricing and `model_pricing` seed data signed off.
 - [ ] §5.1 sandbox walkthrough completed end-to-end; §5.2 tests green.
 - [ ] Alerts live for webhook non-2xx and dispatcher charge-recording failures.

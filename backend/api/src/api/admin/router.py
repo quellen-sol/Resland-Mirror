@@ -22,6 +22,18 @@ async def admin_purchases(user_id: SiteAdmin, pg_conn: PgConnection):
     return await service.list_purchases(pg_conn=pg_conn)
 
 
+@router.get("/settings", response_model=model.SiteSettingsResponse)
+async def admin_get_settings(user_id: SiteAdmin, pg_conn: PgConnection):
+    return await service.get_settings(pg_conn=pg_conn)
+
+
+@router.put("/settings", response_model=model.SiteSettingsResponse)
+async def admin_put_settings(
+    body: model.SiteSettingsUpdate, user_id: SiteAdmin, pg_conn: PgConnection
+):
+    return await service.update_settings(pg_conn=pg_conn, body=body)
+
+
 @router.get("/models", response_model=model.AdminModelsResponse)
 async def admin_models(user_id: SiteAdmin, pg_conn: PgConnection):
     return await service.list_models(pg_conn=pg_conn)

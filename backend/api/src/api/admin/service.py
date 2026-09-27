@@ -1,7 +1,32 @@
 from fastapi import HTTPException
 
+from .. import site_settings
 from ..deps import PgConnection
 from . import model
+
+
+def _settings_response(s: site_settings.SiteSettings) -> model.SiteSettingsResponse:
+    return model.SiteSettingsResponse(
+        maintenance_mode=s.maintenance_mode,
+        payments_paused=s.payments_paused,
+        updated_at=s.updated_at.isoformat() if s.updated_at else None,
+    )
+
+
+async def get_settings(pg_conn: PgConnection) -> model.SiteSettingsResponse:
+    return _settings_response(await site_settings.get(pg_conn))
+
+
+async def update_settings(
+    pg_conn: PgConnection, body: model.SiteSettingsUpdate
+) -> model.SiteSettingsResponse:
+    return _settings_response(
+        await site_settings.update(
+            pg_conn,
+            maintenance_mode=body.maintenance_mode,
+            payments_paused=body.payments_paused,
+        )
+    )
 
 
 async def list_users(pg_conn: PgConnection) -> model.AdminUsersResponse:

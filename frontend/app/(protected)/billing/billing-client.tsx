@@ -47,9 +47,11 @@ function fmtDate(iso: string) {
 export default function BillingClient({
   accessToken,
   checkoutResult,
+  paymentsPaused,
 }: {
   accessToken: string;
   checkoutResult: string | null;
+  paymentsPaused: boolean;
 }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [packs, setPacks] = useState<TokenPack[]>([]);
@@ -153,6 +155,15 @@ export default function BillingClient({
         </CardContent>
       </Card>
 
+      {paymentsPaused && (
+        <Card className="border-amber-800/60 bg-amber-950/40 text-amber-200">
+          <CardContent className="pt-6 text-sm">
+            Purchases are temporarily paused — your balance and history are
+            unaffected. Please check back soon.
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
         {packs.map((pack) => (
           <Card
@@ -171,7 +182,7 @@ export default function BillingClient({
               </p>
               <Button
                 onClick={() => buy(pack.id)}
-                disabled={busyPack !== null}
+                disabled={busyPack !== null || paymentsPaused}
                 className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
               >
                 {busyPack === pack.id ? (
