@@ -149,8 +149,7 @@ class AmqpClient:
             exchange = await channel.declare_exchange(
                 exchange_name,
                 ExchangeType.TOPIC,
-                durable=False,
-                auto_delete=True,
+                durable=True,
             )
             publisher = AmqpPublisher(exchange, routing_key)
             self._publishers[key] = publisher
@@ -176,8 +175,7 @@ class AmqpClient:
             exchange = await channel.declare_exchange(
                 exchange_name,
                 ExchangeType.TOPIC,
-                durable=False,
-                auto_delete=True,
+                durable=True,
             )
             queue = await channel.declare_queue(
                 queue_name,
