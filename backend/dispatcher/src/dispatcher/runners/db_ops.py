@@ -309,7 +309,8 @@ def fetch_tailor_profile(pg_client: Connection, user_id: str) -> TailorProfile:
     with pg_client.cursor(row_factory=class_row(TailorSkillRow)) as cursor:
         skills = cursor.execute(
             """
-            SELECT name, category FROM user_base_skill WHERE user_id = %s
+            SELECT name, category FROM user_base_skill
+            WHERE user_id = %s ORDER BY sort_order, id
             """,
             [user_id],
         ).fetchall()
@@ -520,16 +521,18 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
             [user_id],
         )
 
+        sort_order = 0
         for skill_category in profile.skills:
             for skill in skill_category.skills:
                 pg_client.execute(
                     """
-                    INSERT INTO user_base_skill (user_id, name, category)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO user_base_skill (user_id, name, category, sort_order)
+                    VALUES (%s, %s, %s, %s)
                     ON CONFLICT (user_id, name) DO NOTHING
                     """,
-                    [user_id, skill, skill_category.category],
+                    [user_id, skill, skill_category.category, sort_order],
                 )
+                sort_order += 1
 
         pg_client.execute(
             """

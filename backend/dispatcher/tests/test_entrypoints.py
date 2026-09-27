@@ -1,15 +1,14 @@
 """Process entrypoints — dispatcher.async_main's consumer wiring and the
-module-level Postgres checkpointer setup in dispatcher.pg.
+Postgres checkpointer table setup in dispatcher.pg.do_pg_setup.
 
 Run: .venv/bin/python -m unittest backend.dispatcher.tests.test_entrypoints -v
 """
 
-import importlib
-import sys
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import dispatcher
+from dispatcher import pg as pg_module
 from shared.amqp import (
     BULLET_SUGG_QUEUE_NAME,
     RESUME_QUEUE_NAME,
@@ -35,8 +34,9 @@ class AsyncMain(unittest.IsolatedAsyncioTestCase):
             async def run(self):
                 self.ran = True
 
+        calls = []
         conn = MagicMock()
-        conn.dial = AsyncMock()
+        conn.dial = AsyncMock(side_effect=lambda: calls.append("dial"))
 
         async def _consumer(destination, message_handler):
             c = _Consumer(destination, message_handler)
@@ -47,9 +47,18 @@ class AsyncMain(unittest.IsolatedAsyncioTestCase):
         env = MagicMock()
         env.connection = AsyncMock(return_value=conn)
 
-        with patch.object(dispatcher, "AsyncEnvironment", return_value=env):
+        with (
+            patch.object(dispatcher, "AsyncEnvironment", return_value=env),
+            patch.object(
+                dispatcher,
+                "do_pg_setup",
+                side_effect=lambda: calls.append("pg_setup"),
+            ) as pg_setup,
+        ):
             await dispatcher.async_main()
 
+        pg_setup.assert_called_once_with()
+        self.assertEqual(calls[0], "pg_setup")
         self.assertEqual(conn.dial.await_count, 3)
         self.assertEqual(
             [c.destination for c in consumers],
@@ -65,27 +74,22 @@ class AsyncMain(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(all(c.ran for c in consumers))
 
 
-class PgModule(unittest.TestCase):
-    def test_import_sets_up_checkpointer(self):
+class PgSetup(unittest.TestCase):
+    def test_do_pg_setup_creates_checkpointer_tables(self):
         conn = MagicMock()
         cm = MagicMock()
         cm.__enter__ = MagicMock(return_value=conn)
         cm.__exit__ = MagicMock(return_value=False)
         saver = MagicMock()
-        sys.modules.pop("dispatcher.pg", None)
-        try:
-            with (
-                patch("psycopg.connect", return_value=cm) as connect,
-                patch(
-                    "langgraph.checkpoint.postgres.PostgresSaver",
-                    return_value=saver,
-                ) as saver_cls,
-            ):
-                importlib.import_module("dispatcher.pg")
-        finally:
-            sys.modules.pop("dispatcher.pg", None)
+        with (
+            patch("psycopg.connect", return_value=cm) as connect,
+            patch.object(
+                pg_module, "PostgresSaver", return_value=saver
+            ) as saver_cls,
+        ):
+            pg_module.do_pg_setup()
         connect.assert_called_once_with(
-            conninfo=dispatcher.env_vars.PG_URL, autocommit=True
+            conninfo=pg_module.PG_URL, autocommit=True
         )
         saver_cls.assert_called_once_with(conn)
         saver.setup.assert_called_once_with()

@@ -7,7 +7,11 @@ Run: .venv/bin/python -m unittest backend.api.tests.test_api_app -v
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from api import api, deps
+from fastapi.testclient import TestClient
+
+from api import api, auth, deps
+
+from .test_auth import _admin_conn, _token, _verify_patched
 
 
 class Lifespan(unittest.IsolatedAsyncioTestCase):
@@ -74,6 +78,63 @@ class MaintenanceMode(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(api.is_stripe_webhook_request(req))
         req.url.path = "/billing/checkout"
         self.assertFalse(api.is_stripe_webhook_request(req))
+
+
+class MaintenanceModeE2E(unittest.TestCase):
+    """The whole middleware stack via TestClient: real RS256 JWTs, only the
+    JWKS fetch and the Postgres connection are stubbed."""
+
+    def _client(self, admin_row):
+        conn = _admin_conn(admin_row)
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=conn)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        patches = [
+            patch.object(api, "MAINTENANCE_MODE", True),
+            *_verify_patched(),
+            patch.object(
+                auth.AsyncConnection, "connect", new=AsyncMock(return_value=cm)
+            ),
+        ]
+        for p in patches:
+            p.start()
+        self.addCleanup(lambda: [p.stop() for p in patches])
+        return TestClient(api.app)
+
+    def test_admin_reaches_router(self):
+        # /nope has no route — a 404 proves the request passed the middleware.
+        r = self._client((True,)).get(
+            "/nope", headers={"Authorization": f"Bearer {_token()}"}
+        )
+        self.assertEqual(r.status_code, 404)
+
+    def test_non_admin_jwt_503(self):
+        r = self._client((False,)).get(
+            "/nope", headers={"Authorization": f"Bearer {_token()}"}
+        )
+        self.assertEqual(r.status_code, 503)
+
+    def test_no_token_503(self):
+        self.assertEqual(self._client((True,)).get("/nope").status_code, 503)
+
+    def test_bad_token_503(self):
+        r = self._client((True,)).get(
+            "/nope", headers={"Authorization": "Bearer not.a.jwt"}
+        )
+        self.assertEqual(r.status_code, 503)
+
+    def test_docs_infra_exempt(self):
+        # openapi.json backs /docs and /redoc — exempting only /docs leaves
+        # the Swagger UI unable to fetch its spec during maintenance.
+        client = self._client((False,))
+        self.assertEqual(client.get("/docs").status_code, 200)
+        self.assertEqual(client.get("/openapi.json").status_code, 200)
+        self.assertEqual(client.get("/redoc").status_code, 200)
+
+    def test_stripe_webhook_exempt(self):
+        # GET on the POST-only route 405s — proves it cleared the middleware.
+        r = self._client((False,)).get("/stripe/webhook")
+        self.assertEqual(r.status_code, 405)
 
 
 if __name__ == "__main__":

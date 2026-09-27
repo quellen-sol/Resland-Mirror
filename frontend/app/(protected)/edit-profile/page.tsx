@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getUser, getUserProfileData } from "@/lib/db";
 import type { ProfileFormValues } from "@/components/profile-form";
+import { rowsToGroups } from "@/lib/skills";
 import EditProfileForm from "./edit-profile-form";
 
 export const metadata: Metadata = { title: "Edit profile" };
@@ -23,7 +24,9 @@ export default async function EditProfilePage() {
     phone: user.phone ?? "",
     location: user.location ?? "",
     socialLinks: socialLinks.map((l) => ({ type: l.type, link: l.link })),
-    skills: skills.map((s) => s.name),
+    skillGroups: rowsToGroups(
+      skills.map((s) => ({ name: s.name, category: s.category })),
+    ),
     experiences: experiences.map((e) => ({
       id: e.id,
       companyName: e.company_name,
@@ -66,7 +69,7 @@ export default async function EditProfilePage() {
   }
 
   return (
-    <div className="relative flex flex-1 justify-center overflow-hidden bg-zinc-950 px-6 py-10 font-sans">
+    <div className="relative flex flex-1 justify-center overflow-clip bg-zinc-950 px-6 py-10 font-sans">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
 
       <main className="relative w-full max-w-3xl">

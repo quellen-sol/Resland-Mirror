@@ -290,6 +290,30 @@ class DbOpsPg(unittest.TestCase):
         self.assertEqual(profile.education[0].institution, "MIT")
         self.assertEqual(profile.projects[0].name, "Proj")
 
+    def test_fetch_tailor_profile_orders_skills_by_sort_order(self):
+        self._user()
+        for name, category, order in [
+            ("AWS", "Cloud", 2),
+            ("Go", "Langs", 0),
+            ("Git", None, 3),
+            ("Rust", "Langs", 1),
+        ]:
+            self.conn.execute(
+                "INSERT INTO user_base_skill (user_id, name, category, sort_order)"
+                " VALUES ('u1', %s, %s, %s)",
+                (name, category, order),
+            )
+        profile = db_ops.fetch_tailor_profile(self.conn, "u1")
+        self.assertEqual(
+            [(s.name, s.category) for s in profile.skills],
+            [
+                ("Go", "Langs"),
+                ("Rust", "Langs"),
+                ("AWS", "Cloud"),
+                ("Git", None),
+            ],
+        )
+
     def test_fetch_tailor_profile_unknown_user_is_empty(self):
         profile = db_ops.fetch_tailor_profile(self.conn, "ghost")
         self.assertIsNone(profile.header)
@@ -428,6 +452,31 @@ class DbOpsPg(unittest.TestCase):
         ):
             n = self.conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
             self.assertEqual(n, 1, table)
+
+    def test_upsert_user_profile_writes_skill_sort_order(self):
+        self._user()
+        profile = UserDocxProfile(
+            summary="",
+            basic_info=UserProfileBasicInfo(
+                name="Jane", email="", phone="", location=""
+            ),
+            experience=[],
+            skills=[
+                UserSkillByCategory(category="Langs", skills=["Go", "Rust"]),
+                UserSkillByCategory(category="Cloud", skills=["AWS"]),
+            ],
+            education=[],
+            projects=[],
+        )
+        db_ops.upsert_user_profile(self.conn, "u1", profile)
+        rows = self.conn.execute(
+            "SELECT name, category, sort_order FROM user_base_skill"
+            " WHERE user_id='u1' ORDER BY sort_order"
+        ).fetchall()
+        self.assertEqual(
+            rows,
+            [("Go", "Langs", 0), ("Rust", "Langs", 1), ("AWS", "Cloud", 2)],
+        )
 
     def test_upsert_user_profile_replaces_prior_sections(self):
         self._user()

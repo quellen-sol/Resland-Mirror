@@ -55,18 +55,26 @@ async def is_site_admin_request(request: Request) -> bool:
     """Middleware-friendly admin check (no Depends): False on any failure."""
     authorization = request.headers.get("authorization")
     if not authorization or not authorization.startswith("Bearer "):
+        print("No bearer token")
         return False
     try:
         user_id = await asyncio.to_thread(_verify_token, authorization[7:])
+        print(f"Got user_id: {user_id}")
         async with await AsyncConnection.connect(
             conninfo=PG_URL, autocommit=True
         ) as conn:
-            return await _is_site_admin(conn, user_id)
-    except Exception:
+            site_admin = await _is_site_admin(conn, user_id)
+            print(f"{user_id} Is site admin: {site_admin}")
+            return site_admin
+    except Exception as e:
+        print(f"Exception from db: {e}")
         return False
 
 def is_docs_request(request: Request) -> bool:
-    return request.url.path.startswith("/docs")
+    # /docs alone isn't enough: Swagger UI and ReDoc fetch /openapi.json.
+    path = request.url.path
+    is_docs = path.startswith(("/docs", "/redoc")) or path == "/openapi.json"
+    return is_docs
 
 
 def is_stripe_webhook_request(request: Request) -> bool:

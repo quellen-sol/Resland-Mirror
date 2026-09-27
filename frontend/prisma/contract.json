@@ -1055,6 +1055,13 @@
                   "kind": "scalar"
                 }
               },
+              "sort_order": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "user_id": {
                 "nullable": false,
                 "type": {
@@ -1090,6 +1097,9 @@
                 },
                 "name": {
                   "column": "name"
+                },
+                "sort_order": {
+                  "column": "sort_order"
                 },
                 "user_id": {
                   "column": "user_id"
@@ -2432,6 +2442,15 @@
                   "nativeType": "text",
                   "nullable": false
                 },
+                "sort_order": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
                 "user_id": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -3079,7 +3098,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "2d9e997e862ea3eb741cd87eb5ed1798cf439c142125663097f849b14b26463b"
+    "storageHash": "787c1c218f39b6f79c7db522adeb4a8c58b137285b548d4c7b83b36d52982924"
   },
   "capabilities": {
     "postgres": {

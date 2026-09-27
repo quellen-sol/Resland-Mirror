@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'2d9e997e862ea3eb741cd87eb5ed1798cf439c142125663097f849b14b26463b'>;
+  StorageHashBase<'787c1c218f39b6f79c7db522adeb4a8c58b137285b548d4c7b83b36d52982924'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -326,6 +326,7 @@ export type FieldOutputTypes = {
       readonly user_id: CodecTypes['pg/text@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
       readonly category: CodecTypes['pg/text@1']['output'] | null;
+      readonly sort_order: CodecTypes['pg/int4@1']['output'];
     };
     readonly UserGeneratedResume: {
       readonly user_id: CodecTypes['pg/text@1']['output'];
@@ -464,6 +465,7 @@ export type FieldInputTypes = {
       readonly user_id: CodecTypes['pg/text@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly category: CodecTypes['pg/text@1']['input'] | null;
+      readonly sort_order: CodecTypes['pg/int4@1']['input'];
     };
     readonly UserGeneratedResume: {
       readonly user_id: CodecTypes['pg/text@1']['input'];
@@ -601,6 +603,7 @@ export type StorageColumnTypes = {
       readonly category: CodecTypes['pg/text@1']['output'] | null;
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly name: CodecTypes['pg/text@1']['output'];
+      readonly sort_order: CodecTypes['pg/int4@1']['output'];
       readonly user_id: CodecTypes['pg/text@1']['output'];
     };
     readonly user_generated_resume: {
@@ -739,6 +742,7 @@ export type StorageColumnInputTypes = {
       readonly category: CodecTypes['pg/text@1']['input'] | null;
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
+      readonly sort_order: CodecTypes['pg/int4@1']['input'];
       readonly user_id: CodecTypes['pg/text@1']['input'];
     };
     readonly user_generated_resume: {
@@ -1430,6 +1434,15 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: true;
+                };
+                readonly sort_order: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/int4@1', 0>;
+                  };
                 };
               };
               primaryKey: { readonly columns: readonly ['id'] };
@@ -2454,6 +2467,10 @@ type ContractBase = Omit<
                 readonly nullable: true;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly sort_order: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
             };
             readonly relations: {
               readonly user: {
@@ -2473,6 +2490,7 @@ type ContractBase = Omit<
                 readonly user_id: { readonly column: 'user_id' };
                 readonly name: { readonly column: 'name' };
                 readonly category: { readonly column: 'category' };
+                readonly sort_order: { readonly column: 'sort_order' };
               };
             };
           };
