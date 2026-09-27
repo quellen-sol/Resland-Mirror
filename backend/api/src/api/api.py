@@ -58,12 +58,14 @@ origins = [
     "http://192.168.1.8:3000",
     "https://resland.org",
     "https://www.resland.org",
-    "https://resland*.vercel.app",
 ]
+
+vercel_preview_origin = "https://resland.*\\.vercel\\.app"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=vercel_preview_origin,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
