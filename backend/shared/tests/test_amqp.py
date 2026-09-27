@@ -176,8 +176,7 @@ class AmqpClientAccessors(unittest.IsolatedAsyncioTestCase):
         channel.declare_exchange.assert_awaited_once_with(
             RESUME_EXCHANGE_NAME,
             ExchangeType.TOPIC,
-            durable=False,
-            auto_delete=True,
+            durable=True,
         )
 
     async def test_publisher_publish_routes_with_key(self):
@@ -283,8 +282,8 @@ class DeclareTopology(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(queues[RESUME_DLQ_NAME][1]["arguments"])
 
         for call in channel.declare_exchange.await_args_list:
-            self.assertEqual(call.kwargs["durable"], False)
-            self.assertEqual(call.kwargs["auto_delete"], True)
+            self.assertEqual(call.kwargs["durable"], True)
+            self.assertEqual(call.kwargs.get("auto_delete", False), False)
         for _, kwargs in queues.values():
             self.assertEqual(kwargs["durable"], True)
 
