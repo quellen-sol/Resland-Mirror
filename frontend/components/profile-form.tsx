@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { ArrowDown, ArrowUp, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -196,11 +197,13 @@ export default function ProfileForm({
   initial,
   pending,
   submitLabel,
+  cancelHref,
   onSubmit,
 }: {
   initial?: Partial<ProfileFormValues>;
   pending?: boolean;
   submitLabel: string;
+  cancelHref?: string;
   onSubmit: (data: ProfileFormValues) => void;
 }) {
   const [values, setValues] = useState<ProfileFormValues>({
@@ -243,6 +246,22 @@ export default function ProfileForm({
       setSkillDraft("");
     }
   }
+
+  const submitButton = (
+    <Button
+      onClick={() => onSubmit(values)}
+      disabled={pending}
+      className="h-9 border-0 bg-gradient-to-r from-violet-600 to-purple-600 px-6 text-white shadow-lg shadow-purple-950/50 hover:from-violet-500 hover:to-purple-500"
+    >
+      {pending ? (
+        <>
+          <Loader2 className="animate-spin" /> Saving…
+        </>
+      ) : (
+        submitLabel
+      )}
+    </Button>
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -708,19 +727,20 @@ export default function ProfileForm({
         </div>
       </section>
 
-      <Button
-        onClick={() => onSubmit(values)}
-        disabled={pending}
-        className="h-9 self-end border-0 bg-gradient-to-r from-violet-600 to-purple-600 px-6 text-white shadow-lg shadow-purple-950/50 hover:from-violet-500 hover:to-purple-500"
-      >
-        {pending ? (
-          <>
-            <Loader2 className="animate-spin" /> Saving…
-          </>
-        ) : (
-          submitLabel
-        )}
-      </Button>
+      {cancelHref ? (
+        <div className="sticky bottom-0 z-10 -mx-6 flex items-center justify-end gap-3 border-t border-zinc-800 bg-zinc-950/80 px-6 py-4 backdrop-blur">
+          <Button
+            variant="outline"
+            render={<Link href={cancelHref} />}
+            className="border-zinc-700 bg-transparent text-zinc-300 hover:bg-zinc-800"
+          >
+            Cancel
+          </Button>
+          {submitButton}
+        </div>
+      ) : (
+        <div className="flex justify-end">{submitButton}</div>
+      )}
     </div>
   );
 }

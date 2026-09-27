@@ -66,7 +66,7 @@ export default async function EditProfilePage() {
   }
 
   return (
-    <div className="relative flex flex-1 justify-center overflow-hidden bg-zinc-950 px-6 py-10 font-sans">
+    <div className="relative flex flex-1 justify-center overflow-clip bg-zinc-950 px-6 py-10 font-sans">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
 
       <main className="relative w-full max-w-3xl">
