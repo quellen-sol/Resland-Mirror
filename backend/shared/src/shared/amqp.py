@@ -72,6 +72,7 @@ class AmqpResumeJob(BaseAmqpJob):
 class AmqpSuggestionJob(BaseAmqpJob):
     session_id: str
     answer: str | None = None
+    prompt: str | None = None
     job_type: str = "suggestion"
 
 

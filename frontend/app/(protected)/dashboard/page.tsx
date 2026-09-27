@@ -209,6 +209,12 @@ export default async function DashboardPage() {
                     <SuggestionDialog
                       accessToken={accessToken}
                       experienceId={exp.id}
+                      contextLabel={`${exp.title} · ${exp.company_name}`}
+                      targetText={
+                        bulletsFor(exp.id)
+                          .map((b) => b.bullet)
+                          .join("\n") || undefined
+                      }
                     />
                   </span>
                 </div>
@@ -225,6 +231,7 @@ export default async function DashboardPage() {
                           experienceId={exp.id}
                           bulletId={b.id}
                           targetText={b.bullet}
+                          contextLabel={`${exp.title} · ${exp.company_name}`}
                           variant="icon"
                         />
                       </li>

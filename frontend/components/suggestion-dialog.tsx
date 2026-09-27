@@ -49,6 +49,7 @@ export default function SuggestionDialog({
   experienceId,
   bulletId,
   targetText,
+  contextLabel,
   variant = "button",
 }: {
   accessToken: string;
@@ -57,6 +58,8 @@ export default function SuggestionDialog({
   bulletId?: number;
   /** The current text the suggestion would replace — shown for comparison. */
   targetText?: string;
+  /** Job label shown in the header, e.g. "Engineer · Acme". */
+  contextLabel?: string;
   /** "icon" for per-bullet rows, "button" for the experience-level action. */
   variant?: "icon" | "button";
 }) {
@@ -65,6 +68,8 @@ export default function SuggestionDialog({
   const [model, setModel] = useState("");
   const [session, setSession] = useState<SuggestionSession | null>(null);
   const [answer, setAnswer] = useState("");
+  const [ownPrompt, setOwnPrompt] = useState("");
+  const [promptMode, setPromptMode] = useState(false);
   const [busy, setBusy] = useState(false);
   const finishedRef = useRef(false);
   const startedAtRef = useRef<number>(0);
@@ -76,8 +81,26 @@ export default function SuggestionDialog({
     return apiRequest(accessToken, `/bullets${path}`, init);
   }
 
-  async function start() {
-    if (session || !apiBaseUrl || busy) return;
+  function reportStartError(error: unknown) {
+    if (isInsufficientBalance(error)) {
+      toast.error("Insufficient balance", {
+        description: "Top up to keep going.",
+        action: {
+          label: "Top up",
+          onClick: () => router.push("/billing"),
+        },
+      });
+    } else {
+      toast.error("Couldn't start suggestion", {
+        description: describeApiError(error),
+      });
+    }
+  }
+
+  /** POST a fresh session (optionally seeded with the user's own prompt)
+   *  and prime local state for polling. */
+  async function launch(prompt?: string, closeOnError = true) {
+    if (!apiBaseUrl || busy) return;
     setBusy(true);
     finishedRef.current = false;
     consecutiveFailuresRef.current = 0;
@@ -89,6 +112,7 @@ export default function SuggestionDialog({
           experience_id: experienceId,
           bullet_id: bulletId ?? null,
           model: model || null,
+          prompt: prompt || null,
         }),
       })) as { session_id: string };
       try {
@@ -101,23 +125,53 @@ export default function SuggestionDialog({
         setSession({ session_id, status: "PROCESSING" });
       }
     } catch (error) {
-      if (isInsufficientBalance(error)) {
-        toast.error("Insufficient balance", {
-          description: "Top up to keep going.",
-          action: {
-            label: "Top up",
-            onClick: () => router.push("/billing"),
-          },
-        });
-      } else {
-        toast.error("Couldn't start suggestion", {
-          description: describeApiError(error),
-        });
-      }
-      setOpen(false);
+      reportStartError(error);
+      if (closeOnError) setOpen(false);
     } finally {
       setBusy(false);
     }
+  }
+
+  async function start() {
+    if (session) return;
+    await launch();
+  }
+
+  /** Requeue a FAILED session — the backend resumes the checkpointed agent
+   *  instead of starting over. */
+  async function retry() {
+    if (!session || busy) return;
+    setBusy(true);
+    try {
+      await apiFetch(`/suggestions/${session.session_id}/retry`, {
+        method: "POST",
+      });
+      startedAtRef.current = Date.now();
+      consecutiveFailuresRef.current = 0;
+      finishedRef.current = false;
+      setSession((s) => (s ? { ...s, status: "PROCESSING" } : s));
+    } catch (error) {
+      reportStartError(error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Discard the current suggestion and relaunch with the user's own prompt. */
+  async function submitOwnPrompt() {
+    const text = ownPrompt.trim();
+    if (!text || busy) return;
+    finishedRef.current = true;
+    if (session) {
+      await apiFetch(`/suggestions/${session.session_id}/dismiss`, {
+        method: "POST",
+      }).catch(() => {});
+    }
+    setSession(null);
+    setAnswer("");
+    setOwnPrompt("");
+    setPromptMode(false);
+    await launch(text, false);
   }
 
   useEffect(() => {
@@ -278,13 +332,14 @@ export default function SuggestionDialog({
         </DialogTrigger>
       )}
 
-      <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
+      <DialogContent className="max-h-[85vh] overflow-y-auto border-zinc-800 bg-zinc-900 text-zinc-100 sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-zinc-100">
             <Sparkles className="size-4 text-purple-400" />
             {bulletId ? "Improve this bullet" : "Improve this experience"}
           </DialogTitle>
           <DialogDescription className="text-zinc-400">
+            {contextLabel ? `${contextLabel} — ` : ""}
             The agent may ask a question or two before suggesting a rewrite.
           </DialogDescription>
         </DialogHeader>
@@ -311,9 +366,11 @@ export default function SuggestionDialog({
           {targetText && (
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
               <p className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-                Current
+                {bulletId ? "Your bullet point" : "Your current bullets"}
               </p>
-              <p className="mt-1 text-sm text-zinc-300">{targetText}</p>
+              <p className="mt-1 text-sm whitespace-pre-wrap text-zinc-300">
+                {targetText}
+              </p>
             </div>
           )}
 
@@ -366,6 +423,29 @@ export default function SuggestionDialog({
                   ))}
                 </ul>
               </div>
+              {promptMode && (
+                <div className="flex gap-2">
+                  <Input
+                    value={ownPrompt}
+                    onChange={(e) => setOwnPrompt(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void submitOwnPrompt();
+                      }
+                    }}
+                    placeholder="Tell the agent what to change…"
+                    className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                  />
+                  <Button
+                    onClick={submitOwnPrompt}
+                    disabled={busy || !ownPrompt.trim()}
+                    className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
+                  >
+                    <Send />
+                  </Button>
+                </div>
+              )}
               <div className="flex justify-end gap-2">
                 <Button
                   variant="outline"
@@ -373,7 +453,15 @@ export default function SuggestionDialog({
                   disabled={busy}
                   className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                 >
-                  Dismiss
+                  Cancel
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setPromptMode((v) => !v)}
+                  disabled={busy}
+                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                >
+                  Enter own prompt
                 </Button>
                 <Button
                   onClick={accept}
@@ -403,15 +491,25 @@ export default function SuggestionDialog({
           {failed && (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-red-400">
-                Something went wrong — try again.
+                Something went wrong on our end.
               </p>
-              <Button
-                variant="outline"
-                onClick={reset}
-                className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-              >
-                Start over
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={retry}
+                  disabled={busy}
+                  className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
+                >
+                  {busy ? <Loader2 className="animate-spin" /> : "Retry"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={reset}
+                  disabled={busy}
+                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                >
+                  Start over
+                </Button>
+              </div>
             </div>
           )}
           {gone && (

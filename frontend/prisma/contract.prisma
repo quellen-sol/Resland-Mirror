@@ -138,6 +138,7 @@ enum SuggestionStatus {
   PROCESSING
   WAITING_FOR_INPUT
   COMPLETED
+  FAILED
 }
 
 model UserSuggestion {

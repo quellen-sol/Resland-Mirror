@@ -207,6 +207,36 @@ class DbOpsPg(unittest.TestCase):
             [{"bullet_id": 3, "suggestion": "rewrote it"}],
         )
 
+    def test_set_suggestion_failed_marks_failed(self):
+        self._user()
+        exp = self._experience()
+        self._suggestion("s1", "u1", exp)
+        db_ops.set_suggestion_failed(self.conn, "s1")
+        status = self.conn.execute(
+            "SELECT status FROM user_suggestion WHERE id='s1'"
+        ).fetchone()[0]
+        self.assertEqual(status, "FAILED")
+
+    def test_set_suggestion_failed_preserves_completed_and_waiting(self):
+        self._user()
+        exp = self._experience()
+        self._suggestion("s1", "u1", exp)
+        self._suggestion("s2", "u1", exp)
+        self.conn.execute(
+            "UPDATE user_suggestion SET status='COMPLETED' WHERE id='s1'"
+        )
+        self.conn.execute(
+            "UPDATE user_suggestion SET status='WAITING_FOR_INPUT' WHERE id='s2'"
+        )
+        db_ops.set_suggestion_failed(self.conn, "s1")
+        db_ops.set_suggestion_failed(self.conn, "s2")
+        statuses = self.conn.execute(
+            "SELECT id, status FROM user_suggestion ORDER BY id"
+        ).fetchall()
+        self.assertEqual(
+            statuses, [("s1", "COMPLETED"), ("s2", "WAITING_FOR_INPUT")]
+        )
+
     # tailor ------------------------------------------------------------
 
     def test_fetch_tailor_run(self):
