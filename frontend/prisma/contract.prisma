@@ -88,11 +88,14 @@ model UserBaseExperienceBullet {
 }
 
 model UserBaseSkill {
-  id       Int     @id @default(autoincrement())
-  user_id  String
-  user     User    @relation(fields: [user_id], references: [auth0_id])
-  name     String
-  category String?
+  id         Int     @id @default(autoincrement())
+  user_id    String
+  user       User    @relation(fields: [user_id], references: [auth0_id])
+  name       String
+  category   String?
+  // Display order across all of the user's skills — groups render as
+  // contiguous runs of the same category in this order.
+  sort_order Int     @default(0)
 
   @@map("user_base_skill")
   @@unique([user_id, name])

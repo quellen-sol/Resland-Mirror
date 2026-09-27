@@ -111,8 +111,13 @@ export async function saveProfileEdit(input: SaveProfileInput) {
       });
     }
 
-    for (const name of input.skills) {
-      await tx.orm.public.UserBaseSkill.create({ user_id: user.auth0_id, name });
+    for (const [i, skill] of input.skills.entries()) {
+      await tx.orm.public.UserBaseSkill.create({
+        user_id: user.auth0_id,
+        name: skill.name,
+        category: skill.category,
+        sort_order: i,
+      });
     }
 
     for (const edu of input.education) {

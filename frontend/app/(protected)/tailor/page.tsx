@@ -11,7 +11,7 @@ export default async function TailorPage() {
   if (!user) redirect("/auth/login");
   const accessToken = await getAccessTokenOrLogin("/tailor");
 
-  const { experiences } = await getUserProfileData(user.auth0_id);
+  const { experiences, skills } = await getUserProfileData(user.auth0_id);
 
   return (
     <div className="relative flex flex-1 overflow-hidden bg-zinc-950 font-sans">
@@ -26,6 +26,7 @@ export default async function TailorPage() {
             start_date: e.start_date,
             end_date: e.end_date,
           }))}
+          skills={skills.map((s) => ({ name: s.name, category: s.category }))}
           hasProfile={experiences.length > 0}
         />
       </main>

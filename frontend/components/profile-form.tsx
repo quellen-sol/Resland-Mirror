@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { ArrowDown, ArrowUp, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { SkillGroupForm } from "@/lib/skills";
+import { ungroupedGroup } from "@/lib/skills";
+import SkillsEditor from "@/components/skills-editor";
 
 export interface SocialLinkForm {
   type: "LINKEDIN" | "GITHUB" | "WEBSITE";
@@ -58,7 +62,7 @@ export interface ProfileFormValues {
   phone: string;
   location: string;
   socialLinks: SocialLinkForm[];
-  skills: string[];
+  skillGroups: SkillGroupForm[];
   experiences: ExperienceForm[];
   education: EducationForm[];
   projects: ProjectForm[];
@@ -70,7 +74,7 @@ export const emptyProfileValues: ProfileFormValues = {
   phone: "",
   location: "",
   socialLinks: [],
-  skills: [],
+  skillGroups: [ungroupedGroup()],
   experiences: [
     {
       companyName: "",
@@ -196,19 +200,19 @@ export default function ProfileForm({
   initial,
   pending,
   submitLabel,
+  cancelHref,
   onSubmit,
 }: {
   initial?: Partial<ProfileFormValues>;
   pending?: boolean;
   submitLabel: string;
+  cancelHref?: string;
   onSubmit: (data: ProfileFormValues) => void;
 }) {
   const [values, setValues] = useState<ProfileFormValues>({
     ...emptyProfileValues,
     ...initial,
   });
-  const [skillDraft, setSkillDraft] = useState("");
-
   function set<K extends keyof ProfileFormValues>(
     key: K,
     value: ProfileFormValues[K],
@@ -236,13 +240,21 @@ export default function ProfileForm({
     setValues((v) => ({ ...v, [key]: v[key].filter((_, i) => i !== index) }));
   }
 
-  function addSkill() {
-    const name = skillDraft.trim();
-    if (name) {
-      set("skills", [...values.skills, name]);
-      setSkillDraft("");
-    }
-  }
+  const submitButton = (
+    <Button
+      onClick={() => onSubmit(values)}
+      disabled={pending}
+      className="h-9 border-0 bg-gradient-to-r from-violet-600 to-purple-600 px-6 text-white shadow-lg shadow-purple-950/50 hover:from-violet-500 hover:to-purple-500"
+    >
+      {pending ? (
+        <>
+          <Loader2 className="animate-spin" /> Saving…
+        </>
+      ) : (
+        submitLabel
+      )}
+    </Button>
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -345,46 +357,12 @@ export default function ProfileForm({
       {/* Skills */}
       <section>
         <h3 className="text-sm font-medium text-purple-300">Skills</h3>
-        <div className="mt-3 flex gap-2">
-          <Input
-            value={skillDraft}
-            onChange={(e) => setSkillDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addSkill();
-              }
-            }}
-            placeholder="e.g. TypeScript — press Enter to add"
-            className={inputCls}
+        <div className="mt-3">
+          <SkillsEditor
+            groups={values.skillGroups}
+            onChange={(groups) => set("skillGroups", groups)}
           />
-          <AddButton onClick={addSkill}>Add</AddButton>
         </div>
-        {values.skills.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {values.skills.map((skill, i) => (
-              <span
-                key={`${skill}-${i}`}
-                className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
-              >
-                {skill}
-                <button
-                  type="button"
-                  onClick={() =>
-                    set(
-                      "skills",
-                      values.skills.filter((_, j) => j !== i),
-                    )
-                  }
-                  className="text-purple-300/60 hover:text-purple-200"
-                  aria-label={`Remove ${skill}`}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
       </section>
 
       <Separator className="bg-zinc-800" />
@@ -708,19 +686,20 @@ export default function ProfileForm({
         </div>
       </section>
 
-      <Button
-        onClick={() => onSubmit(values)}
-        disabled={pending}
-        className="h-9 self-end border-0 bg-gradient-to-r from-violet-600 to-purple-600 px-6 text-white shadow-lg shadow-purple-950/50 hover:from-violet-500 hover:to-purple-500"
-      >
-        {pending ? (
-          <>
-            <Loader2 className="animate-spin" /> Saving…
-          </>
-        ) : (
-          submitLabel
-        )}
-      </Button>
+      {cancelHref ? (
+        <div className="sticky bottom-0 z-10 -mx-6 flex items-center justify-end gap-3 border-t border-zinc-800 bg-zinc-950/80 px-6 py-4 backdrop-blur">
+          <Button
+            variant="outline"
+            render={<Link href={cancelHref} />}
+            className="border-zinc-700 bg-transparent text-zinc-300 hover:bg-zinc-800"
+          >
+            Cancel
+          </Button>
+          {submitButton}
+        </div>
+      ) : (
+        <div className="flex justify-end">{submitButton}</div>
+      )}
     </div>
   );
 }
