@@ -82,19 +82,25 @@ def _tailored_row(**over):
 
 
 class SaveFromRun(unittest.IsolatedAsyncioTestCase):
+    async def test_repeat_save_returns_existing_entry(self):
+        pg = _Pg([one(("t-existing",))])
+        tailored_id = await service.save_from_run(pg, "u1", "r1")
+        self.assertEqual(tailored_id, "t-existing")
+        self.assertEqual(len(pg.queries), 1)
+
     async def test_missing_run_404(self):
         with self.assertRaises(HTTPException) as ctx:
-            await service.save_from_run(_Pg([[]]), "u1", "r1")
+            await service.save_from_run(_Pg([_Result(), []]), "u1", "r1")
         self.assertEqual(ctx.exception.status_code, 404)
 
     async def test_unfinished_run_409(self):
-        pg = _Pg([one(_run_row(status="PROCESSING", result=None))])
+        pg = _Pg([_Result(), one(_run_row(status="PROCESSING", result=None))])
         with self.assertRaises(HTTPException) as ctx:
             await service.save_from_run(pg, "u1", "r1")
         self.assertEqual(ctx.exception.status_code, 409)
 
     async def test_unreadable_result_409(self):
-        pg = _Pg([one(_run_row(result="{not json"))])
+        pg = _Pg([_Result(), one(_run_row(result="{not json"))])
         with self.assertRaises(HTTPException) as ctx:
             await service.save_from_run(pg, "u1", "r1")
         self.assertEqual(ctx.exception.status_code, 409)
@@ -102,12 +108,13 @@ class SaveFromRun(unittest.IsolatedAsyncioTestCase):
     async def test_snapshot_resolves_meta_and_groups_skills(self):
         pg = _Pg(
             [
+                _Result(),  # get_tailored_by_run → no existing entry
                 one(_run_row()),
                 # _experience_meta
                 _Result([(1, "Acme", "Engineer", "2020", "2023")]),
                 # _skill_categories
                 _Result([("Python", "Languages"), ("Go", "Languages")]),
-                _Result(),  # insert
+                _Result(rowcount=1),  # insert
             ]
         )
         tailored_id = await service.save_from_run(pg, "u1", "r1")
@@ -130,6 +137,7 @@ class SaveFromRun(unittest.IsolatedAsyncioTestCase):
     async def test_dangling_experience_refs_dropped(self):
         pg = _Pg(
             [
+                _Result(),
                 one(_run_row()),
                 _Result([]),  # no matching base experience
                 _Result([]),
@@ -163,10 +171,18 @@ class GetAndList(unittest.IsolatedAsyncioTestCase):
 
 class Update(unittest.IsolatedAsyncioTestCase):
     async def test_update_404(self):
-        pg = _Pg([_Result(rowcount=0)])
+        pg = _Pg([_Result()])  # existence check → missing
         with self.assertRaises(HTTPException) as ctx:
             await service.update_tailored(
                 pg, "u1", "t1", model.UpdateTailoredRequest(role="X")
+            )
+        self.assertEqual(ctx.exception.status_code, 404)
+
+    async def test_empty_patch_404s_for_missing_row(self):
+        pg = _Pg([_Result()])
+        with self.assertRaises(HTTPException) as ctx:
+            await service.update_tailored(
+                pg, "u1", "t1", model.UpdateTailoredRequest()
             )
         self.assertEqual(ctx.exception.status_code, 404)
 
@@ -180,7 +196,9 @@ class Update(unittest.IsolatedAsyncioTestCase):
             ],
             skill_groups=[],
         )
-        pg = _Pg([_Result(rowcount=1), one(_tailored_row(role="X"))])
+        pg = _Pg(
+            [one(_tailored_row()), _Result(rowcount=1), one(_tailored_row(role="X"))]
+        )
         resp = await service.update_tailored(
             pg,
             "u1",

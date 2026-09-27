@@ -123,6 +123,48 @@
     ]
   },
   {
+    "id": "unique.user_tailored_resume.user_tailored_resume_user_id_tailor_run_id_key",
+    "label": "Add unique constraint on \"user_tailored_resume\" (user_id, tailor_run_id)",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "unique",
+        "name": "user_tailored_resume_user_id_tailor_run_id_key",
+        "table": "user_tailored_resume"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"user_tailored_resume_user_id_tailor_run_id_key\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_tailored_resume_user_id_tailor_run_id_key",
+          "public",
+          "\"public\".\"user_tailored_resume\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add unique constraint \"user_tailored_resume_user_id_tailor_run_id_key\"",
+        "sql": "ALTER TABLE \"public\".\"user_tailored_resume\" ADD CONSTRAINT \"user_tailored_resume_user_id_tailor_run_id_key\" UNIQUE (\"user_id\", \"tailor_run_id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"user_tailored_resume_user_id_tailor_run_id_key\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_tailored_resume_user_id_tailor_run_id_key",
+          "public",
+          "\"public\".\"user_tailored_resume\""
+        ]
+      }
+    ]
+  },
+  {
     "id": "index.user_tailored_resume.user_tailored_resume_user_id_idx_6c952402",
     "label": "Create index \"user_tailored_resume_user_id_idx_6c952402\" on \"user_tailored_resume\"",
     "operationClass": "additive",

@@ -40,13 +40,17 @@ async def create_tailored_resume(
     job_description: str,
     content: str,
 ) -> str:
+    """Insert a board entry, or return the existing row's id when the
+    (user_id, tailor_run_id) unique constraint fires — saving a run twice
+    must stay idempotent."""
     async with conn.cursor() as cursor:
-        await cursor.execute(
+        res = await cursor.execute(
             """
             INSERT INTO user_tailored_resume
                 (id, user_id, tailor_run_id, company_name, role,
                  job_description, content)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (user_id, tailor_run_id) DO NOTHING
             """,
             (
                 tailored_id,
@@ -58,7 +62,32 @@ async def create_tailored_resume(
                 content,
             ),
         )
-    return tailored_id
+        if res.rowcount > 0 or tailor_run_id is None:
+            return tailored_id
+        res = await cursor.execute(
+            """
+            SELECT id FROM user_tailored_resume
+            WHERE user_id = %s AND tailor_run_id = %s
+            """,
+            (user_id, tailor_run_id),
+        )
+        row = await res.fetchone()
+        return row[0] if row else tailored_id
+
+
+async def get_tailored_by_run(
+    pg_conn: PgConnection, user_id: str, run_id: str
+) -> str | None:
+    async with pg_conn.cursor() as cursor:
+        res = await cursor.execute(
+            """
+            SELECT id FROM user_tailored_resume
+            WHERE user_id = %s AND tailor_run_id = %s
+            """,
+            (user_id, run_id),
+        )
+        row = await res.fetchone()
+        return row[0] if row else None
 
 
 async def get_tailored_resume(

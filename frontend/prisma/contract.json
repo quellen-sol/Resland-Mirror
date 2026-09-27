@@ -3343,7 +3343,14 @@
                   "id"
                 ]
               },
-              "uniques": []
+              "uniques": [
+                {
+                  "columns": [
+                    "user_id",
+                    "tailor_run_id"
+                  ]
+                }
+              ]
             },
             "user_upload_job": {
               "checks": [
@@ -3488,7 +3495,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "0375ac5dbfc9699171f7678315a610e7dda9f91c5b69ec81ff4c7efaed4548c9"
+    "storageHash": "bc3ed381debcbee76352fb5ba436fd0db987dc694f94fc7a46913c0dc559498e"
   },
   "capabilities": {
     "postgres": {

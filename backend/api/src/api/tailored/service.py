@@ -81,6 +81,12 @@ async def save_from_run(pg_conn: PgConnection, user_id: str, run_id: str) -> str
     """Snapshot a COMPLETED tailor run into a board entry. The snapshot stores
     display-ready content (experience metadata + skill categories resolved)
     so it survives base-profile re-uploads that rebuild the base tables."""
+    # A repeat save of the same run returns the existing board entry — a
+    # reload drops the client's savedId, so the UI can't be the guard.
+    existing_id = await db.get_tailored_by_run(pg_conn, user_id, run_id)
+    if existing_id:
+        return existing_id
+
     run = await tailor_db.get_tailor_run(pg_conn, user_id=user_id, run_id=run_id)
     if not run:
         raise HTTPException(status_code=404, detail="Tailor run not found")
@@ -184,6 +190,9 @@ async def update_tailored(
     req: model.UpdateTailoredRequest,
 ) -> model.TailoredResumeResponse:
     # Explicit null clears the nullable fields; an absent field is untouched.
+    # Check existence up front — an empty PATCH skips the UPDATE entirely.
+    if not await db.get_tailored_resume(pg_conn, user_id, tailored_id):
+        raise HTTPException(status_code=404, detail="Tailored resume not found")
     provided = req.model_fields_set
     updated = await db.update_tailored_resume(
         pg_conn,

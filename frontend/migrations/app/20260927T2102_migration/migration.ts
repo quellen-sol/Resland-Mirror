@@ -1,6 +1,6 @@
 #!/usr/bin/env -S node
-import type { Contract as End } from '../../snapshots/0375ac5dbfc9699171f7678315a610e7dda9f91c5b69ec81ff4c7efaed4548c9/contract';
-import endContract from '../../snapshots/0375ac5dbfc9699171f7678315a610e7dda9f91c5b69ec81ff4c7efaed4548c9/contract.json' with { type: 'json' };
+import type { Contract as End } from '../../snapshots/bc3ed381debcbee76352fb5ba436fd0db987dc694f94fc7a46913c0dc559498e/contract';
+import endContract from '../../snapshots/bc3ed381debcbee76352fb5ba436fd0db987dc694f94fc7a46913c0dc559498e/contract.json' with { type: 'json' };
 import type { Contract as Start } from '../../snapshots/c9d11cbec8d8698eec9378f615f694ee856fcda93f97b0270c507997cef9ac8a/contract';
 import startContract from '../../snapshots/c9d11cbec8d8698eec9378f615f694ee856fcda93f97b0270c507997cef9ac8a/contract.json' with { type: 'json' };
 import { Migration, MigrationCLI, col, fn, primaryKey } from '@prisma/orm-postgres/migration';
@@ -49,6 +49,12 @@ export default class M extends Migration<Start, End> {
         schema: 'public',
         table: 'user_tailor_run',
         column: col('role', 'text', { codecRef: { codecId: 'pg/text@1' } }),
+      }),
+      this.addUnique({
+        schema: 'public',
+        table: 'user_tailored_resume',
+        constraint: 'user_tailored_resume_user_id_tailor_run_id_key',
+        columns: ['user_id', 'tailor_run_id'],
       }),
       this.createIndex({
         schema: 'public',

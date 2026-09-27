@@ -218,6 +218,9 @@ model UserTailoredResume {
   @@map("user_tailored_resume")
 
   @@index([user_id])
+  // Saving a run twice must not duplicate the board entry — NULLs don't
+  // conflict, so rows without a run stay insertable.
+  @@unique([user_id, tailor_run_id])
 }
 
 // Resume layout captured from the user's uploaded doc at parse time.

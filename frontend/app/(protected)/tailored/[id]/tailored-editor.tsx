@@ -67,9 +67,15 @@ export default function TailoredEditor({
   const [busy, setBusy] = useState<"save" | "export" | "delete" | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [newSkill, setNewSkill] = useState<Record<number, string>>({});
+  const [dirty, setDirty] = useState(false);
+
+  function mutateContent(fn: (c: TailoredContent) => TailoredContent) {
+    setDirty(true);
+    setContent(fn);
+  }
 
   function setBullet(expIdx: number, bulletIdx: number, text: string) {
-    setContent((c) => ({
+    mutateContent((c) => ({
       ...c,
       experiences: c.experiences.map((e, i) =>
         i === expIdx
@@ -83,7 +89,7 @@ export default function TailoredEditor({
   }
 
   function removeBullet(expIdx: number, bulletIdx: number) {
-    setContent((c) => ({
+    mutateContent((c) => ({
       ...c,
       experiences: c.experiences.map((e, i) =>
         i === expIdx
@@ -94,7 +100,7 @@ export default function TailoredEditor({
   }
 
   function addBullet(expIdx: number) {
-    setContent((c) => ({
+    mutateContent((c) => ({
       ...c,
       experiences: c.experiences.map((e, i) =>
         i === expIdx ? { ...e, bullets: [...e.bullets, ""] } : e,
@@ -103,7 +109,7 @@ export default function TailoredEditor({
   }
 
   function removeSkill(groupIdx: number, skill: string) {
-    setContent((c) => ({
+    mutateContent((c) => ({
       ...c,
       skill_groups: c.skill_groups.map((g, i) =>
         i === groupIdx
@@ -116,7 +122,7 @@ export default function TailoredEditor({
   function addSkill(groupIdx: number) {
     const name = (newSkill[groupIdx] ?? "").trim();
     if (!name) return;
-    setContent((c) => ({
+    mutateContent((c) => ({
       ...c,
       skill_groups: c.skill_groups.map((g, i) =>
         i === groupIdx && !g.skills.includes(name)
@@ -127,17 +133,22 @@ export default function TailoredEditor({
     setNewSkill((s) => ({ ...s, [groupIdx]: "" }));
   }
 
+  async function persistContent() {
+    await apiFetch(accessToken, `/tailored/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        company_name: company,
+        role: role,
+        content,
+      }),
+    });
+    setDirty(false);
+  }
+
   async function onSave() {
     setBusy("save");
     try {
-      await apiFetch(accessToken, `/tailored/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          company_name: company,
-          role: role,
-          content,
-        }),
-      });
+      await persistContent();
       toast.success("Saved");
       router.refresh();
     } catch (error) {
@@ -150,6 +161,12 @@ export default function TailoredEditor({
   async function onExport() {
     setBusy("export");
     try {
+      // Export renders the stored snapshot — persist edits first so a
+      // failed save can never produce a stale document.
+      if (dirty) {
+        await persistContent();
+        router.refresh();
+      }
       const res = (await apiFetch(accessToken, `/tailored/${id}/export`, {
         method: "POST",
       })) as ExportTailoredResponse;
@@ -215,7 +232,10 @@ export default function TailoredEditor({
               </label>
               <Input
                 value={company}
-                onChange={(e) => setCompany(e.target.value)}
+                onChange={(e) => {
+                  setCompany(e.target.value);
+                  setDirty(true);
+                }}
                 className={inputClass}
               />
             </div>
@@ -225,7 +245,10 @@ export default function TailoredEditor({
               </label>
               <Input
                 value={role}
-                onChange={(e) => setRole(e.target.value)}
+                onChange={(e) => {
+                  setRole(e.target.value);
+                  setDirty(true);
+                }}
                 className={inputClass}
               />
             </div>
@@ -250,7 +273,10 @@ export default function TailoredEditor({
           <Textarea
             value={content.summary ?? ""}
             onChange={(e) =>
-              setContent((c) => ({ ...c, summary: e.target.value || null }))
+              mutateContent((c) => ({
+                ...c,
+                summary: e.target.value || null,
+              }))
             }
             placeholder="No summary — the exported resume won't include one."
             className={`min-h-24 ${inputClass}`}
