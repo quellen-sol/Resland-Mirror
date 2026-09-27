@@ -43,6 +43,21 @@ async def answer_suggestion(
     )
 
 
+@router.post("/suggestions/{session_id}/retry")
+async def retry_suggestion(
+    user_id: Auth0UserId,
+    session_id: str,
+    pg_conn: PgConnection,
+    amqp_client: AmqpClientDep,
+):
+    return await service.retry_suggestion(
+        user_id=user_id,
+        session_id=session_id,
+        pg_conn=pg_conn,
+        amqp_client=amqp_client,
+    )
+
+
 @router.post("/suggestions/{session_id}/accept")
 async def accept_suggestion(
     user_id: Auth0UserId, session_id: str, pg_conn: PgConnection

@@ -146,6 +146,10 @@
               {
                 "name": "COMPLETED",
                 "value": "COMPLETED"
+              },
+              {
+                "name": "FAILED",
+                "value": "FAILED"
               }
             ]
           },
@@ -2798,8 +2802,8 @@
             "user_suggestion": {
               "checks": [
                 {
-                  "expression": "\"status\" IN ('PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED')",
-                  "name": "user_suggestion_status_check_8152fec2",
+                  "expression": "\"status\" IN ('PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED', 'FAILED')",
+                  "name": "user_suggestion_status_check_fa868dec",
                   "prefix": "user_suggestion_status_check"
                 }
               ],
@@ -3171,7 +3175,8 @@
               "values": [
                 "PROCESSING",
                 "WAITING_FOR_INPUT",
-                "COMPLETED"
+                "COMPLETED",
+                "FAILED"
               ]
             },
             "TailorStatus": {
@@ -3196,7 +3201,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "6a7a31751ea63f3115c80d946f1e6b42f2d43fdd73c84894c9900648ce6bfd95"
+    "storageHash": "c9d11cbec8d8698eec9378f615f694ee856fcda93f97b0270c507997cef9ac8a"
   },
   "capabilities": {
     "postgres": {

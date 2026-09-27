@@ -10,18 +10,12 @@ from .db_ops import (
     default_model_spec,
     fetch_suggestion_rows,
     record_token_usage,
+    set_suggestion_failed,
     set_suggestion_question,
     set_suggestion_result,
 )
 from .generic import RunnerError
 from .local_threaded import LocalThreadJobRunner
-
-# Shown as the pending question when the agent crashes mid-run (provider
-# outage, transient error) — the answer flow then resumes the checkpointed
-# graph instead of losing the session.
-RESUME_AFTER_ERROR_MESSAGE = (
-    "Something went wrong on our end — send any message to continue."
-)
 
 
 class SuggestionsRunner(LocalThreadJobRunner):
@@ -56,6 +50,7 @@ class SuggestionsRunner(LocalThreadJobRunner):
                         raise TypeError("Session ID must be a string")
 
                     answer = self.job_data.get("answer")
+                    prompt = self.job_data.get("prompt")
 
                     rows = fetch_suggestion_rows(pg_conn, session_id)
                     if not rows:
@@ -70,17 +65,16 @@ class SuggestionsRunner(LocalThreadJobRunner):
 
                     try:
                         outcome = build_and_invoke_agent(
-                            session_id, answer, rows, model_spec, usage
+                            session_id, answer, rows, model_spec, usage, prompt
                         )
                     except Exception as e:
-                        # Leave the session resumable — the checkpointed graph can be
-                        # continued by the answer flow once the failure clears. The
-                        # job ends cleanly so the message isn't dead-lettered.
+                        # Leave the session resumable — the checkpointed graph is
+                        # continued by the retry endpoint once the failure
+                        # clears. The job ends cleanly so the message isn't
+                        # dead-lettered.
                         print(f"Agent failed for suggestion {session_id}: {e}")
 
-                        set_suggestion_question(
-                            pg_conn, session_id, RESUME_AFTER_ERROR_MESSAGE
-                        )
+                        set_suggestion_failed(pg_conn, session_id)
                         return
 
                     if outcome.status == "waiting":

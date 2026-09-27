@@ -172,7 +172,15 @@ class SuggestionAgent(unittest.TestCase):
         self.addCleanup(self.pg_patch.stop)
         self.addCleanup(self.saver_patch.stop)
 
-    def _run(self, script, session_id="sess-1", answer=None, rows=None, usage=None):
+    def _run(
+        self,
+        script,
+        session_id="sess-1",
+        answer=None,
+        rows=None,
+        usage=None,
+        prompt=None,
+    ):
         with _patch_model(suggestions, script) as model_cls:
             outcome = suggestions.build_and_invoke_agent(
                 session_id,
@@ -180,6 +188,7 @@ class SuggestionAgent(unittest.TestCase):
                 rows if rows is not None else [sugg_row()],
                 "openrouter:test/model",
                 usage if usage is not None else _usage(),
+                prompt,
             )
         return outcome, model_cls.return_value
 
@@ -243,6 +252,43 @@ class SuggestionAgent(unittest.TestCase):
         self.assertEqual(outcome.status, "completed")
         resumed_msg = model.calls[0][-1]
         self.assertEqual(resumed_msg.content, "5 engineers")
+
+    def test_custom_prompt_seeds_kickoff_message(self):
+        outcome, model = self._run(
+            [ai("done")],
+            prompt="Keep them under 10 words",
+        )
+        self.assertEqual(outcome.status, "completed")
+        kickoff = model.calls[0][-1]
+        self.assertEqual(kickoff.type, "human")
+        self.assertIn("Keep them under 10 words", kickoff.content)
+
+    def test_retry_resumes_checkpoint_without_new_kickoff(self):
+        # First run crashes mid-node — the checkpoint keeps llm_call pending.
+        def boom():
+            raise RuntimeError("provider down")
+
+        with self.assertRaises(RuntimeError):
+            self._run([boom])
+
+        # Retry with no answer: the pending node resumes in place instead of
+        # a duplicate kickoff message being injected.
+        outcome, model = self._run(
+            [
+                tc(
+                    "submit_suggestions",
+                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "x"}]}},
+                )
+            ]
+        )
+        self.assertEqual(outcome.status, "completed")
+        humans = [
+            m
+            for m in model.calls[0]
+            if getattr(m, "type", None) == "human"
+        ]
+        self.assertEqual(len(humans), 1)
+        self.assertIn("get_user_bullet_points", humans[0].content)
 
     def test_answer_on_finished_run_hits_empty_input_fallback(self):
         # Command(resume) on a checkpoint with no pending interrupt raises

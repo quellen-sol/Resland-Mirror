@@ -241,6 +241,20 @@ def set_suggestion_result(
         )
 
 
+def set_suggestion_failed(pg_client: Connection, session_id: str):
+    # Don't clobber a result or a pending question that was already written —
+    # the session is still usable in those states.
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            UPDATE user_suggestion
+            SET status = 'FAILED'
+            WHERE id = %s AND status NOT IN ('COMPLETED', 'WAITING_FOR_INPUT')
+            """,
+            (session_id,),
+        )
+
+
 def fetch_tailor_run(pg_client: Connection, run_id: str) -> FetchTailorRunRow | None:
     with pg_client.cursor(row_factory=class_row(FetchTailorRunRow)) as cursor:
         return cursor.execute(
