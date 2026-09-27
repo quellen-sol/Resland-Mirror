@@ -7,6 +7,7 @@ test("non-admin menu omits the admin link but keeps every other item", () => {
   assert.deepEqual(keys, [
     "upload",
     "tailor",
+    "tailored",
     "export",
     "edit-profile",
     "billing",
@@ -19,6 +20,7 @@ test("admin menu inserts the admin link between export and edit-profile", () => 
   assert.deepEqual(keys, [
     "upload",
     "tailor",
+    "tailored",
     "export",
     "admin",
     "edit-profile",

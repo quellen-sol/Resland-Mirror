@@ -14,7 +14,7 @@ from shared.amqp import TAILOR_EXCHANGE_NAME
 
 from api.tailor import db, model, service
 
-from .helpers import _Amqp, _Pg, _Result
+from .helpers import _Amqp, _Pg, _Result, one
 
 
 def _row(**over):
@@ -22,6 +22,8 @@ def _row(**over):
         id="r1",
         user_id="u1",
         job_description="JD",
+        company_name=None,
+        role=None,
         model=None,
         pending_question=None,
         result=None,
@@ -34,7 +36,7 @@ def _row(**over):
 
 class StartTailor(unittest.IsolatedAsyncioTestCase):
     async def test_active_run_resumes_without_publish(self):
-        pg = _Pg([[("r-existing",)]])
+        pg = _Pg([one(_row(status="PROCESSING"))])
         amqp = _Amqp()
         with (
             patch.object(service, "require_balance", new=AsyncMock()) as bal,
@@ -43,13 +45,57 @@ class StartTailor(unittest.IsolatedAsyncioTestCase):
             resp = await service.start_tailor(
                 pg, amqp, model.StartTailorRequest(job_description="JD"), "u1"
             )
-        self.assertEqual(resp.run_id, "r-existing")
+        self.assertEqual(resp.run_id, "r1")
+        self.assertTrue(resp.resumed)
         bal.assert_not_called()
         self.assertEqual(amqp.publisher.published, [])
 
+    async def test_result_bearing_wait_resumes(self):
+        # A run parked on the review interrupt still counts as outstanding —
+        # it blocks a fresh tailor instead of being overwritten.
+        pg = _Pg([one(_row(status="WAITING_FOR_INPUT", result='{"x":1}'))])
+        amqp = _Amqp()
+        with patch.object(service, "require_balance", new=AsyncMock()):
+            resp = await service.start_tailor(
+                pg, amqp, model.StartTailorRequest(job_description="JD"), "u1"
+            )
+        self.assertEqual(resp.run_id, "r1")
+        self.assertTrue(resp.resumed)
+        self.assertEqual(amqp.publisher.published, [])
+
+    async def test_completed_runs_clear_on_new_start(self):
+        pg = _Pg(
+            [
+                _Result(),                # outstanding select → none
+                _Result([("r-done",)]),   # clear: DELETE ... RETURNING
+                _Result(),                # checkpoints
+                _Result(),                # checkpoint_blobs
+                _Result(),                # checkpoint_writes
+                _Result(),                # insert new run
+            ]
+        )
+        amqp = _Amqp()
+        with (
+            patch.object(service, "require_balance", new=AsyncMock()),
+            patch.object(
+                service,
+                "validate_model_choice",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            resp = await service.start_tailor(
+                pg, amqp, model.StartTailorRequest(job_description="JD"), "u1"
+            )
+        self.assertNotEqual(resp.run_id, "r-done")
+        self.assertFalse(resp.resumed)
+        self.assertTrue(amqp.publisher.published)
+        deletes = [(q, p) for q, p in pg.queries if "DELETE" in q]
+        self.assertIn("status = 'COMPLETED'", deletes[0][0])
+        self.assertEqual([p for _, p in deletes[1:]], [("r-done",)] * 3)
+
     async def test_happy_path_commits_then_publishes(self):
         order = []
-        pg = _Pg([[], _Result()])  # no active; insert
+        pg = _Pg([_Result(), _Result()])  # no outstanding; clear + insert
         real_commit = pg.commit
 
         async def commit():
@@ -84,12 +130,31 @@ class GetTailorStatus(unittest.IsolatedAsyncioTestCase):
 
     async def test_fields_mapped(self):
         resp = await service.get_tailor_status(
-            _Pg([_Result(fetchone=_row(status="WAITING_FOR_INPUT", pending_question="Q"))]),
+            _Pg([_Result(fetchone=_row(status="WAITING_FOR_INPUT", pending_question="Q",
+                                       company_name="Acme", role="Engineer"))]),
             "u1",
             "r1",
         )
+        self.assertEqual(resp.run_id, "r1")
         self.assertEqual(resp.status, "WAITING_FOR_INPUT")
         self.assertEqual(resp.pending_question, "Q")
+        self.assertEqual(resp.job_description, "JD")
+        self.assertEqual(resp.company_name, "Acme")
+        self.assertEqual(resp.role, "Engineer")
+
+
+class GetActiveTailor(unittest.IsolatedAsyncioTestCase):
+    async def test_none_outstanding_404(self):
+        with self.assertRaises(HTTPException) as ctx:
+            await service.get_active_tailor(_Pg([_Result()]), "u1")
+        self.assertEqual(ctx.exception.status_code, 404)
+
+    async def test_returns_outstanding_run(self):
+        resp = await service.get_active_tailor(
+            _Pg([_Result(fetchone=_row(status="FAILED"))]), "u1"
+        )
+        self.assertEqual(resp.run_id, "r1")
+        self.assertEqual(resp.status, "FAILED")
 
 
 class AnswerTailor(unittest.IsolatedAsyncioTestCase):
@@ -121,6 +186,26 @@ class AnswerTailor(unittest.IsolatedAsyncioTestCase):
         body = json.loads(amqp.publisher.published[0].body)
         self.assertEqual(body["answer"], "yes please")
         self.assertEqual(body["run_id"], "r1")
+
+    async def test_answer_keeps_stored_result(self):
+        # Feedback on a submitted resume resumes the run — the stored result
+        # must survive the PROCESSING transition so it stays on screen.
+        pg = _Pg(
+            [
+                _Result(
+                    fetchone=_row(status="WAITING_FOR_INPUT", result='{"x":1}')
+                ),
+                _Result(),
+            ]
+        )
+        out = await service.answer_tailor(
+            "u1", "r1", model.AnswerRequest(text="tweak"), pg, _Amqp()
+        )
+        self.assertEqual(out, {"ok": True})
+        update = next(q for q, _ in pg.queries if "UPDATE user_tailor_run" in q)
+        self.assertNotIn("result", update)
+        params = next(p for q, p in pg.queries if "UPDATE user_tailor_run" in q)
+        self.assertEqual(params, ("PROCESSING", None, "r1"))
 
 
 class DismissTailor(unittest.IsolatedAsyncioTestCase):

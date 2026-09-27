@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  Files,
   LogOut,
   Menu,
   PenLine,
@@ -30,6 +31,7 @@ import ExportResumeButton from "./export-resume-button";
 
 const LINK_ICONS: Partial<Record<DashboardMenuItemKey, LucideIcon>> = {
   tailor: Sparkles,
+  tailored: Files,
   admin: ShieldCheck,
   "edit-profile": PenLine,
   billing: Zap,

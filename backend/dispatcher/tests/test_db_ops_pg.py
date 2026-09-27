@@ -351,6 +351,66 @@ class DbOpsPg(unittest.TestCase):
         self.assertEqual(row[0], "COMPLETED")
         self.assertEqual(json.loads(row[1])["skills"], ["Python"])
 
+    def test_set_tailor_question_can_store_result(self):
+        self._user()
+        self._tailor_run("r1", "u1")
+        resume = TailoredResume(
+            summary=None,
+            experiences=[
+                TailoredExperience(
+                    experience_id=1,
+                    bullets=[TailoredBullet(bullet_id=2, text="x")],
+                )
+            ],
+            skills=["Go"],
+        )
+        db_ops.set_tailor_question(self.conn, "r1", "Review?", result=resume)
+        row = self.conn.execute(
+            "SELECT pending_question, status, result"
+            " FROM user_tailor_run WHERE id='r1'"
+        ).fetchone()
+        self.assertEqual(row[0], "Review?")
+        self.assertEqual(row[1], "WAITING_FOR_INPUT")
+        self.assertEqual(json.loads(row[2])["skills"], ["Go"])
+
+        # A later waiting write without a result keeps the stored one.
+        db_ops.set_tailor_question(self.conn, "r1", "Review again?")
+        row = self.conn.execute(
+            "SELECT result FROM user_tailor_run WHERE id='r1'"
+        ).fetchone()
+        self.assertEqual(json.loads(row[0])["skills"], ["Go"])
+
+    def test_complete_tailor_run_requires_result(self):
+        self._user()
+        self._tailor_run("r1", "u1")
+        # No result yet — nothing to complete.
+        self.assertFalse(db_ops.complete_tailor_run(self.conn, "r1"))
+        status = self.conn.execute(
+            "SELECT status FROM user_tailor_run WHERE id='r1'"
+        ).fetchone()[0]
+        self.assertEqual(status, "PROCESSING")
+
+        db_ops.set_tailor_question(
+            self.conn,
+            "r1",
+            "Review?",
+            result=TailoredResume(
+                summary=None,
+                experiences=[
+                    TailoredExperience(
+                        experience_id=1,
+                        bullets=[TailoredBullet(bullet_id=2, text="x")],
+                    )
+                ],
+                skills=[],
+            ),
+        )
+        self.assertTrue(db_ops.complete_tailor_run(self.conn, "r1"))
+        row = self.conn.execute(
+            "SELECT status, pending_question FROM user_tailor_run WHERE id='r1'"
+        ).fetchone()
+        self.assertEqual(row, ("COMPLETED", None))
+
     def test_set_tailor_failed_marks_failed(self):
         self._user()
         self._tailor_run("r1", "u1")

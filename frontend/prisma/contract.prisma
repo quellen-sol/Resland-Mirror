@@ -176,6 +176,10 @@ model UserTailorRun {
   user_id          String
   user             User         @relation(fields: [user_id], references: [auth0_id])
   job_description  String
+  // Target company/role captured with the JD — surfaced to the agent and
+  // copied onto the saved tailored resume.
+  company_name     String?
+  role             String?
   // Null = system default model.
   model            String?
   pending_question String?
@@ -186,6 +190,37 @@ model UserTailorRun {
   @@map("user_tailor_run")
 
   @@index([user_id])
+}
+
+// A saved tailored resume on the board — a self-contained snapshot of the
+// tailor result. Base rows are rebuilt on every resume re-upload, so the
+// snapshot keeps the tailored copy intact.
+model UserTailoredResume {
+  id              String    @id
+  user_id         String
+  user            User      @relation(fields: [user_id], references: [auth0_id])
+  // Run that produced it — plain column, no FK: runs are deleted on dismiss.
+  tailor_run_id   String?
+  company_name    String?
+  role            String?
+  job_description String
+  // Editable snapshot JSON: {summary, experiences[], skill_groups[]},
+  // resolved against the base profile at save time.
+  content         String
+  // Generated docx bookkeeping — mirrors user_generated_resume at the
+  // per-tailored-resume key resumes/<user_id>/tailored/<id>.docx.
+  s3_key          String?
+  source_hash     String?
+  generated_at    DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @default(now())
+
+  @@map("user_tailored_resume")
+
+  @@index([user_id])
+  // Saving a run twice must not duplicate the board entry — NULLs don't
+  // conflict, so rows without a run stay insertable.
+  @@unique([user_id, tailor_run_id])
 }
 
 // Resume layout captured from the user's uploaded doc at parse time.
