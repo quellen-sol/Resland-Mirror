@@ -16,14 +16,17 @@ async def start_tailor(
     user_id: str,
 ) -> model.StartTailorResponse:
     async with pg_conn.cursor() as cursor:
-        # Runs are only deleted on dismiss, so a surviving row is work the
-        # user hasn't finished with — hand it back to resume instead of
-        # erroring. (Resuming also avoids racing the in-flight run.)
+        # Runs are only deleted on dismiss or when a new run starts, so a
+        # surviving *unfinished* row is work the user hasn't finished with —
+        # hand it back to resume instead of erroring. A run holding a result
+        # (COMPLETED, or parked on the review interrupt) is finished work:
+        # don't resume it — start fresh and clear it below.
         active = await cursor.execute(
             """
             SELECT id FROM user_tailor_run
             WHERE user_id = %s
-              AND status IN ('PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED')
+              AND (status = 'PROCESSING'
+                  OR (status = 'WAITING_FOR_INPUT' AND result IS NULL))
             ORDER BY created_at DESC
             LIMIT 1
             """,
@@ -33,6 +36,7 @@ async def start_tailor(
         if active:
             return model.StartTailorResponse(run_id=active[0])
 
+    await db.clear_finished_tailor_runs(pg_conn, user_id)
     await require_balance(pg_conn, user_id)
     chosen_model = await validate_model_choice(pg_conn, req.model)
 

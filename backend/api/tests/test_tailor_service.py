@@ -49,6 +49,38 @@ class StartTailor(unittest.IsolatedAsyncioTestCase):
         bal.assert_not_called()
         self.assertEqual(amqp.publisher.published, [])
 
+    async def test_finished_run_starts_fresh_and_clears_old(self):
+        # A run holding a result (COMPLETED or parked on the review
+        # interrupt) must not hijack a new tailor — start fresh and delete it
+        # with its checkpoints.
+        pg = _Pg(
+            [
+                [],                       # active select → no unfinished run
+                _Result([("r-old",)]),    # clear: DELETE ... RETURNING
+                _Result(),                # checkpoints
+                _Result(),                # checkpoint_blobs
+                _Result(),                # checkpoint_writes
+                _Result(),                # insert new run
+            ]
+        )
+        amqp = _Amqp()
+        with (
+            patch.object(service, "require_balance", new=AsyncMock()),
+            patch.object(
+                service,
+                "validate_model_choice",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            resp = await service.start_tailor(
+                pg, amqp, model.StartTailorRequest(job_description="JD"), "u1"
+            )
+        self.assertNotEqual(resp.run_id, "r-old")
+        self.assertTrue(amqp.publisher.published)
+        deletes = [(q, p) for q, p in pg.queries if "DELETE" in q]
+        self.assertEqual(deletes[0][1], ("u1",))  # result-bearing run rows
+        self.assertEqual([p for _, p in deletes[1:]], [("r-old",)] * 3)
+
     async def test_happy_path_commits_then_publishes(self):
         order = []
         pg = _Pg([[], _Result()])  # no active; insert

@@ -78,6 +78,28 @@ async def update_tailor_run(
         )
 
 
+async def clear_finished_tailor_runs(conn: PgConnection, user_id: str) -> None:
+    """Drop runs that already produced a result (COMPLETED or sitting on the
+    review interrupt) plus their checkpoints — they're unreachable once a new
+    run starts, and anything worth keeping was snapshotted on save."""
+    async with conn.cursor() as cursor:
+        res = await cursor.execute(
+            """
+            DELETE FROM user_tailor_run
+            WHERE user_id = %s AND result IS NOT NULL
+            RETURNING id
+            """,
+            (user_id,),
+        )
+        run_ids = [row[0] for row in await res.fetchall()]
+        for run_id in run_ids:
+            for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+                await cursor.execute(
+                    f"DELETE FROM {table} WHERE thread_id = %s",
+                    (run_id,),
+                )
+
+
 async def delete_tailor_run(conn: PgConnection, run_id: str, user_id: str) -> None:
     async with conn.cursor() as cursor:
         await cursor.execute(
