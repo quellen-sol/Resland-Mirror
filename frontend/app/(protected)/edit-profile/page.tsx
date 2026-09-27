@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getUser, getUserProfileData } from "@/lib/db";
 import type { ProfileFormValues } from "@/components/profile-form";
+import { rowsToGroups } from "@/lib/skills";
 import EditProfileForm from "./edit-profile-form";
 
 export const metadata: Metadata = { title: "Edit profile" };
@@ -23,7 +24,9 @@ export default async function EditProfilePage() {
     phone: user.phone ?? "",
     location: user.location ?? "",
     socialLinks: socialLinks.map((l) => ({ type: l.type, link: l.link })),
-    skills: skills.map((s) => s.name),
+    skillGroups: rowsToGroups(
+      skills.map((s) => ({ name: s.name, category: s.category })),
+    ),
     experiences: experiences.map((e) => ({
       id: e.id,
       companyName: e.company_name,

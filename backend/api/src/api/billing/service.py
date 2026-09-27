@@ -3,6 +3,7 @@ import asyncio
 import stripe
 from fastapi import HTTPException
 
+from .. import site_settings
 from ..deps import PgConnection
 from ..env_vars import FRONTEND_BASE_URL, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 from . import model
@@ -79,6 +80,12 @@ async def create_checkout(
     pg_conn: PgConnection, user_id: str, req: model.CheckoutRequest
 ) -> model.CheckoutResponse:
     _require_stripe()
+    if await site_settings.payments_paused(pg_conn):
+        # 403 (not 503) so the web client's error mapping surfaces this detail.
+        raise HTTPException(
+            status_code=403,
+            detail="Purchases are temporarily paused — please try again later.",
+        )
     pack = TOKEN_PACKS.get(req.pack_id)
     if not pack:
         raise HTTPException(status_code=400, detail="Unknown pack")

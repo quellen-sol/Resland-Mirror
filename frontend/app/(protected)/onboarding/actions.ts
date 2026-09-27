@@ -28,6 +28,12 @@ export interface EducationInput {
   description: string | null;
 }
 
+export interface SkillInput {
+  name: string;
+  // null = ungrouped
+  category: string | null;
+}
+
 export interface ProjectInput {
   name: string;
   link: string | null;
@@ -42,7 +48,7 @@ export interface SaveProfileInput {
   phone: string;
   location: string;
   socialLinks: { type: "LINKEDIN" | "GITHUB" | "WEBSITE"; link: string }[];
-  skills: string[];
+  skills: SkillInput[];
   experiences: ExperienceInput[];
   education: EducationInput[];
   projects: ProjectInput[];
@@ -82,8 +88,13 @@ export async function saveManualProfile(input: SaveProfileInput) {
     });
   }
 
-  for (const name of input.skills) {
-    await db.orm.public.UserBaseSkill.create({ user_id: user.auth0_id, name });
+  for (const [i, skill] of input.skills.entries()) {
+    await db.orm.public.UserBaseSkill.create({
+      user_id: user.auth0_id,
+      name: skill.name,
+      category: skill.category,
+      sort_order: i,
+    });
   }
 
   for (const exp of input.experiences) {

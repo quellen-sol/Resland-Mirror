@@ -1,5 +1,6 @@
 import type { ProfileFormValues } from "@/components/profile-form";
 import type { SaveProfileInput } from "@/app/(protected)/onboarding/actions";
+import { groupsToRows } from "@/lib/skills";
 
 export function toProfileInput(values: ProfileFormValues): SaveProfileInput {
   return {
@@ -8,7 +9,7 @@ export function toProfileInput(values: ProfileFormValues): SaveProfileInput {
     phone: values.phone,
     location: values.location,
     socialLinks: values.socialLinks.filter((l) => l.link.trim() !== ""),
-    skills: values.skills.map((s) => s.trim()).filter(Boolean),
+    skills: groupsToRows(values.skillGroups),
     experiences: values.experiences
       .filter((e) => e.companyName && e.title && e.startDate)
       .map((e) => ({

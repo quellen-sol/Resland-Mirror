@@ -48,6 +48,33 @@ class FetchResumeContent(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(content.projects[0].name, "Proj")
         self.assertEqual(content.source, "base")
 
+    async def test_skill_groups_follow_row_order(self):
+        # Rows arrive in sort_order; a category's group holds every skill
+        # that shares its name, uncategorized skills land in a None group.
+        pg = _Pg(
+            [
+                [("Jane", "j@x.com", "555", "NYC", None)],
+                [],
+                # Empty experiences skip the bullets query entirely.
+                [],
+                [
+                    ("Go", "Langs"),
+                    ("Git", None),
+                    ("Rust", "Langs"),
+                    ("AWS", "Cloud"),
+                ],
+                [],
+                [],
+            ]
+        )
+        content = await service._fetch_resume_content(pg, "u1")
+        self.assertEqual(
+            [(g.category, g.skills) for g in content.skill_groups],
+            [("Langs", ["Go", "Rust"]), (None, ["Git"]), ("Cloud", ["AWS"])],
+        )
+        # The skills query is the 4th execute (user, links, exps).
+        self.assertIn("ORDER BY sort_order", pg.queries[3][0])
+
     async def test_missing_user_gives_none_header(self):
         pg = _Pg([[], [], [], [], [], [], []])
         content = await service._fetch_resume_content(pg, "ghost")

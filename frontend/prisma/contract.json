@@ -12,6 +12,10 @@
       "model": "ModelPricing",
       "namespace": "public"
     },
+    "site_settings": {
+      "model": "SiteSettings",
+      "namespace": "public"
+    },
     "token_usage": {
       "model": "TokenUsage",
       "namespace": "public"
@@ -373,6 +377,57 @@
               },
               "namespaceId": "public",
               "table": "model_pricing"
+            }
+          },
+          "SiteSettings": {
+            "fields": {
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "maintenance_mode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "payments_paused": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "updated_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "id": {
+                  "column": "id"
+                },
+                "maintenance_mode": {
+                  "column": "maintenance_mode"
+                },
+                "payments_paused": {
+                  "column": "payments_paused"
+                },
+                "updated_at": {
+                  "column": "updated_at"
+                }
+              },
+              "namespaceId": "public",
+              "table": "site_settings"
             }
           },
           "TokenUsage": {
@@ -1051,6 +1106,13 @@
                   "kind": "scalar"
                 }
               },
+              "sort_order": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
               "user_id": {
                 "nullable": false,
                 "type": {
@@ -1086,6 +1148,9 @@
                 },
                 "name": {
                   "column": "name"
+                },
+                "sort_order": {
+                  "column": "sort_order"
                 },
                 "user_id": {
                   "column": "user_id"
@@ -1828,6 +1893,54 @@
               },
               "uniques": []
             },
+            "site_settings": {
+              "columns": {
+                "id": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 1
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "maintenance_mode": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "payments_paused": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "updated_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "token_usage": {
               "checks": [
                 {
@@ -2426,6 +2539,15 @@
                 "name": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
+                  "nullable": false
+                },
+                "sort_order": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 0
+                  },
+                  "nativeType": "int4",
                   "nullable": false
                 },
                 "user_id": {
@@ -3074,7 +3196,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "31540dd849f6e9c286da91907829aea32ce114a05372af52009b69d742dd4a43"
+    "storageHash": "6a7a31751ea63f3115c80d946f1e6b42f2d43fdd73c84894c9900648ce6bfd95"
   },
   "capabilities": {
     "postgres": {

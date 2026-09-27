@@ -35,7 +35,9 @@ export async function getUserProfileData(userId: string) {
                 .where((j) => j.user_id.eq(userId))
                 .orderBy((j) => j.created_at.desc())
                 .all(),
-            db.orm.public.UserBaseSkill.where((s) => s.user_id.eq(userId)).all(),
+            db.orm.public.UserBaseSkill.where((s) => s.user_id.eq(userId))
+                .orderBy((s) => s.sort_order.asc())
+                .all(),
             db.orm.public.UserBaseExperience.where((e) => e.user_id.eq(userId))
                 .all(),
             db.orm.public.UserBaseEducation.where((e) => e.user_id.eq(userId)).all(),

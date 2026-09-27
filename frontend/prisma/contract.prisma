@@ -88,11 +88,14 @@ model UserBaseExperienceBullet {
 }
 
 model UserBaseSkill {
-  id       Int     @id @default(autoincrement())
-  user_id  String
-  user     User    @relation(fields: [user_id], references: [auth0_id])
-  name     String
-  category String?
+  id         Int     @id @default(autoincrement())
+  user_id    String
+  user       User    @relation(fields: [user_id], references: [auth0_id])
+  name       String
+  category   String?
+  // Display order across all of the user's skills — groups render as
+  // contiguous runs of the same category in this order.
+  sort_order Int     @default(0)
 
   @@map("user_base_skill")
   @@unique([user_id, name])
@@ -253,6 +256,18 @@ model TokenUsage {
   @@unique([job_kind, job_id])
   @@index([user_id])
   @@index([created_at])
+}
+
+// Site-wide kill switches toggled from /admin — a single row (id = 1).
+// Both backends read it through a short-TTL in-process cache so requests
+// never hit the table; writes go through PUT /admin/settings.
+model SiteSettings {
+  id               Int      @id @default(1)
+  maintenance_mode Boolean  @default(false)
+  payments_paused  Boolean  @default(false)
+  updated_at       DateTime @default(now())
+
+  @@map("site_settings")
 }
 
 enum PurchaseStatus {
