@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getAccessTokenOrLogin } from "@/lib/auth";
 import { getUser } from "@/lib/db";
+import { getSiteSettings } from "@/lib/settings";
 import BillingClient from "./billing-client";
 
 export const metadata: Metadata = { title: "Billing" };
@@ -14,7 +15,10 @@ export default async function BillingPage({
   const user = await getUser();
   if (!user) redirect("/auth/login");
   const accessToken = await getAccessTokenOrLogin("/billing");
-  const { checkout } = await searchParams;
+  const [{ checkout }, settings] = await Promise.all([
+    searchParams,
+    getSiteSettings(),
+  ]);
 
   return (
     <div className="relative flex flex-1 overflow-hidden bg-zinc-950 font-sans">
@@ -23,6 +27,7 @@ export default async function BillingPage({
         <BillingClient
           accessToken={accessToken}
           checkoutResult={checkout ?? null}
+          paymentsPaused={settings.payments_paused}
         />
       </main>
     </div>

@@ -1,5 +1,6 @@
 """api.py — lifespan AMQP wiring and the maintenance-mode middleware
-(503 for everyone but site admins and /docs).
+(503 for everyone but site admins and /docs). The flag itself lives in the
+site_settings table — these tests stub the cached read.
 
 Run: .venv/bin/python -m unittest backend.api.tests.test_api_app -v
 """
@@ -9,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from api import api, auth, deps
+from api import api, auth, deps, site_settings
 
 from .test_auth import _admin_conn, _token, _verify_patched
 
@@ -32,7 +33,11 @@ class MaintenanceMode(unittest.IsolatedAsyncioTestCase):
         req = MagicMock()
         nxt = AsyncMock(return_value="response")
         with (
-            patch.object(api, "MAINTENANCE_MODE", maint),
+            patch.object(
+                site_settings,
+                "is_maintenance_mode",
+                new=AsyncMock(return_value=maint),
+            ),
             patch.object(
                 api, "is_site_admin_request", new=AsyncMock(return_value=admin)
             ),
@@ -90,7 +95,11 @@ class MaintenanceModeE2E(unittest.TestCase):
         cm.__aenter__ = AsyncMock(return_value=conn)
         cm.__aexit__ = AsyncMock(return_value=False)
         patches = [
-            patch.object(api, "MAINTENANCE_MODE", True),
+            patch.object(
+                site_settings,
+                "is_maintenance_mode",
+                new=AsyncMock(return_value=True),
+            ),
             *_verify_patched(),
             patch.object(
                 auth.AsyncConnection, "connect", new=AsyncMock(return_value=cm)

@@ -258,6 +258,18 @@ model TokenUsage {
   @@index([created_at])
 }
 
+// Site-wide kill switches toggled from /admin — a single row (id = 1).
+// Both backends read it through a short-TTL in-process cache so requests
+// never hit the table; writes go through PUT /admin/settings.
+model SiteSettings {
+  id               Int      @id @default(1)
+  maintenance_mode Boolean  @default(false)
+  payments_paused  Boolean  @default(false)
+  updated_at       DateTime @default(now())
+
+  @@map("site_settings")
+}
+
 enum PurchaseStatus {
   PENDING
   COMPLETED

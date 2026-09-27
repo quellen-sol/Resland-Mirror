@@ -78,6 +78,18 @@ class ModelPricingUpsert(BaseModel):
     sort_order: int
 
 
+class SiteSettingsResponse(BaseModel):
+    maintenance_mode: bool
+    payments_paused: bool
+    updated_at: str | None
+
+
+class SiteSettingsUpdate(BaseModel):
+    # Omitted fields keep their current value.
+    maintenance_mode: bool | None = None
+    payments_paused: bool | None = None
+
+
 class AdminPurchaseRow(BaseModel):
     id: str
     user_id: str
