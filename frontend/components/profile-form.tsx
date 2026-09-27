@@ -15,6 +15,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { SkillGroupForm } from "@/lib/skills";
+import { ungroupedGroup } from "@/lib/skills";
+import SkillsEditor from "@/components/skills-editor";
 
 export interface SocialLinkForm {
   type: "LINKEDIN" | "GITHUB" | "WEBSITE";
@@ -59,7 +62,7 @@ export interface ProfileFormValues {
   phone: string;
   location: string;
   socialLinks: SocialLinkForm[];
-  skills: string[];
+  skillGroups: SkillGroupForm[];
   experiences: ExperienceForm[];
   education: EducationForm[];
   projects: ProjectForm[];
@@ -71,7 +74,7 @@ export const emptyProfileValues: ProfileFormValues = {
   phone: "",
   location: "",
   socialLinks: [],
-  skills: [],
+  skillGroups: [ungroupedGroup()],
   experiences: [
     {
       companyName: "",
@@ -210,8 +213,6 @@ export default function ProfileForm({
     ...emptyProfileValues,
     ...initial,
   });
-  const [skillDraft, setSkillDraft] = useState("");
-
   function set<K extends keyof ProfileFormValues>(
     key: K,
     value: ProfileFormValues[K],
@@ -237,14 +238,6 @@ export default function ProfileForm({
     index: number,
   ) {
     setValues((v) => ({ ...v, [key]: v[key].filter((_, i) => i !== index) }));
-  }
-
-  function addSkill() {
-    const name = skillDraft.trim();
-    if (name) {
-      set("skills", [...values.skills, name]);
-      setSkillDraft("");
-    }
   }
 
   const submitButton = (
@@ -364,46 +357,12 @@ export default function ProfileForm({
       {/* Skills */}
       <section>
         <h3 className="text-sm font-medium text-purple-300">Skills</h3>
-        <div className="mt-3 flex gap-2">
-          <Input
-            value={skillDraft}
-            onChange={(e) => setSkillDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                addSkill();
-              }
-            }}
-            placeholder="e.g. TypeScript — press Enter to add"
-            className={inputCls}
+        <div className="mt-3">
+          <SkillsEditor
+            groups={values.skillGroups}
+            onChange={(groups) => set("skillGroups", groups)}
           />
-          <AddButton onClick={addSkill}>Add</AddButton>
         </div>
-        {values.skills.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {values.skills.map((skill, i) => (
-              <span
-                key={`${skill}-${i}`}
-                className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
-              >
-                {skill}
-                <button
-                  type="button"
-                  onClick={() =>
-                    set(
-                      "skills",
-                      values.skills.filter((_, j) => j !== i),
-                    )
-                  }
-                  className="text-purple-300/60 hover:text-purple-200"
-                  aria-label={`Remove ${skill}`}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
       </section>
 
       <Separator className="bg-zinc-800" />

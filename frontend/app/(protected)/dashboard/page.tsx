@@ -14,6 +14,7 @@ import {
 import { auth0 } from "@/lib/auth0";
 import { getAccessTokenOrLogin } from "@/lib/auth";
 import { getUser, getUserProfileData } from "@/lib/db";
+import { groupSkills } from "@/lib/skills";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "cn";
@@ -203,14 +204,27 @@ export default async function DashboardPage() {
             {skills.length === 0 ? (
               <Empty text="No skills added yet." />
             ) : (
-              <div className="flex flex-wrap gap-2">
-                {skills.map((skill) => (
-                  <span
-                    key={skill.id}
-                    className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
-                  >
-                    {skill.name}
-                  </span>
+              <div className="flex flex-col gap-3">
+                {groupSkills(
+                  skills.map((s) => ({ name: s.name, category: s.category })),
+                ).map((group, gi) => (
+                  <div key={group.category ?? `ungrouped-${gi}`}>
+                    {group.category !== null && (
+                      <p className="mb-1.5 text-xs font-medium tracking-wide text-zinc-500 uppercase">
+                        {group.category}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {group.skills.map((skill) => (
+                        <span
+                          key={skill}
+                          className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             )}

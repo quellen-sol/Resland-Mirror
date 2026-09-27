@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "contract:emit": "prisma contract emit",
-    "test": "node --test lib/auth0.test.js"
+    "test": "node --test lib/auth0.test.js lib/skills.test.js"
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "~4.29.0",
