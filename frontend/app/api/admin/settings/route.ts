@@ -69,10 +69,12 @@ export async function PUT(request: Request) {
   const settings = (await res.json()) as {
     maintenance_mode: boolean;
     payments_paused: boolean;
+    updated_at?: string | null;
   };
   primeSiteSettingsCache({
     maintenance_mode: settings.maintenance_mode,
     payments_paused: settings.payments_paused,
+    updated_at: settings.updated_at ?? null,
   });
   return NextResponse.json(settings);
 }

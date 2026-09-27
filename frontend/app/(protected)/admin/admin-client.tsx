@@ -192,7 +192,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
-  const [savingSetting, setSavingSetting] = useState<string | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   function loadAdmin() {
     return Promise.all([
@@ -237,10 +237,11 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
   }, [accessToken]);
 
   async function saveSettings(patch: Partial<SiteSettings>) {
-    if (!settings) return;
+    // One save at a time: overlapping PUTs would let an older full-state
+    // response clobber a newer one and misreport the switches.
+    if (!settings || savingSettings) return;
     const prev = settings;
-    const key = Object.keys(patch)[0];
-    setSavingSetting(key);
+    setSavingSettings(true);
     setSettings({ ...settings, ...patch });
     try {
       const res = await fetch("/api/admin/settings", {
@@ -257,7 +258,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
         description: describeApiError(e),
       });
     } finally {
-      setSavingSetting(null);
+      setSavingSettings(false);
     }
   }
 
@@ -451,7 +452,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                 type="checkbox"
                 className="mt-0.5 size-4 cursor-pointer accent-purple-500"
                 checked={settings?.[row.key] ?? false}
-                disabled={!settings || savingSetting === row.key}
+                disabled={!settings || savingSettings}
                 onChange={(e) =>
                   void saveSettings({ [row.key]: e.target.checked })
                 }

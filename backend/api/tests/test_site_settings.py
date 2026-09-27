@@ -83,12 +83,21 @@ class Get(_Reset):
             s = await site_settings.get()
         self.assertTrue(s.payments_paused)
 
-    async def test_db_error_fails_open(self):
+    async def test_db_error_defaults_safe(self):
         pg = _Pg()
         pg.cursor = MagicMock(side_effect=RuntimeError("down"))
         s = await site_settings.get(pg)
+        # No cache: payments fail closed, maintenance follows the env seed.
         self.assertFalse(s.maintenance_mode)
-        self.assertFalse(s.payments_paused)
+        self.assertTrue(s.payments_paused)
+
+    async def test_db_error_keeps_env_paused_deploy_paused(self):
+        pg = _Pg()
+        pg.cursor = MagicMock(side_effect=RuntimeError("down"))
+        with patch.object(site_settings, "MAINTENANCE_MODE", True):
+            s = await site_settings.get(pg)
+        self.assertTrue(s.maintenance_mode)
+        self.assertTrue(s.payments_paused)
 
     async def test_db_error_serves_stale_cache(self):
         site_settings._cache = site_settings.SiteSettings(
@@ -112,17 +121,38 @@ class Update(_Reset):
         s = await site_settings.update(pg, maintenance_mode=True)
         self.assertTrue(s.maintenance_mode)
         self.assertFalse(s.payments_paused)
-        self.assertIn("UPDATE site_settings", pg.queries[0][0])
-        self.assertEqual(pg.queries[0][1], (True, False, 1))
+        self.assertIn("ON CONFLICT", pg.queries[0][0])
         # Write-through: a fresh read doesn't touch the DB again.
         again = await site_settings.get(pg)
         self.assertTrue(again.maintenance_mode)
         self.assertEqual(len(pg.queries), 1)
 
-    async def test_partial_update_keeps_other_flag(self):
-        pg = _Pg([_row(maint=True, paused=False), _row(maint=True, paused=True)])
-        await site_settings.update(pg, payments_paused=True)
-        self.assertEqual(pg.queries[1][1], (True, True, 1))
+    async def test_partial_update_leaves_other_field_to_db(self):
+        # A stale cache must not write back over another switch: the upsert
+        # COALESCEs unprovided fields against the stored row, so the only
+        # value sent is the one being changed.
+        site_settings._cache = site_settings.SiteSettings(
+            maintenance_mode=False, payments_paused=False
+        )
+        site_settings._cache_expires_at = float("inf")
+        pg = _Pg([_row(maint=True, paused=True)])  # DB has maint=True already
+        s = await site_settings.update(pg, payments_paused=True)
+        sql, params = pg.queries[0]
+        self.assertIn("ON CONFLICT", sql)
+        self.assertIn("COALESCE", sql)
+        # (id, maint, env seed, paused, paused default, maint, paused)
+        self.assertEqual(params, (1, None, False, True, False, None, True))
+        self.assertEqual(len(pg.queries), 1)
+        # Response comes from RETURNING, not the stale cache.
+        self.assertTrue(s.maintenance_mode)
+        self.assertTrue(s.payments_paused)
+
+    async def test_no_fields_is_a_plain_read(self):
+        pg = _Pg([_row(maint=True)])
+        s = await site_settings.update(pg)
+        self.assertTrue(s.maintenance_mode)
+        self.assertIn("SELECT", pg.queries[0][0])
+        self.assertEqual(len(pg.queries), 1)
 
 
 class AdminEndpoints(_Reset):
@@ -133,7 +163,7 @@ class AdminEndpoints(_Reset):
         self.assertEqual(resp.updated_at, "2025-01-01T12:00:00")
 
     async def test_update_settings(self):
-        pg = _Pg([_row(), _row(paused=True)])
+        pg = _Pg([_row(paused=True)])  # single upsert, RETURNING row
         resp = await admin_service.update_settings(
             pg, admin_model.SiteSettingsUpdate(payments_paused=True)
         )

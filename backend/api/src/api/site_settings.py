@@ -18,7 +18,7 @@ from psycopg.rows import TupleRow
 from .env_vars import MAINTENANCE_MODE, PG_URL
 
 _ROW_ID = 1
-_TTL_SECONDS = 15.0
+_TTL_SECONDS = 600.0
 
 
 @dataclass(frozen=True)
@@ -79,11 +79,13 @@ async def get(pg_conn: AsyncConnection[TupleRow] | None = None) -> SiteSettings:
             ) as conn:
                 value = await _fetch(conn)
     except Exception as e:
-        # Fail open on the last-known (or all-off) values — a DB blip must
-        # not throw the site into maintenance on its own.
+        # Serve the last-known values when we have them. With nothing cached
+        # fall back to the env seed for maintenance (so an env-paused deploy
+        # stays paused) and fail payments closed — a checkout needs the DB
+        # anyway, so this only guards a read-path blip.
         print(f"site_settings read failed: {e}")
         return _cache or SiteSettings(
-            maintenance_mode=False, payments_paused=False
+            maintenance_mode=MAINTENANCE_MODE, payments_paused=True
         )
     _cache = value
     _cache_expires_at = now + _TTL_SECONDS
@@ -96,26 +98,36 @@ async def update(
     maintenance_mode: bool | None = None,
     payments_paused: bool | None = None,
 ) -> SiteSettings:
-    """Upsert the singleton row and write through to the cache."""
+    """Atomically patch only the provided fields; write through to cache.
+
+    None means "don't touch" — each field is COALESCE'd against the stored
+    row so concurrent admin writes on different replicas can't undo each
+    other via a stale TTL cache. The INSERT path seeds maintenance_mode
+    from the env var for a never-created row.
+    """
     global _cache, _cache_expires_at
-    current = await get(pg_conn)
-    merged = SiteSettings(
-        maintenance_mode=(
-            current.maintenance_mode if maintenance_mode is None else maintenance_mode
-        ),
-        payments_paused=(
-            current.payments_paused if payments_paused is None else payments_paused
-        ),
-    )
+    if maintenance_mode is None and payments_paused is None:
+        return await get(pg_conn)
     async with pg_conn.cursor() as cursor:
         res = await cursor.execute(
             """
-            UPDATE site_settings
-            SET maintenance_mode = %s, payments_paused = %s, updated_at = now()
-            WHERE id = %s
+            INSERT INTO site_settings (id, maintenance_mode, payments_paused)
+            VALUES (%s, COALESCE(%s, %s), COALESCE(%s, %s))
+            ON CONFLICT (id) DO UPDATE SET
+                maintenance_mode = COALESCE(%s, site_settings.maintenance_mode),
+                payments_paused = COALESCE(%s, site_settings.payments_paused),
+                updated_at = now()
             RETURNING maintenance_mode, payments_paused, updated_at
             """,
-            (merged.maintenance_mode, merged.payments_paused, _ROW_ID),
+            (
+                _ROW_ID,
+                maintenance_mode,
+                MAINTENANCE_MODE,
+                payments_paused,
+                False,
+                maintenance_mode,
+                payments_paused,
+            ),
         )
         row = await res.fetchone()
     value = SiteSettings(
