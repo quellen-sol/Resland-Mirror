@@ -87,7 +87,10 @@ async def _fetch_resume_content(pg_conn: PgConnection, user_id: str) -> ResumeCo
 
     skill_rows = await _fetch_all(
         pg_conn,
-        "SELECT name, category FROM user_base_skill WHERE user_id = %s",
+        """
+        SELECT name, category FROM user_base_skill
+        WHERE user_id = %s ORDER BY sort_order, id
+        """,
         (user_id,),
     )
     skills_by_cat: dict[str | None, list[str]] = {}

@@ -18,6 +18,7 @@ import {
   isInsufficientBalance,
 } from "@/lib/api";
 import ApiUnavailable from "@/components/api-unavailable";
+import { groupSkills } from "@/lib/skills";
 
 const MAX_JD_CHARS = 10_000;
 const POLL_INTERVAL_MS = 3000;
@@ -69,10 +70,12 @@ function fmtDate(date: string | null) {
 export default function TailorForm({
   accessToken,
   experiences,
+  skills,
   hasProfile,
 }: {
   accessToken: string;
   experiences: ExperienceMeta[];
+  skills: { name: string; category: string | null }[];
   hasProfile: boolean;
 }) {
   const router = useRouter();
@@ -92,6 +95,12 @@ export default function TailorForm({
     for (const e of experiences) map.set(e.id, e);
     return map;
   }, [experiences]);
+
+  const skillCategory = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const s of skills) map.set(s.name, s.category);
+    return map;
+  }, [skills]);
 
   async function apiFetch(path: string, init?: RequestInit) {
     return apiRequest(accessToken, `/tailor${path}`, init);
@@ -489,17 +498,31 @@ export default function TailorForm({
               <CardHeader>
                 <CardTitle className="text-lg">Skills</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {tailored.skills.map((skill) => (
-                    <span
-                      key={skill}
-                      className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
-                    >
-                      {skill}
-                    </span>
-                  ))}
-                </div>
+              <CardContent className="flex flex-col gap-3">
+                {groupSkills(
+                  tailored.skills.map((name) => ({
+                    name,
+                    category: skillCategory.get(name) ?? null,
+                  })),
+                ).map((group, gi) => (
+                  <div key={group.category ?? `ungrouped-${gi}`}>
+                    {group.category !== null && (
+                      <p className="mb-1.5 text-xs font-medium tracking-wide text-zinc-500 uppercase">
+                        {group.category}
+                      </p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {group.skills.map((skill) => (
+                        <span
+                          key={skill}
+                          className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
+                        >
+                          {skill}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}
