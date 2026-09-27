@@ -21,7 +21,7 @@ class TailorHandler(GenericHandlerWithCleanup):
                 raise HandlerError("Could not find `run_id` in message")
 
             runner = TailorRunner(data)
-            self.dispatch_job(
+            await self.dispatch_job(
                 DispatchJobParams(job_id=run_id, runner=runner, message=message)
             )
         except Exception as e:

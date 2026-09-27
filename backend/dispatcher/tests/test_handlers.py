@@ -87,18 +87,66 @@ class ParseEvent(unittest.TestCase):
             self.handler.parse_event(_message(None))
 
 
-class DispatchJob(unittest.TestCase):
-    def test_registers_handle_under_job_id(self):
+class DispatchJob(unittest.IsolatedAsyncioTestCase):
+    async def test_registers_handle_under_job_id(self):
         handler = _Handler()
         handle = _Handle("PROCESSING")
         msg = _message({})
-        handler.dispatch_job(
+        await handler.dispatch_job(
             DispatchJobParams(
                 job_id="j1", runner=_Runner(handle), message=msg
             )
         )
         self.assertIs(handler.running_jobs["j1"][0], handle)
         self.assertIs(handler.running_jobs["j1"][1], msg)
+
+    async def test_redelivery_of_in_flight_job_is_acked_not_redispatched(self):
+        handler = _Handler()
+        msg = _message({})
+        handler.running_jobs["j1"] = (_Handle("PROCESSING"), msg)
+
+        runner = _Runner(_Handle("PROCESSING"))
+        dup = _message({})
+        await handler.dispatch_job(
+            DispatchJobParams(job_id="j1", runner=runner, message=dup)
+        )
+
+        dup.ack.assert_awaited_once()
+        self.assertIs(handler.running_jobs["j1"][1], msg)
+
+    async def test_failed_settle_retries_then_gives_up(self):
+        handler = _Handler()
+        msg = _message({})
+        msg.ack = AsyncMock(side_effect=RuntimeError("channel closed"))
+        handle = _Handle("COMPLETED")
+        handler.running_jobs["j1"] = (handle, msg)
+        handler.last_statuses["j1"] = "COMPLETED"
+
+        # 9 failures keep the job tracked; the 10th drops it — the broker
+        # already requeued the delivery when its channel died.
+        for _ in range(9):
+            with self.assertRaises(RuntimeError):
+                await handler._reap_job("j1", handle, msg)
+            self.assertIn("j1", handler.running_jobs)
+        await handler._reap_job("j1", handle, msg)
+        self.assertNotIn("j1", handler.running_jobs)
+        self.assertEqual(msg.ack.await_count, 10)
+
+    async def test_db_update_failure_retries_write_next_tick(self):
+        handler = _Handler()
+        handler.update_db_status = MagicMock(
+            side_effect=[RuntimeError("db down"), None]
+        )
+        handle = _Handle("PROCESSING")
+        handler.running_jobs["j1"] = (handle, _message({}))
+
+        with self.assertRaises(RuntimeError):
+            await handler._reap_job("j1", handle, handler.running_jobs["j1"][1])
+        self.assertNotIn("j1", handler.last_statuses)
+
+        await handler._reap_job("j1", handle, handler.running_jobs["j1"][1])
+        self.assertEqual(handler.last_statuses["j1"], "PROCESSING")
+        self.assertEqual(handler.update_db_status.call_count, 2)
 
 
 class CleanupLoop(unittest.IsolatedAsyncioTestCase):

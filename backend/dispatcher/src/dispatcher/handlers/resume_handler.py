@@ -28,7 +28,7 @@ class ResumeHandler(GenericHandlerWithCleanup):
                 raise HandlerError("Could not find `job_id` in message")
 
             runner = ResumeRunner(data)
-            self.dispatch_job(
+            await self.dispatch_job(
                 DispatchJobParams(job_id=job_id, runner=runner, message=message)
             )
         except Exception as e:

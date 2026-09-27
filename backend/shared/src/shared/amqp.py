@@ -55,7 +55,9 @@ class BaseAmqpJob:
         return as_json.encode()
 
     def to_message(self) -> aio_pika.Message:
-        return aio_pika.Message(body=self.to_bytes())
+        return aio_pika.Message(
+            body=self.to_bytes(), delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+        )
 
 
 @dataclass
@@ -132,7 +134,9 @@ class AmqpClient:
     async def _get_channel(self) -> AbstractChannel:
         conn = self._require_connection()
         if self._channel is None or self._channel.is_closed:
+            # Cached publishers hold exchanges from the old channel — invalid.
             self._channel = await conn.channel()
+            self._publishers.clear()
         return self._channel
 
     async def get_publisher(

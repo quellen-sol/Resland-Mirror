@@ -18,7 +18,7 @@ class SuggestionHandler(GenericHandlerWithCleanup):
                 raise HandlerError("Could not find `session_id` in message")
 
             runner = SuggestionsRunner(data)
-            self.dispatch_job(
+            await self.dispatch_job(
                 DispatchJobParams(
                     job_id=session_id, runner=runner, message=message
                 )
