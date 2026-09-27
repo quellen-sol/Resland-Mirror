@@ -39,9 +39,9 @@ app = FastAPI(lifespan=lifespan)
 async def maintenance_mode(request: Request, call_next):
     if (
         MAINTENANCE_MODE
-        and not await is_site_admin_request(request)
         and not is_docs_request(request)
         and not is_stripe_webhook_request(request)
+        and not await is_site_admin_request(request)
     ):
         return JSONResponse(
             status_code=503,

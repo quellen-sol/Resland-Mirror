@@ -66,7 +66,9 @@ async def is_site_admin_request(request: Request) -> bool:
         return False
 
 def is_docs_request(request: Request) -> bool:
-    return request.url.path.startswith("/docs")
+    # /docs alone isn't enough: Swagger UI and ReDoc fetch /openapi.json.
+    path = request.url.path
+    return path.startswith(("/docs", "/redoc")) or path == "/openapi.json"
 
 
 def is_stripe_webhook_request(request: Request) -> bool:
