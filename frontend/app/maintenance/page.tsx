@@ -33,6 +33,12 @@ export default function MaintenancePage() {
         >
           Admin? Log in
         </Link>
+        <Link
+          href="/auth/logout"
+          className="text-sm text-zinc-500 hover:text-zinc-300"
+        >
+          Sign out
+        </Link>
       </div>
     </main>
   );
