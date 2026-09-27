@@ -16,7 +16,7 @@ from shared.docgen import (
     default_format_profile,
     render_docx,
 )
-from shared.pdfgen import render_pdf
+from shared.pdfgen import pdf_encodable, render_pdf
 from shared.s3 import get_s3_client
 
 from ..deps import PgConnection
@@ -212,7 +212,11 @@ async def export_resume(pg_conn: PgConnection, user_id: str):
         )
 
     fmt, was_pdf = await _fetch_format_profile(pg_conn, user_id)
-    s3_key = (GENERATED_PDF_KEY if was_pdf else GENERATED_DOCX_KEY).format(
+    # Base-14 pdf fonts only cover cp1252 — a profile carrying text that
+    # can't encode (CJK names, exotic glyphs) falls back to docx rather
+    # than exporting '?'s.
+    want_pdf = was_pdf and pdf_encodable(content)
+    s3_key = (GENERATED_PDF_KEY if want_pdf else GENERATED_DOCX_KEY).format(
         user_id=user_id
     )
     source_hash = content_source_hash(
@@ -243,7 +247,7 @@ async def export_resume(pg_conn: PgConnection, user_id: str):
     )
     if stale:
         rendered = (
-            render_pdf(content, fmt) if was_pdf else render_docx(content, fmt)
+            render_pdf(content, fmt) if want_pdf else render_docx(content, fmt)
         )
         s3_client.upload_fileobj(
             io.BytesIO(rendered), S3_RESUME_BUCKET, s3_key

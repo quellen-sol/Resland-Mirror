@@ -292,6 +292,43 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(resp.regenerated)
         s3.upload_fileobj.assert_called_once()
 
+    async def test_pdf_source_unencodable_falls_back_to_docx(self):
+        """A pdf-sourced profile whose text cp1252 can't carry (a CJK
+        name) renders docx — the pdf path would emit '?'s."""
+        stored = default_format_profile()
+        pg = _Pg(
+            [
+                [("李明", "j@x.com", "555", "NYC", "My summary")],
+                [("https://gh",)],
+                [(11, "Acme", "Eng", "2020", None)],
+                [(11, "Built x")],
+                [],
+                [],
+                [],
+            ]
+        )
+        pg.results.put(
+            _Result([(stored.to_json(), "resumes/u1/resume_doc.pdf")])
+        )
+        pg.results.put(_Result([]))  # no existing generated row
+        pg.results.put(_Result([(datetime.datetime(2025, 1, 2),)]))
+        s3 = self._s3()
+        with (
+            patch.object(service, "get_s3_client", return_value=s3),
+            patch.object(
+                service, "render_docx", return_value=b"docx"
+            ) as render_docx,
+            patch.object(service, "render_pdf") as render_pdf,
+        ):
+            resp = await service.export_resume(pg, "u1")
+        self.assertTrue(resp.regenerated)
+        render_pdf.assert_not_called()
+        render_docx.assert_called_once()
+        self.assertEqual(
+            s3.upload_fileobj.call_args.args[2],
+            "resumes/u1/generated.docx",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

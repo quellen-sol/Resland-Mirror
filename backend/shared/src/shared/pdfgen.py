@@ -63,17 +63,82 @@ _FAMILIES = {
 
 # Characters cp1252 can't carry, mapped to the nearest printable twin.
 _TEXT_FIX = {
+    "‐": "-",  # U+2010 hyphen
     "‑": "-",  # U+2011 non-breaking hyphen
     "‒": "-",  # U+2012 figure dash
+    "−": "-",  # U+2212 minus sign
     "―": "—",  # U+2015 horizontal bar
     "\u202f": " ",  # narrow no-break space
     "\u00a0": " ",
+    "　": " ",  # ideographic space
     "ﬁ": "fi",  # ligatures
     "ﬂ": "fl",
     "ﬀ": "ff",
     "ﬃ": "ffi",
     "ﬄ": "ffl",
+    # Bullet and marker variants — base-14 faces only carry "•".
+    "●": "•",
+    "○": "•",
+    "◦": "•",
+    "▪": "•",
+    "■": "•",
+    "□": "•",
+    "∙": "•",
+    "►": "›",
+    "‣": "›",
+    "▸": "›",
+    "★": "*",
+    "☆": "*",
+    "✓": "v",
+    "✔": "v",
+    "‖": "|",
 }
+
+
+def _unfixable(text: str) -> str | None:
+    """The first character that survives _TEXT_FIX but not cp1252 — for
+    these the base-14 faces have no glyph, so the caller should fall back
+    to docx rather than export '?'s."""
+    for k, v in _TEXT_FIX.items():
+        text = text.replace(k, v)
+    try:
+        text.encode("cp1252")
+    except UnicodeEncodeError as exc:
+        return text[exc.start]
+    return None
+
+
+def pdf_encodable(content: ResumeContent) -> bool:
+    """Whether every content string can be written through the cp1252
+    base-14 encoding — False means the export should render docx instead
+    of emitting '?' for e.g. CJK names."""
+    h = content.header
+    texts: list[str | None] = [
+        h.name,
+        h.email,
+        h.phone,
+        h.location,
+        *h.links,
+        content.summary,
+    ]
+    for exp in content.experiences:
+        texts += [exp.company, exp.title, exp.start_date, exp.end_date]
+        texts += exp.bullets
+    for group in content.skill_groups:
+        texts += [group.category, *group.skills]
+    for edu in content.education:
+        texts += [
+            edu.institution,
+            edu.degree,
+            edu.field_of_study,
+            edu.start_date,
+            edu.end_date,
+            edu.description,
+        ]
+    for proj in content.projects:
+        texts += [proj.name, proj.link, proj.description]
+        texts += [proj.start_date, proj.end_date]
+    return all(_unfixable(t) is None for t in texts if t)
 
 
 def _family_of(font_name: str | None) -> str:
@@ -241,12 +306,38 @@ def _wrap(
             if lines[-1]
             else 0.0
         )
+        if w > avail:
+            # A token wider than the column (a long URL, say) never fits
+            # whole — split it into measured segments so it wraps instead
+            # of clipping past the page edge.
+            for seg in _split_token(word, res, size, avail):
+                if lines[-1]:
+                    lines.append([])
+                lines[-1].append((seg, style))
+            cur_w = _text_width(lines[-1][-1][0], res, size)
+            continue
         if cur_w + space_w + w > avail and lines[-1]:
             lines.append([])
             cur_w, space_w = 0.0, 0.0
         lines[-1].append((word, style))
         cur_w += space_w + w
     return lines
+
+
+def _split_token(word: str, res: str, size: float, avail: float) -> list[str]:
+    """Split one unbroken token at measured width boundaries — every
+    character is kept, the pieces just land on successive lines."""
+    parts: list[str] = []
+    cur = ""
+    for ch in word:
+        if cur and _text_width(cur + ch, res, size) > avail:
+            parts.append(cur)
+            cur = ch
+        else:
+            cur += ch
+    if cur:
+        parts.append(cur)
+    return parts
 
 
 def _line_width(atoms: list[tuple[str, RoleStyle]]) -> float:
@@ -310,12 +401,16 @@ def _entry_header(
     title_style = fmt.roles.get(title_role, fmt.role(ROLE_ENTRY_TITLE))
     sub_style = fmt.roles.get(sub_role, fmt.role(ROLE_ENTRY_SUB))
     sep = fmt.entry_title_separator
-    if tail and fmt.entry_title_tail_sub:
-        runs = [(title, title_style), (f"{sep}{tail}", sub_style)]
-    elif tail:
-        runs = [(f"{title}{sep}{tail}", title_style)]
-    else:
-        runs = [(title, title_style)]
+    parts = [(title, title_style)]
+    if tail:
+        tail_style = sub_style if fmt.entry_title_tail_sub else title_style
+        parts.append((tail, tail_style))
+    if fmt.entry_title_tail_first:
+        parts.reverse()
+    runs = [
+        (f"{sep}{text}" if i else text, style)
+        for i, (text, style) in enumerate(parts)
+    ]
 
     flow.ensure(0)
     flow.descend(title_style.space_before_pt or 0.0)

@@ -127,6 +127,9 @@ class FormatProfile:
     # When the entry title line splits into a bold head (job title) and a
     # lighter tail (company/location/dates), the tail renders in entry_sub.
     entry_title_tail_sub: bool = False
+    # True when the source orders the tail before the head —
+    # "Company - Title" instead of "Title - Company".
+    entry_title_tail_first: bool = False
     dates_on_title_line: bool = True
     dates_separator: str = " – "
     # Label used for open-ended entries ("Present"); None = render the
@@ -410,11 +413,17 @@ def _dominant_font(
 _SEPARATORS = (" | ", " — ", " – ", " - ", " · ", " @ ", " at ")
 
 
-def _title_separator(text: str, head: str, tail: str) -> str | None:
-    """The separator joining title and company on an entry line — "|" or
-    "—" etc. Detected from what actually sits between them in the source,
-    whether the source orders them head-tail or tail-head."""
-    for first, second in ((head, tail), (tail, head)):
+def _title_separator(
+    text: str, head: str, tail: str
+) -> tuple[str, bool] | None:
+    """(separator, tail_first) joining title and company on an entry line
+    — "|" or "—" etc. Detected from what actually sits between them in
+    the source, in whichever order the source writes them; tail_first is
+    True when the tail (company) precedes the head (title)."""
+    for first, second, tail_first in (
+        (head, tail, False),
+        (tail, head, True),
+    ):
         i = text.find(first)
         j = text.find(second, i + len(first)) if i >= 0 else -1
         if i >= 0 and j > i:
@@ -423,11 +432,11 @@ def _title_separator(text: str, head: str, tail: str) -> str | None:
                 # Punctuation joins take no leading space:
                 # "Title, Company", not "Title , Company".
                 if between[0] in ",;:.":
-                    return f"{between} "
-                return f" {between} "
+                    return f"{between} ", tail_first
+                return f" {between} ", tail_first
     for candidate in _SEPARATORS:
         if candidate in text:
-            return candidate
+            return candidate, False
     return None
 
 
@@ -715,6 +724,7 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
     first_exp = profile.experience[0] if profile.experience else None
     dates_on_title_line = True
     entry_title_separator = " — "
+    tail_first = False
     tail_sub = False
     tail_style: RoleStyle | None = None
     if first_exp is not None:
@@ -724,11 +734,11 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
         if exp_para_idx is not None:
             exp_para = paras[exp_para_idx]
             exp_text = exp_para.text
-            sep = _title_separator(
+            detected = _title_separator(
                 exp_text, first_exp.position, first_exp.company
             )
-            if sep:
-                entry_title_separator = sep
+            if detected:
+                entry_title_separator, tail_first = detected
             date_bits = _norm(first_exp.start_date)
             dates_on_title_line = bool(
                 date_bits and date_bits.split()[0] in _norm(exp_text)
@@ -858,9 +868,11 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
                 # No experience line to learn the separator from — the
                 # project line's own chain is the next best witness.
                 anchor = first_proj.link or first_proj.start_date
-                proj_sep = _title_separator(proj_text, first_proj.name, anchor)
-                if proj_sep:
-                    entry_title_separator = proj_sep
+                proj_detected = _title_separator(
+                    proj_text, first_proj.name, anchor
+                )
+                if proj_detected:
+                    entry_title_separator, tail_first = proj_detected
             # Projects often style name/tail/link differently from
             # experience entries — capture dedicated roles from the first
             # matched project block.
@@ -955,6 +967,7 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
         location_on_own_line=location_on_own_line,
         entry_title_separator=entry_title_separator,
         entry_title_tail_sub=tail_sub,
+        entry_title_tail_first=tail_first,
         dates_on_title_line=dates_on_title_line,
         dates_separator=dates_separator,
         dates_open_label=dates_open_label,
@@ -1163,17 +1176,18 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
     first_exp = profile.experience[0] if profile.experience else None
     dates_on_title_line = True
     entry_title_separator = " — "
+    tail_first = False
     if first_exp is not None:
         exp_line_idx = _match_any_idx(
             lines, [first_exp.position, first_exp.company]
         )
         if exp_line_idx is not None:
             exp_line = lines[exp_line_idx].text
-            sep = _title_separator(
+            detected = _title_separator(
                 exp_line, first_exp.position, first_exp.company
             )
-            if sep:
-                entry_title_separator = sep
+            if detected:
+                entry_title_separator, tail_first = detected
             date_bits = _norm(first_exp.start_date)
             dates_on_title_line = bool(
                 date_bits and date_bits.split()[0] in _norm(exp_line)
@@ -1257,9 +1271,11 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
             )
             if first_exp is None or exp_line_idx is None:
                 anchor = first_proj.link or first_proj.start_date
-                proj_sep = _title_separator(proj_text, first_proj.name, anchor)
-                if proj_sep:
-                    entry_title_separator = proj_sep
+                proj_detected = _title_separator(
+                    proj_text, first_proj.name, anchor
+                )
+                if proj_detected:
+                    entry_title_separator, tail_first = proj_detected
             # Same optional project roles as the docx path — pdf lines
             # carry one dominant style each, so head/tail can't split.
             roles.setdefault(ROLE_PROJECT_TITLE, _style(lines[proj_name_idx]))
@@ -1316,6 +1332,7 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
         contact_separator=separator,
         location_on_own_line=location_on_own_line,
         entry_title_separator=entry_title_separator,
+        entry_title_tail_first=tail_first,
         dates_on_title_line=dates_on_title_line,
         dates_separator=dates_separator,
         dates_open_label=dates_open_label,
@@ -1450,13 +1467,16 @@ def _entry_header(
     sep = fmt.entry_title_separator
 
     def _title_runs(para: Paragraph):
-        if tail and fmt.entry_title_tail_sub:
-            _write_run(para, title, title_style)
-            _write_run(para, f"{sep}{tail}", sub_style)
-        elif tail:
-            _write_run(para, f"{title}{sep}{tail}", title_style)
-        else:
-            _write_run(para, title, title_style)
+        parts = [(title, title_style)]
+        if tail:
+            tail_style = (
+                sub_style if fmt.entry_title_tail_sub else title_style
+            )
+            parts.append((tail, tail_style))
+        if fmt.entry_title_tail_first:
+            parts.reverse()
+        for i, (text, style) in enumerate(parts):
+            _write_run(para, f"{sep}{text}" if i else text, style)
 
     if fmt.dates_on_title_line and dates:
         para = doc.add_paragraph()

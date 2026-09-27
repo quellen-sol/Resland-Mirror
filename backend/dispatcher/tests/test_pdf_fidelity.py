@@ -35,7 +35,7 @@ from shared.docgen import (
     capture_format_profile_pdf,
     render_docx,
 )
-from shared.pdfgen import render_pdf
+from shared.pdfgen import pdf_encodable, render_pdf
 
 from dispatcher.doc_parsers.pdf import column_counts, parse_pdf, raw_text
 
@@ -367,6 +367,7 @@ class FixtureCapture(unittest.TestCase):
         # 'Fernhill Creative Studio - Content Project Manager' — the
         # company-first separator is a plain hyphen.
         self.assertEqual(self.fmt.entry_title_separator, " - ")
+        self.assertTrue(self.fmt.entry_title_tail_first)
         self.assertTrue(self.fmt.dates_on_title_line)
         self.assertEqual(self.fmt.dates_separator, " – ")
         self.assertEqual(self.fmt.dates_open_label, "Current")
@@ -430,6 +431,13 @@ class FixtureRender(unittest.TestCase):
         )
         self.assertIn("Sept 2024 – Current", title.text)
 
+    def test_source_entry_order_kept(self):
+        # Source writes 'Company - Title'; the render must not swap it.
+        title = next(
+            p for p in self.paras if "Content Project Manager" in p.text
+        )
+        self.assertTrue(title.text.startswith("Fernhill Creative Studio"))
+
     def test_comma_separator_has_no_leading_space(self):
         joined = "\n".join(self.texts)
         self.assertNotIn(" , ", joined)
@@ -489,6 +497,34 @@ class FixtureRenderPdf(unittest.TestCase):
         header = next(l for l in out.lines if l.text == "SUMMARY")
         self.assertTrue(header.style.bold)
         self.assertEqual(header.style.color, "00366D")
+
+    def test_source_entry_order_kept(self):
+        out = parse_pdf(self.pdf)
+        title = next(
+            l for l in out.lines if "Content Project Manager" in l.text
+        )
+        self.assertTrue(title.text.startswith("Fernhill Creative Studio"))
+
+    def test_long_unbroken_link_wraps(self):
+        # A URL wider than the column must split across lines instead of
+        # clipping past the content right edge.
+        content = _canva_content()
+        url = "https://portfolio.example.com/" + "x" * 180
+        content.header.links = [url]
+        out = parse_pdf(render_pdf(content, self.fmt))
+        right = 612 - self.fmt.page_margins_in["right"] * 72
+        for line in out.lines:
+            if not line.empty:
+                self.assertLessEqual(line.x1, right + 2.0)
+        joined = raw_text(out).replace("\n", "").replace(" ", "")
+        self.assertIn("portfolio.example.com", joined)
+        self.assertIn("x" * 40, joined)
+
+    def test_pdf_encodable(self):
+        content = _canva_content()
+        self.assertTrue(pdf_encodable(content))
+        content.header.name = "李明"
+        self.assertFalse(pdf_encodable(content))
 
 
 def _food_service_profile() -> _Profile:
@@ -613,6 +649,7 @@ class FoodServiceFixture(unittest.TestCase):
         self.assertEqual(
             self.fmt.section_titles["education"], "EDUCATION"
         )
+        self.assertTrue(self.fmt.entry_title_tail_first)
         name = self.fmt.roles[ROLE_NAME]
         self.assertEqual(name.font_name, "ProximaNova")
         self.assertEqual(
@@ -632,11 +669,11 @@ class FoodServiceFixture(unittest.TestCase):
             "Corvia Inc",
         ):
             self.assertIn(field_text, joined)
-        # Dates on their own line — the entry line holds just title+tail.
+        # Source order is 'Company - Title' — the render keeps it.
         title = next(
             p for p in rendered.paragraphs if "Executive Assistant" in p.text
         )
-        self.assertIn("Corvia Inc", title.text)
+        self.assertTrue(title.text.startswith("Corvia Inc"))
 
     def test_render_pdf_round_trip(self):
         out = parse_pdf(render_pdf(_food_service_content(), self.fmt))
@@ -650,6 +687,10 @@ class FoodServiceFixture(unittest.TestCase):
             "EDUCATION",
         ):
             self.assertIn(field_text, joined)
+        # The captured '●' bullet glyph maps to its cp1252 twin '•' —
+        # never a '?'.
+        self.assertIn("•", joined)
+        self.assertNotIn("?", joined)
 
 
 class GeneratedBadRegression(unittest.TestCase):
