@@ -17,7 +17,8 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET") or ""
 # Where Stripe Checkout sends the browser back after payment.
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL") or "http://localhost:3000"
 
-# Set to 1/true to pause all activity: every request gets a 503.
+# Legacy bootstrap: seeds site_settings.maintenance_mode when the row is first
+# created, so an env-paused deploy stays paused. Afterwards /admin owns the flag.
 MAINTENANCE_MODE = (os.getenv("MAINTENANCE_MODE") or "").strip().lower() in {
     "1",
     "true",

@@ -12,6 +12,10 @@
       "model": "ModelPricing",
       "namespace": "public"
     },
+    "site_settings": {
+      "model": "SiteSettings",
+      "namespace": "public"
+    },
     "token_usage": {
       "model": "TokenUsage",
       "namespace": "public"
@@ -377,6 +381,57 @@
               },
               "namespaceId": "public",
               "table": "model_pricing"
+            }
+          },
+          "SiteSettings": {
+            "fields": {
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "maintenance_mode": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "payments_paused": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/bool@1",
+                  "kind": "scalar"
+                }
+              },
+              "updated_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "id": {
+                  "column": "id"
+                },
+                "maintenance_mode": {
+                  "column": "maintenance_mode"
+                },
+                "payments_paused": {
+                  "column": "payments_paused"
+                },
+                "updated_at": {
+                  "column": "updated_at"
+                }
+              },
+              "namespaceId": "public",
+              "table": "site_settings"
             }
           },
           "TokenUsage": {
@@ -1842,6 +1897,54 @@
               },
               "uniques": []
             },
+            "site_settings": {
+              "columns": {
+                "id": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": 1
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "maintenance_mode": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "payments_paused": {
+                  "codecId": "pg/bool@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": false
+                  },
+                  "nativeType": "bool",
+                  "nullable": false
+                },
+                "updated_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "token_usage": {
               "checks": [
                 {
@@ -3098,7 +3201,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "787c1c218f39b6f79c7db522adeb4a8c58b137285b548d4c7b83b36d52982924"
+    "storageHash": "c9d11cbec8d8698eec9378f615f694ee856fcda93f97b0270c507997cef9ac8a"
   },
   "capabilities": {
     "postgres": {

@@ -47,14 +47,17 @@ function fmtDate(iso: string) {
 export default function BillingClient({
   accessToken,
   checkoutResult,
+  paymentsPaused: initialPaymentsPaused,
 }: {
   accessToken: string;
   checkoutResult: string | null;
+  paymentsPaused: boolean;
 }) {
   const [balance, setBalance] = useState<number | null>(null);
   const [packs, setPacks] = useState<TokenPack[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [busyPack, setBusyPack] = useState<string | null>(null);
+  const [paused, setPaused] = useState(initialPaymentsPaused);
   const [error, setError] = useState<string | null>(null);
 
   function loadBilling() {
@@ -96,6 +99,33 @@ export default function BillingClient({
     void loadBilling();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  // The page snapshot can go stale while open — re-read the flag on focus
+  // and on a poll so resumed payments unlock Buy without a reload.
+  useEffect(() => {
+    let cancelled = false;
+    async function refresh() {
+      try {
+        const res = await fetch("/api/site-settings");
+        if (!res.ok) return;
+        const body = (await res.json()) as { payments_paused?: boolean };
+        if (!cancelled && typeof body.payments_paused === "boolean")
+          setPaused(body.payments_paused);
+      } catch {
+        // Keep the last known state.
+      }
+    }
+    const interval = setInterval(() => void refresh(), 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
 
   async function buy(packId: string) {
     setBusyPack(packId);
@@ -153,6 +183,15 @@ export default function BillingClient({
         </CardContent>
       </Card>
 
+      {paused && (
+        <Card className="border-amber-800/60 bg-amber-950/40 text-amber-200">
+          <CardContent className="pt-6 text-sm">
+            Purchases are temporarily paused — your balance and history are
+            unaffected. Please check back soon.
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
         {packs.map((pack) => (
           <Card
@@ -171,7 +210,7 @@ export default function BillingClient({
               </p>
               <Button
                 onClick={() => buy(pack.id)}
-                disabled={busyPack !== null}
+                disabled={busyPack !== null || paused}
                 className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
               >
                 {busyPack === pack.id ? (
