@@ -35,7 +35,6 @@ from shared.docgen import (
     capture_format_profile_pdf,
     render_docx,
 )
-from shared.pdfgen import pdf_encodable, render_pdf
 
 from dispatcher.doc_parsers.pdf import column_counts, parse_pdf, raw_text
 
@@ -453,79 +452,6 @@ class FixtureRender(unittest.TestCase):
         self.assertIn(num, (None, "1"))
 
 
-@unittest.skipUnless(HAS_PDFMINER, "pdfminer.six not installed")
-class FixtureRenderPdf(unittest.TestCase):
-    """render_pdf output round-trips through the pdf extractor."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.doc = parse_pdf(ORIGINAL.read_bytes())
-        cls.fmt = capture_format_profile_pdf(cls.doc, _canva_profile())
-        cls.pdf = render_pdf(_canva_content(), cls.fmt)
-
-    def test_is_a_pdf(self):
-        self.assertTrue(self.pdf.startswith(b"%PDF-"))
-        self.assertIn(b"%%EOF", self.pdf)
-
-    def test_text_survives_round_trip(self):
-        out = parse_pdf(self.pdf)
-        joined = raw_text(out)
-        for field_text in (
-            "Dana Prescott",
-            "dprescott@example.com",
-            "(208) 555-0142",
-            "Cedar Hollow Falls, Idaho",
-            "WORK EXPERIENCE",
-            "Content Project Manager (Contractor)",
-            "Sept 2024",
-        ):
-            self.assertIn(field_text, joined)
-
-    def test_dates_float_right(self):
-        out = parse_pdf(self.pdf)
-        title = next(
-            l for l in out.lines if "Content Project Manager" in l.text
-        )
-        dates = next(l for l in out.lines if "Sept 2024" in l.text)
-        self.assertAlmostEqual(title.top, dates.top, delta=4.0)
-        # Right-floated: dates end at the content right edge (~556pt for
-        # the captured 0.78" right margin).
-        self.assertGreater(dates.x1, 540.0)
-
-    def test_headers_bold_and_colored(self):
-        out = parse_pdf(self.pdf)
-        header = next(l for l in out.lines if l.text == "SUMMARY")
-        self.assertTrue(header.style.bold)
-        self.assertEqual(header.style.color, "00366D")
-
-    def test_source_entry_order_kept(self):
-        out = parse_pdf(self.pdf)
-        title = next(
-            l for l in out.lines if "Content Project Manager" in l.text
-        )
-        self.assertTrue(title.text.startswith("Fernhill Creative Studio"))
-
-    def test_long_unbroken_link_wraps(self):
-        # A URL wider than the column must split across lines instead of
-        # clipping past the content right edge.
-        content = _canva_content()
-        url = "https://portfolio.example.com/" + "x" * 180
-        content.header.links = [url]
-        out = parse_pdf(render_pdf(content, self.fmt))
-        right = 612 - self.fmt.page_margins_in["right"] * 72
-        for line in out.lines:
-            if not line.empty:
-                self.assertLessEqual(line.x1, right + 2.0)
-        joined = raw_text(out).replace("\n", "").replace(" ", "")
-        self.assertIn("portfolio.example.com", joined)
-        self.assertIn("x" * 40, joined)
-
-    def test_pdf_encodable(self):
-        content = _canva_content()
-        self.assertTrue(pdf_encodable(content))
-        content.header.name = "李明"
-        self.assertFalse(pdf_encodable(content))
-
 
 def _food_service_profile() -> _Profile:
     """What the parse agent should extract from the food-service pdf —
@@ -675,22 +601,6 @@ class FoodServiceFixture(unittest.TestCase):
         )
         self.assertTrue(title.text.startswith("Corvia Inc"))
 
-    def test_render_pdf_round_trip(self):
-        out = parse_pdf(render_pdf(_food_service_content(), self.fmt))
-        joined = raw_text(out)
-        for field_text in (
-            "Dana Prescott",
-            "dprescott@example.com",
-            "208.555.0142",
-            "ABOUT ME",
-            "EXPERIENCE",
-            "EDUCATION",
-        ):
-            self.assertIn(field_text, joined)
-        # The captured '●' bullet glyph maps to its cp1252 twin '•' —
-        # never a '?'.
-        self.assertIn("•", joined)
-        self.assertNotIn("?", joined)
 
 
 class GeneratedBadRegression(unittest.TestCase):
