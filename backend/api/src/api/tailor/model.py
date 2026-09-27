@@ -24,6 +24,7 @@ class StartTailorResponse(BaseModel):
 
 
 class TailorStatusResponse(BaseModel):
+    run_id: str
     status: str
     job_description: str
     company_name: str | None = None

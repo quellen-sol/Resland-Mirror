@@ -95,12 +95,14 @@ export default function TailorForm({
   const [jd, setJd] = useState("");
   const [model, setModel] = useState("");
   const [run, setRun] = useState<TailorRun | null>(null);
+  const [checked, setChecked] = useState(false);
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
   const [savedId, setSavedId] = useState<string | null>(null);
   const finishedRef = useRef(false);
   const startedAtRef = useRef<number>(0);
   const consecutiveFailuresRef = useRef(0);
+  const resumeNotifiedRef = useRef(false);
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -119,6 +121,42 @@ export default function TailorForm({
   async function apiFetch(path: string, init?: RequestInit) {
     return apiRequest(accessToken, `/tailor${path}`, init);
   }
+
+  function notifyResumed() {
+    if (resumeNotifiedRef.current) return;
+    resumeNotifiedRef.current = true;
+    // An unfinished run resumes — its credits weren't lost; the user still
+    // has to finish or cancel it.
+    toast.info("Resumed your in-progress tailoring", {
+      description:
+        "An unfinished session is still open — continue it here, or Cancel to discard it.",
+    });
+  }
+
+  // An outstanding (non-COMPLETED) run is unresolved work — reattach to it
+  // on mount instead of offering a fresh form.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = (await apiFetch("/active")) as TailorRun;
+        if (cancelled) return;
+        startedAtRef.current = Date.now();
+        consecutiveFailuresRef.current = 0;
+        setRun(status);
+        notifyResumed();
+      } catch {
+        // 404 = nothing outstanding; anything else also falls through to
+        // the entry form (a failed start will toast its own error).
+      } finally {
+        if (!cancelled) setChecked(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function start() {
     const text = jd.trim();
@@ -139,14 +177,7 @@ export default function TailorForm({
           model: model || null,
         }),
       })) as { run_id: string; resumed?: boolean };
-      if (resumed) {
-        // The API hands back an unfinished run — its credits weren't lost;
-        // the user still has to finish or cancel it.
-        toast.info("Resumed your in-progress tailoring", {
-          description:
-            "An unfinished session is still open — continue it here, or Cancel to discard it.",
-        });
-      }
+      if (resumed) notifyResumed();
       try {
         const status = (await apiFetch(`/${run_id}`)) as Omit<
           TailorRun,
@@ -320,7 +351,7 @@ export default function TailorForm({
         </Link>
       </header>
 
-      {!hasProfile && !run && (
+      {checked && !hasProfile && !run && (
         <Card className="border-amber-500/30 bg-amber-500/5 text-zinc-100">
           <CardContent className="pt-6 text-sm text-amber-200">
             You have no work experience yet —{" "}
@@ -336,7 +367,7 @@ export default function TailorForm({
       )}
 
       {/* Job description input */}
-      {!run && hasProfile && (
+      {checked && !run && hasProfile && (
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">

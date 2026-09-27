@@ -19,6 +19,12 @@ async def start_tailor(
     )
 
 
+# Literal routes before /{run_id} so FastAPI binds "active" correctly.
+@router.get("/tailor/active", response_model=model.TailorStatusResponse)
+async def get_active_tailor(user_id: Auth0UserId, pg_conn: PgConnection):
+    return await service.get_active_tailor(pg_conn=pg_conn, user_id=user_id)
+
+
 @router.get("/tailor/{run_id}", response_model=model.TailorStatusResponse)
 async def get_tailor_run(user_id: Auth0UserId, run_id: str, pg_conn: PgConnection):
     return await service.get_tailor_status(

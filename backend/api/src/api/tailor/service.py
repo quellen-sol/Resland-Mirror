@@ -15,28 +15,13 @@ async def start_tailor(
     req: model.StartTailorRequest,
     user_id: str,
 ) -> model.StartTailorResponse:
-    async with pg_conn.cursor() as cursor:
-        # Runs are only deleted on dismiss or when a new run starts, so a
-        # surviving *unfinished* row is work the user hasn't finished with —
-        # hand it back to resume instead of erroring. A run holding a result
-        # (COMPLETED, or parked on the review interrupt) is finished work:
-        # don't resume it — start fresh and clear it below.
-        active = await cursor.execute(
-            """
-            SELECT id FROM user_tailor_run
-            WHERE user_id = %s
-              AND (status = 'PROCESSING'
-                  OR (status = 'WAITING_FOR_INPUT' AND result IS NULL))
-            ORDER BY created_at DESC
-            LIMIT 1
-            """,
-            (user_id,),
-        )
-        active = await active.fetchone()
-        if active:
-            return model.StartTailorResponse(run_id=active[0], resumed=True)
+    active = await db.get_outstanding_tailor_run(pg_conn, user_id)
+    if active:
+        # A surviving non-COMPLETED run is unresolved work — hand it back to
+        # resume (and let the UI warn that its credits are still open).
+        return model.StartTailorResponse(run_id=active.id, resumed=True)
 
-    await db.clear_finished_tailor_runs(pg_conn, user_id)
+    await db.clear_completed_tailor_runs(pg_conn, user_id)
     await require_balance(pg_conn, user_id)
     chosen_model = await validate_model_choice(pg_conn, req.model)
 
@@ -61,14 +46,9 @@ async def start_tailor(
     return model.StartTailorResponse(run_id=run_id)
 
 
-async def get_tailor_status(
-    pg_conn: PgConnection, user_id: str, run_id: str
-) -> model.TailorStatusResponse:
-    res = await db.get_tailor_run(pg_conn=pg_conn, user_id=user_id, run_id=run_id)
-    if not res:
-        raise HTTPException(status_code=404, detail="Tailor run not found")
-
+def _to_status(res: db.UserTailorRunRow) -> model.TailorStatusResponse:
     return model.TailorStatusResponse(
+        run_id=res.id,
         status=res.status,
         job_description=res.job_description,
         company_name=res.company_name,
@@ -76,6 +56,24 @@ async def get_tailor_status(
         pending_question=res.pending_question,
         result=res.result,
     )
+
+
+async def get_active_tailor(
+    pg_conn: PgConnection, user_id: str
+) -> model.TailorStatusResponse:
+    res = await db.get_outstanding_tailor_run(pg_conn, user_id)
+    if not res:
+        raise HTTPException(status_code=404, detail="No outstanding tailor run")
+    return _to_status(res)
+
+
+async def get_tailor_status(
+    pg_conn: PgConnection, user_id: str, run_id: str
+) -> model.TailorStatusResponse:
+    res = await db.get_tailor_run(pg_conn=pg_conn, user_id=user_id, run_id=run_id)
+    if not res:
+        raise HTTPException(status_code=404, detail="Tailor run not found")
+    return _to_status(res)
 
 
 async def answer_tailor(

@@ -57,6 +57,24 @@ async def get_tailor_run(
     return row
 
 
+async def get_outstanding_tailor_run(
+    pg_conn: PgConnection, user_id: str
+) -> UserTailorRunRow | None:
+    """The user's latest unresolved run — anything short of COMPLETED still
+    counts as outstanding, including FAILED (the user decides its fate)."""
+    async with pg_conn.cursor(row_factory=class_row(UserTailorRunRow)) as cursor:
+        res = await cursor.execute(
+            """
+            SELECT * FROM user_tailor_run
+            WHERE user_id = %s AND status <> 'COMPLETED'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (user_id,),
+        )
+        return await res.fetchone()
+
+
 async def update_tailor_run(
     conn: PgConnection,
     run_id: str,
@@ -78,15 +96,14 @@ async def update_tailor_run(
         )
 
 
-async def clear_finished_tailor_runs(conn: PgConnection, user_id: str) -> None:
-    """Drop runs that already produced a result (COMPLETED or sitting on the
-    review interrupt) plus their checkpoints — they're unreachable once a new
-    run starts, and anything worth keeping was snapshotted on save."""
+async def clear_completed_tailor_runs(conn: PgConnection, user_id: str) -> None:
+    """Drop resolved (COMPLETED) runs plus their checkpoints once a new run
+    starts — anything worth keeping was snapshotted on save."""
     async with conn.cursor() as cursor:
         res = await cursor.execute(
             """
             DELETE FROM user_tailor_run
-            WHERE user_id = %s AND result IS NOT NULL
+            WHERE user_id = %s AND status = 'COMPLETED'
             RETURNING id
             """,
             (user_id,),
