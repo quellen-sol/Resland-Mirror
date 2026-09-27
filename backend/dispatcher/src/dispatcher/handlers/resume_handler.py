@@ -1,4 +1,4 @@
-from rabbitmq_amqp_python_client import Event
+from aio_pika.abc import AbstractIncomingMessage
 from shared.pg import get_pg_client
 
 from ..env_vars import PG_URL
@@ -18,9 +18,10 @@ class ResumeHandler(GenericHandlerWithCleanup):
                 (status, job_id),
             )
 
-    def on_amqp_message(self, event: Event):
+    async def on_message(self, message: AbstractIncomingMessage):
+        self._ensure_cleanup_task()
         try:
-            data = self.parse_event(event)
+            data = self.parse_event(message)
 
             job_id = data.get("job_id")
             if not job_id:
@@ -28,8 +29,8 @@ class ResumeHandler(GenericHandlerWithCleanup):
 
             runner = ResumeRunner(data)
             self.dispatch_job(
-                DispatchJobParams(job_id=job_id, runner=runner, event=event)
+                DispatchJobParams(job_id=job_id, runner=runner, message=message)
             )
         except Exception as e:
             print(f"Error processing message: {e}")
-            self.delivery_context.discard(event)
+            await message.nack(requeue=False)

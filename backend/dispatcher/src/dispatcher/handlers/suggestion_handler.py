@@ -1,4 +1,4 @@
-from rabbitmq_amqp_python_client import Event
+from aio_pika.abc import AbstractIncomingMessage
 
 from ..runners.suggestions import SuggestionsRunner
 from .generic import DispatchJobParams, GenericHandlerWithCleanup, HandlerError
@@ -8,9 +8,10 @@ class SuggestionHandler(GenericHandlerWithCleanup):
     def __init__(self):
         super().__init__()
 
-    def on_amqp_message(self, event: Event):
+    async def on_message(self, message: AbstractIncomingMessage):
+        self._ensure_cleanup_task()
         try:
-            data = self.parse_event(event)
+            data = self.parse_event(message)
 
             session_id = data.get("session_id")
             if not session_id:
@@ -18,8 +19,10 @@ class SuggestionHandler(GenericHandlerWithCleanup):
 
             runner = SuggestionsRunner(data)
             self.dispatch_job(
-                DispatchJobParams(job_id=session_id, runner=runner, event=event)
+                DispatchJobParams(
+                    job_id=session_id, runner=runner, message=message
+                )
             )
         except Exception as e:
             print(f"Error processing message: {e}")
-            self.delivery_context.discard(event)
+            await message.nack(requeue=False)

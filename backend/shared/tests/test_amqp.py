@@ -1,8 +1,8 @@
 """AMQP job serialization + AmqpClient tests — stdlib unittest, no broker.
 
-The client's connection/environment and everything returned by it are mocked;
-what's exercised is our own logic: publisher caching, reconnect-once retry,
-topology declaration order, and the not-connected guards.
+The aio-pika connection/channels and everything returned by them are mocked;
+what's exercised is our own logic: publisher caching, channel reuse,
+topology declaration, and the not-connected guards.
 
 Run: .venv/bin/python -m unittest backend.shared.tests.test_amqp -v
      (from the repo root with the workspace venv)
@@ -10,16 +10,10 @@ Run: .venv/bin/python -m unittest backend.shared.tests.test_amqp -v
 
 import json
 import unittest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from rabbitmq_amqp_python_client import ConnectionClosed
-
+from aio_pika.abc import ExchangeType
 from shared.amqp import (
-    AmqpClient,
-    AmqpClientException,
-    AmqpResumeJob,
-    AmqpSuggestionJob,
-    AmqpTailorJob,
     BULLET_SUGG_DLQ_NAME,
     BULLET_SUGG_DLX_NAME,
     BULLET_SUGG_EXCHANGE_NAME,
@@ -32,6 +26,11 @@ from shared.amqp import (
     TAILOR_DLX_NAME,
     TAILOR_EXCHANGE_NAME,
     TAILOR_QUEUE_NAME,
+    AmqpClient,
+    AmqpClientException,
+    AmqpResumeJob,
+    AmqpSuggestionJob,
+    AmqpTailorJob,
 )
 
 
@@ -71,43 +70,65 @@ class JobSerialization(unittest.TestCase):
     def test_to_message_wraps_bytes(self):
         job = AmqpResumeJob(s3_key="k", job_id="j", user_id="u")
         msg = job.to_message()
-        self.assertEqual(bytes(msg.body), job.to_bytes())
+        self.assertEqual(msg.body, job.to_bytes())
 
 
 def _client() -> AmqpClient:
-    """Client with a stubbed-out async environment."""
-    client = AmqpClient.__new__(AmqpClient)
-    client.async_env = MagicMock()
+    client = AmqpClient("amqp://test")
     client.amqp_connection = None
-    client._publishers = {}
     return client
 
 
-class AmqpClientConnect(unittest.IsolatedAsyncioTestCase):
-    async def test_connect_dials_and_clears_publishers(self):
-        client = _client()
-        conn = AsyncMock()
-        client.async_env.connection = AsyncMock(return_value=conn)
-        client._publishers["stale"] = MagicMock()
+def _queue_mock():
+    queue = MagicMock()
+    queue.bind = AsyncMock()
+    queue.consume = AsyncMock()
+    return queue
 
-        await client.connect()
-        conn.dial.assert_awaited_once()
+
+def _conn_with_channel():
+    """Connection mock whose channel() yields a channel mock."""
+    conn = MagicMock()
+    channel = MagicMock()
+    channel.is_closed = False
+    channel.declare_exchange = AsyncMock(return_value=MagicMock())
+    channel.declare_queue = AsyncMock(side_effect=lambda *a, **k: _queue_mock())
+    conn.channel = AsyncMock(return_value=channel)
+    return conn, channel
+
+
+class AmqpClientConnect(unittest.IsolatedAsyncioTestCase):
+    async def test_connect_uses_robust_connection_and_clears_publishers(self):
+        client = _client()
+        conn = MagicMock()
+        client._publishers[("stale", "#")] = MagicMock()
+
+        with patch(
+            "shared.amqp.aio_pika.connect_robust",
+            AsyncMock(return_value=conn),
+        ) as connect:
+            await client.connect()
+
+        connect.assert_awaited_once()
         self.assertIs(client.amqp_connection, conn)
         self.assertEqual(client._publishers, {})
 
     async def test_connect_failure_raises_client_exception(self):
         client = _client()
-        client.async_env.connection = AsyncMock(side_effect=ValueError("down"))
-        with self.assertRaises(AmqpClientException):
+        with patch(
+            "shared.amqp.aio_pika.connect_robust",
+            AsyncMock(side_effect=ValueError("down")),
+        ), self.assertRaises(AmqpClientException):
             await client.connect()
 
     async def test_setup_without_topology_just_connects(self):
         client = _client()
-        conn = AsyncMock()
-        client.async_env.connection = AsyncMock(return_value=conn)
-        await client.setup(declare_topology=False)
-        conn.dial.assert_awaited_once()
-        conn.management.assert_not_called()
+        conn, _ = _conn_with_channel()
+        with patch(
+            "shared.amqp.aio_pika.connect_robust", AsyncMock(return_value=conn)
+        ):
+            await client.setup(declare_topology=False)
+        conn.channel.assert_not_awaited()
 
     async def test_close_idempotent(self):
         client = _client()
@@ -121,74 +142,113 @@ class AmqpClientConnect(unittest.IsolatedAsyncioTestCase):
 
 
 class AmqpClientAccessors(unittest.IsolatedAsyncioTestCase):
-    async def test_publisher_requires_connection(self):
+    async def test_requires_connection(self):
         client = _client()
         with self.assertRaises(AmqpClientException):
             await client.get_publisher("x")
         with self.assertRaises(AmqpClientException):
-            await client.get_consumer("q", MagicMock())
+            await client.consume("q", AsyncMock())
         with self.assertRaises(AmqpClientException):
-            await client.get_manager()
+            await client.declare_topology()
 
-    async def test_publisher_cached_per_address(self):
+    async def test_publisher_cached_per_exchange_and_key(self):
         client = _client()
-        conn = AsyncMock()
-        pub = MagicMock()
-        conn.publisher = AsyncMock(return_value=pub)
+        conn, channel = _conn_with_channel()
         client.amqp_connection = conn
 
         first = await client.get_publisher(RESUME_EXCHANGE_NAME)
         second = await client.get_publisher(RESUME_EXCHANGE_NAME)
-        self.assertIs(first, pub)
-        self.assertIs(second, pub)
-        # Same address → same link — the broker kills duplicate link names.
-        conn.publisher.assert_awaited_once()
+        self.assertIs(first, second)
+        channel.declare_exchange.assert_awaited_once()
 
-        # A different exchange is a different link.
-        conn.publisher = AsyncMock(return_value=MagicMock())
         await client.get_publisher(TAILOR_EXCHANGE_NAME)
-        conn.publisher.assert_awaited_once()
+        self.assertEqual(channel.declare_exchange.await_count, 2)
 
-    async def test_publisher_reconnects_once_on_closed_connection(self):
+        # One shared channel backs all publishers.
+        conn.channel.assert_awaited_once()
+
+    async def test_publisher_declares_topic_exchange(self):
         client = _client()
-        stale_conn = AsyncMock()
-        fresh_conn = AsyncMock()
-        fresh_pub = MagicMock()
-
-        stale_conn.publisher = AsyncMock(
-            side_effect=ConnectionClosed(MagicMock())
-        )
-        client.amqp_connection = stale_conn
-        client.async_env.connection = AsyncMock(return_value=fresh_conn)
-        fresh_conn.publisher = AsyncMock(return_value=fresh_pub)
-
-        pub = await client.get_publisher(RESUME_EXCHANGE_NAME)
-        self.assertIs(pub, fresh_pub)
-        stale_conn.close.assert_awaited_once()
-        fresh_conn.dial.assert_awaited_once()
-
-    async def test_consumer_and_manager_pass_through(self):
-        client = _client()
-        conn = AsyncMock()
+        conn, channel = _conn_with_channel()
         client.amqp_connection = conn
-        await client.get_consumer("q1", MagicMock())
-        conn.consumer.assert_awaited_once()
-        await client.get_manager()
-        conn.management.assert_awaited_once()
+
+        await client.get_publisher(RESUME_EXCHANGE_NAME)
+        channel.declare_exchange.assert_awaited_once_with(
+            RESUME_EXCHANGE_NAME,
+            ExchangeType.TOPIC,
+            durable=False,
+            auto_delete=True,
+        )
+
+    async def test_publisher_publish_routes_with_key(self):
+        client = _client()
+        conn, channel = _conn_with_channel()
+        client.amqp_connection = conn
+        exchange = AsyncMock()
+        channel.declare_exchange = AsyncMock(return_value=exchange)
+
+        publisher = await client.get_publisher(RESUME_EXCHANGE_NAME, "#")
+        msg = AmqpResumeJob(s3_key="k", job_id="j", user_id="u").to_message()
+        await publisher.publish(msg)
+        exchange.publish.assert_awaited_once_with(
+            msg, routing_key="#", mandatory=False
+        )
+
+    async def test_consume_declares_queue_and_registers_callback(self):
+        client = _client()
+        conn, channel = _conn_with_channel()
+        client.amqp_connection = conn
+        queue = _queue_mock()
+        channel.declare_queue = AsyncMock(return_value=queue)
+
+        callback = AsyncMock()
+        await client.consume(RESUME_QUEUE_NAME, callback)
+
+        channel.declare_queue.assert_awaited_once_with(
+            RESUME_QUEUE_NAME,
+            durable=True,
+            arguments={"x-dead-letter-exchange": RESUME_DLX_NAME},
+        )
+        queue.consume.assert_awaited_once_with(callback)
+
+    async def test_consume_uses_fresh_channel_per_queue(self):
+        client = _client()
+        conn = MagicMock()
+        channels = []
+
+        async def channel_factory():
+            c = MagicMock()
+            c.declare_queue = AsyncMock(return_value=_queue_mock())
+            channels.append(c)
+            return c
+
+        conn.channel = channel_factory
+        client.amqp_connection = conn
+
+        await client.consume(RESUME_QUEUE_NAME, AsyncMock())
+        await client.consume(TAILOR_QUEUE_NAME, AsyncMock())
+        self.assertEqual(len(channels), 2)
+        self.assertIsNot(channels[0], channels[1])
 
 
 class DeclareTopology(unittest.IsolatedAsyncioTestCase):
     async def test_declares_everything(self):
         client = _client()
-        conn = AsyncMock()
-        manager = AsyncMock()
-        conn.management = AsyncMock(return_value=manager)
+        conn, channel = _conn_with_channel()
+        queues = {}
+
+        async def declare_queue(name, **kwargs):
+            q = _queue_mock()
+            queues[name] = (q, kwargs)
+            return q
+
+        channel.declare_queue = declare_queue
         client.amqp_connection = conn
 
         await client.declare_topology()
 
         exchanges = {
-            c.args[0].name for c in manager.declare_exchange.await_args_list
+            c.args[0] for c in channel.declare_exchange.await_args_list
         }
         self.assertEqual(
             exchanges,
@@ -201,9 +261,8 @@ class DeclareTopology(unittest.IsolatedAsyncioTestCase):
                 TAILOR_DLX_NAME,
             },
         )
-        queues = {c.args[0].name for c in manager.declare_queue.await_args_list}
         self.assertEqual(
-            queues,
+            set(queues),
             {
                 RESUME_DLQ_NAME,
                 RESUME_QUEUE_NAME,
@@ -213,26 +272,21 @@ class DeclareTopology(unittest.IsolatedAsyncioTestCase):
                 TAILOR_DLQ_NAME,
             },
         )
-        # Every exchange ends up bound to a queue.
-        bound_pairs = {
-            (c.args[0].source_exchange, c.args[0].destination_queue)
-            for c in manager.bind.await_args_list
-        }
-        self.assertEqual(len(bound_pairs), 6)
+        # Every queue ends up bound to its exchange.
+        self.assertTrue(all(q.bind.await_count == 1 for q, _ in queues.values()))
 
         # The work queues dead-letter into their DLX; the DLQs don't.
-        queue_specs = {
-            c.args[0].name: c.args[0]
-            for c in manager.declare_queue.await_args_list
-        }
         self.assertEqual(
-            queue_specs[RESUME_QUEUE_NAME].dead_letter_exchange, RESUME_DLX_NAME
+            queues[RESUME_QUEUE_NAME][1]["arguments"],
+            {"x-dead-letter-exchange": RESUME_DLX_NAME},
         )
-        self.assertIsNone(
-            getattr(
-                queue_specs[RESUME_DLQ_NAME], "dead_letter_exchange", None
-            )
-        )
+        self.assertIsNone(queues[RESUME_DLQ_NAME][1]["arguments"])
+
+        for call in channel.declare_exchange.await_args_list:
+            self.assertEqual(call.kwargs["durable"], False)
+            self.assertEqual(call.kwargs["auto_delete"], True)
+        for _, kwargs in queues.values():
+            self.assertEqual(kwargs["durable"], True)
 
 
 if __name__ == "__main__":
