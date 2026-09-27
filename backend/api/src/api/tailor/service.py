@@ -5,6 +5,7 @@ from shared.amqp import TAILOR_EXCHANGE_NAME, AmqpTailorJob
 
 from ..balance import require_balance, validate_model_choice
 from ..deps import AmqpClientDep, PgConnection
+from ..tailored import service as tailored_service
 from . import db, model
 
 
@@ -41,6 +42,8 @@ async def start_tailor(
         run_id=run_id,
         user_id=user_id,
         job_description=req.job_description,
+        company_name=req.company_name,
+        role=req.role,
         model=chosen_model,
     )
     # The pooled connection only commits on dependency teardown (after the
@@ -98,3 +101,12 @@ async def answer_tailor(
 async def dismiss_tailor(user_id: str, run_id: str, pg_conn: PgConnection) -> dict:
     await db.delete_tailor_run(pg_conn, run_id, user_id)
     return {"ok": True}
+
+
+async def save_tailor(
+    user_id: str, run_id: str, pg_conn: PgConnection
+) -> model.SaveTailorResponse:
+    tailored_id = await tailored_service.save_from_run(
+        pg_conn, user_id=user_id, run_id=run_id
+    )
+    return model.SaveTailorResponse(tailored_id=tailored_id)

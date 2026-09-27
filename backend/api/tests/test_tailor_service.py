@@ -22,6 +22,8 @@ def _row(**over):
         id="r1",
         user_id="u1",
         job_description="JD",
+        company_name=None,
+        role=None,
         model=None,
         pending_question=None,
         result=None,

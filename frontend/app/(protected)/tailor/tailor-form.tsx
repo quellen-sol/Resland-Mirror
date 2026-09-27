@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Bookmark, Check, Loader2, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,11 +79,14 @@ export default function TailorForm({
   hasProfile: boolean;
 }) {
   const router = useRouter();
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
   const [jd, setJd] = useState("");
   const [model, setModel] = useState("");
   const [run, setRun] = useState<TailorRun | null>(null);
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const finishedRef = useRef(false);
   const startedAtRef = useRef<number>(0);
   const consecutiveFailuresRef = useRef(0);
@@ -108,7 +111,9 @@ export default function TailorForm({
 
   async function start() {
     const text = jd.trim();
-    if (!text || run || !apiBaseUrl) return;
+    const companyName = company.trim();
+    const roleName = role.trim();
+    if (!text || !companyName || !roleName || run || !apiBaseUrl) return;
     setBusy(true);
     finishedRef.current = false;
     consecutiveFailuresRef.current = 0;
@@ -116,7 +121,12 @@ export default function TailorForm({
       startedAtRef.current = Date.now();
       const { run_id } = (await apiFetch("", {
         method: "POST",
-        body: JSON.stringify({ job_description: text, model: model || null }),
+        body: JSON.stringify({
+          job_description: text,
+          company_name: companyName,
+          role: roleName,
+          model: model || null,
+        }),
       })) as { run_id: string };
       try {
         const status = (await apiFetch(`/${run_id}`)) as Omit<
@@ -227,7 +237,31 @@ export default function TailorForm({
     }
     setRun(null);
     setJd("");
+    setCompany("");
+    setRole("");
     setAnswer("");
+    setSavedId(null);
+  }
+
+  async function save() {
+    if (!run || savedId) return;
+    setBusy(true);
+    try {
+      const { tailored_id } = (await apiFetch(`/${run.run_id}/save`, {
+        method: "POST",
+      })) as { tailored_id: string };
+      setSavedId(tailored_id);
+      toast.success("Saved to Tailored resumes", {
+        action: {
+          label: "Open",
+          onClick: () => router.push(`/tailored/${tailored_id}`),
+        },
+      });
+    } catch (error) {
+      toast.error("Couldn't save", { description: describeApiError(error) });
+    } finally {
+      setBusy(false);
+    }
   }
 
   let tailored: TailoredResume | null = null;
@@ -291,6 +325,22 @@ export default function TailorForm({
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="Company name"
+                aria-label="Company name"
+                className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+              />
+              <Input
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                placeholder="Role (e.g. Senior Backend Engineer)"
+                aria-label="Role"
+                className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+              />
+            </div>
             <Textarea
               value={jd}
               onChange={(e) => setJd(e.target.value.slice(0, MAX_JD_CHARS))}
@@ -317,7 +367,9 @@ export default function TailorForm({
                 />
                 <Button
                   onClick={start}
-                  disabled={busy || !jd.trim()}
+                  disabled={
+                    busy || !jd.trim() || !company.trim() || !role.trim()
+                  }
                   className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                 >
                   {busy ? (
@@ -527,7 +579,24 @@ export default function TailorForm({
             </Card>
           )}
 
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            {savedId ? (
+              <Link
+                href={`/tailored/${savedId}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/10 px-2.5 py-1.5 text-sm font-medium text-purple-200 hover:bg-purple-500/20 [&_svg]:size-4"
+              >
+                <Check /> Saved — open it
+              </Link>
+            ) : (
+              <Button
+                onClick={save}
+                disabled={busy}
+                className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
+              >
+                {busy ? <Loader2 className="animate-spin" /> : <Bookmark />}{" "}
+                Save to Tailored resumes
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={reset}

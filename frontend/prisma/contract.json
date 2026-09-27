@@ -64,6 +64,10 @@
       "model": "UserTailorRun",
       "namespace": "public"
     },
+    "user_tailored_resume": {
+      "model": "UserTailoredResume",
+      "namespace": "public"
+    },
     "user_upload_job": {
       "model": "UserUploadJob",
       "namespace": "public"
@@ -1532,6 +1536,13 @@
           },
           "UserTailorRun": {
             "fields": {
+              "company_name": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "created_at": {
                 "nullable": false,
                 "type": {
@@ -1568,6 +1579,13 @@
                 }
               },
               "result": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "role": {
                 "nullable": true,
                 "type": {
                   "codecId": "pg/text@1",
@@ -1614,6 +1632,9 @@
             },
             "storage": {
               "fields": {
+                "company_name": {
+                  "column": "company_name"
+                },
                 "created_at": {
                   "column": "created_at"
                 },
@@ -1632,6 +1653,9 @@
                 "result": {
                   "column": "result"
                 },
+                "role": {
+                  "column": "role"
+                },
                 "status": {
                   "column": "status"
                 },
@@ -1641,6 +1665,153 @@
               },
               "namespaceId": "public",
               "table": "user_tailor_run"
+            }
+          },
+          "UserTailoredResume": {
+            "fields": {
+              "company_name": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "content": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "created_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "generated_at": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "job_description": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "role": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "s3_key": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "source_hash": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "tailor_run_id": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updated_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "user_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "user_id"
+                  ],
+                  "targetFields": [
+                    "auth0_id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "company_name": {
+                  "column": "company_name"
+                },
+                "content": {
+                  "column": "content"
+                },
+                "created_at": {
+                  "column": "created_at"
+                },
+                "generated_at": {
+                  "column": "generated_at"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "job_description": {
+                  "column": "job_description"
+                },
+                "role": {
+                  "column": "role"
+                },
+                "s3_key": {
+                  "column": "s3_key"
+                },
+                "source_hash": {
+                  "column": "source_hash"
+                },
+                "tailor_run_id": {
+                  "column": "tailor_run_id"
+                },
+                "updated_at": {
+                  "column": "updated_at"
+                },
+                "user_id": {
+                  "column": "user_id"
+                }
+              },
+              "namespaceId": "public",
+              "table": "user_tailored_resume"
             }
           },
           "UserUploadJob": {
@@ -2964,6 +3135,11 @@
                 }
               ],
               "columns": {
+                "company_name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "created_at": {
                   "codecId": "pg/timestamptz-temporal@1",
                   "default": {
@@ -2994,6 +3170,11 @@
                   "nullable": true
                 },
                 "result": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "role": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
                   "nullable": true
@@ -3044,6 +3225,112 @@
                   ],
                   "name": "user_tailor_run_user_id_idx_6c952402",
                   "prefix": "user_tailor_run_user_id_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
+            "user_tailored_resume": {
+              "columns": {
+                "company_name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "content": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "created_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "generated_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "job_description": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "role": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "s3_key": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "source_hash": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "tailor_run_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "updated_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "user_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "user_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_tailored_resume"
+                  },
+                  "target": {
+                    "columns": [
+                      "auth0_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "user_id"
+                  ],
+                  "name": "user_tailored_resume_user_id_idx_6c952402",
+                  "prefix": "user_tailored_resume_user_id_idx",
                   "unique": false
                 }
               ],
@@ -3196,7 +3483,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "6a7a31751ea63f3115c80d946f1e6b42f2d43fdd73c84894c9900648ce6bfd95"
+    "storageHash": "95a346fef14ca837c5017e3c5db0de1f91c2060ab2c774596db3e03c6bf97763"
   },
   "capabilities": {
     "postgres": {

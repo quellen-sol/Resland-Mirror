@@ -245,7 +245,8 @@ def fetch_tailor_run(pg_client: Connection, run_id: str) -> FetchTailorRunRow | 
     with pg_client.cursor(row_factory=class_row(FetchTailorRunRow)) as cursor:
         return cursor.execute(
             """
-            SELECT id, user_id, job_description, status, model
+            SELECT id, user_id, job_description, company_name, role,
+                   status, model
             FROM user_tailor_run WHERE id = %s
             """,
             [run_id],

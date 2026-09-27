@@ -1,0 +1,206 @@
+[
+  {
+    "id": "table.user_tailored_resume",
+    "label": "Create table \"user_tailored_resume\"",
+    "summary": "Creates table \"user_tailored_resume\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "user_tailored_resume"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"user_tailored_resume\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_tailored_resume\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"user_tailored_resume\"",
+        "sql": "CREATE TABLE \"public\".\"user_tailored_resume\" (\n  \"company_name\" text,\n  \"content\" text NOT NULL,\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"generated_at\" timestamptz,\n  \"id\" text NOT NULL,\n  \"job_description\" text NOT NULL,\n  \"role\" text,\n  \"s3_key\" text,\n  \"source_hash\" text,\n  \"tailor_run_id\" text,\n  \"updated_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"user_tailored_resume\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_tailored_resume\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user_tailor_run.company_name",
+    "label": "Add column \"company_name\" to \"user_tailor_run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "company_name",
+        "table": "user_tailor_run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"company_name\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_tailor_run",
+          "company_name"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"company_name\"",
+        "sql": "ALTER TABLE \"public\".\"user_tailor_run\" ADD COLUMN \"company_name\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"company_name\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_tailor_run",
+          "company_name"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "column.public.user_tailor_run.role",
+    "label": "Add column \"role\" to \"user_tailor_run\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "role",
+        "table": "user_tailor_run"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"role\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_tailor_run",
+          "role"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"role\"",
+        "sql": "ALTER TABLE \"public\".\"user_tailor_run\" ADD COLUMN \"role\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"role\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_tailor_run",
+          "role"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.user_tailored_resume.user_tailored_resume_user_id_idx_6c952402",
+    "label": "Create index \"user_tailored_resume_user_id_idx_6c952402\" on \"user_tailored_resume\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "user_tailored_resume_user_id_idx_6c952402",
+        "table": "user_tailored_resume"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"user_tailored_resume_user_id_idx_6c952402\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_tailored_resume_user_id_idx_6c952402\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"user_tailored_resume_user_id_idx_6c952402\"",
+        "sql": "CREATE INDEX \"user_tailored_resume_user_id_idx_6c952402\" ON \"public\".\"user_tailored_resume\" (\"user_id\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"user_tailored_resume_user_id_idx_6c952402\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_tailored_resume_user_id_idx_6c952402\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.user_tailored_resume.user_tailored_resume_user_id_fkey",
+    "label": "Add foreign key \"user_tailored_resume_user_id_fkey\" on \"user_tailored_resume\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "user_tailored_resume_user_id_fkey",
+        "table": "user_tailored_resume"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"user_tailored_resume_user_id_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_tailored_resume_user_id_fkey",
+          "public",
+          "\"public\".\"user_tailored_resume\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"user_tailored_resume_user_id_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"user_tailored_resume\"\nADD CONSTRAINT \"user_tailored_resume_user_id_fkey\"\nFOREIGN KEY (\"user_id\")\nREFERENCES \"public\".\"user\" (\"auth0_id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"user_tailored_resume_user_id_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_tailored_resume_user_id_fkey",
+          "public",
+          "\"public\".\"user_tailored_resume\""
+        ]
+      }
+    ]
+  }
+]

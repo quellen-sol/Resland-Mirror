@@ -46,3 +46,8 @@ async def answer_tailor(
 @router.post("/tailor/{run_id}/dismiss")
 async def dismiss_tailor(user_id: Auth0UserId, run_id: str, pg_conn: PgConnection):
     return await service.dismiss_tailor(user_id=user_id, run_id=run_id, pg_conn=pg_conn)
+
+
+@router.post("/tailor/{run_id}/save", response_model=model.SaveTailorResponse)
+async def save_tailor(user_id: Auth0UserId, run_id: str, pg_conn: PgConnection):
+    return await service.save_tailor(user_id=user_id, run_id=run_id, pg_conn=pg_conn)

@@ -1,3 +1,4 @@
+import json
 import operator
 import queue
 from dataclasses import dataclass
@@ -25,7 +26,9 @@ from ..env_vars import PG_URL
 TAILOR_SYSTEM_PROMPT = """You tailor a user's resume to a specific job description.
 
 Workflow:
-1. Call get_job_description to read the job posting the user pasted.
+1. Call get_job_description to read the job posting the user pasted — it also
+   returns the target company_name and role when provided; aim the tailored
+   resume at that role.
 2. Call get_user_profile to fetch the user's full base profile (header, social
    links, experiences with bullets in display order, skills, education, projects).
 3. The base profile stores no professional summary. Before tailoring, call
@@ -69,6 +72,8 @@ class FetchTailorRunRow(BaseModel):
     id: str
     user_id: str
     job_description: str
+    company_name: str | None = None
+    role: str | None = None
     status: str
     model: str | None
 
@@ -169,8 +174,15 @@ def build_and_invoke_agent(
     # Tools
     @tool
     def get_job_description():
-        """Returns the job description the user is tailoring their resume to."""
-        return run.job_description
+        """Returns the job description the user is tailoring their resume to,
+        plus the target company name and role when the user provided them."""
+        return json.dumps(
+            {
+                "job_description": run.job_description,
+                "company_name": run.company_name,
+                "role": run.role,
+            }
+        )
 
     @tool
     def get_user_profile():

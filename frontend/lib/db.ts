@@ -66,4 +66,16 @@ export async function getUserProfileData(userId: string) {
     };
 }
 
+export async function getUserTailoredResumes(userId: string) {
+    return db.orm.public.UserTailoredResume.where((t) => t.user_id.eq(userId))
+        .orderBy((t) => t.created_at.desc())
+        .all();
+}
+
+export async function getUserTailoredResume(userId: string, id: string) {
+    return db.orm.public.UserTailoredResume.where((t) => t.id.eq(id))
+        .where((t) => t.user_id.eq(userId))
+        .first();
+}
+
 
