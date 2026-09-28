@@ -35,6 +35,26 @@ async def list_models(pg_conn: PgConnection) -> model.ModelsResponse:
             """
         )
         rows = await res.fetchall()
+
+        # What each action has actually cost per model — the picker shows
+        # this so users see the average price of "this action" up front.
+        avgs = await (
+            await cursor.execute(
+                """
+                SELECT model, job_kind, COUNT(*), AVG(amount_cents)
+                FROM token_usage GROUP BY model, job_kind
+                """
+            )
+        ).fetchall()
+
+    costs_by_model: dict[str, list[model.ActionCostEstimate]] = {}
+    for r in avgs:
+        costs_by_model.setdefault(r[0], []).append(
+            model.ActionCostEstimate(
+                job_kind=r[1], job_count=r[2], avg_cents=float(r[3])
+            )
+        )
+
     return model.ModelsResponse(
         models=[
             model.ModelInfo(
@@ -43,6 +63,7 @@ async def list_models(pg_conn: PgConnection) -> model.ModelsResponse:
                 cents_per_1k_input=float(r[2]),
                 cents_per_1k_output=float(r[3]),
                 is_default=r[4],
+                action_costs=costs_by_model.get(r[0], []),
             )
             for r in rows
         ]

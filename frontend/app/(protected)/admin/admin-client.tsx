@@ -741,6 +741,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                   <th className={th}>Model</th>
                   <th className={th}>Jobs</th>
                   <th className={th}>Charged</th>
+                  <th className={th}>Avg/job</th>
                 </tr>
               </thead>
               <tbody>
@@ -749,6 +750,9 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                     <td className={td}>{m.model}</td>
                     <td className={td}>{m.job_count}</td>
                     <td className={td}>{fmtMoney(m.cents, "usd")}</td>
+                    <td className={td}>
+                      {fmtMoney(m.cents / m.job_count, "usd")}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -767,6 +771,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                   <th className={th}>Kind</th>
                   <th className={th}>Jobs</th>
                   <th className={th}>Charged</th>
+                  <th className={th}>Avg/job</th>
                 </tr>
               </thead>
               <tbody>
@@ -775,6 +780,9 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                     <td className={td}>{k.job_kind}</td>
                     <td className={td}>{k.job_count}</td>
                     <td className={td}>{fmtMoney(k.cents, "usd")}</td>
+                    <td className={td}>
+                      {fmtMoney(k.cents / k.job_count, "usd")}
+                    </td>
                   </tr>
                 ))}
               </tbody>

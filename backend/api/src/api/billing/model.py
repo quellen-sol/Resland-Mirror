@@ -62,12 +62,20 @@ class PurchasesResponse(BaseModel):
     purchases: list[PurchaseItem]
 
 
+class ActionCostEstimate(BaseModel):
+    job_kind: str
+    job_count: int
+    avg_cents: float
+
+
 class ModelInfo(BaseModel):
     id: str
     display_name: str
     cents_per_1k_input: float
     cents_per_1k_output: float
     is_default: bool
+    # Historical average charge per action, aggregated from token_usage.
+    action_costs: list[ActionCostEstimate] = []
 
 
 class ModelsResponse(BaseModel):
