@@ -144,7 +144,7 @@ export default function UploadForm({
           className="border-red-500/30 bg-red-500/10"
         >
           <CircleAlert />
-          <AlertTitle>Upload failed</AlertTitle>
+          <AlertTitle>Upload Failed</AlertTitle>
           <AlertDescription>
             <p>{result.message}</p>
             {result.raw && (

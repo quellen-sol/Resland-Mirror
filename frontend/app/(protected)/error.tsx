@@ -19,7 +19,7 @@ export default function ProtectedError({
           The service may be having trouble. Try again or sign out and back in.
         </p>
         <div className="flex gap-3">
-          <Button onClick={reset}>Try again</Button>
+          <Button onClick={reset}>Try Again</Button>
           <Link
             href="/auth/logout"
             className="inline-flex h-8 items-center rounded-lg border border-zinc-700 px-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800"

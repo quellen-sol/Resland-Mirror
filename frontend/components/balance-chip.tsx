@@ -26,7 +26,7 @@ export default function BalanceChip({ accessToken }: { accessToken: string }) {
   return (
     <Link
       href="/billing"
-      title="Balance — top up"
+      title="Balance — Top Up"
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
         balance > 0

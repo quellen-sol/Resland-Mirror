@@ -19,7 +19,7 @@ export default function GlobalError({
             </h1>
             <p className="text-zinc-400">Resland hit an unexpected error.</p>
             <div className="flex gap-3">
-              <Button onClick={reset}>Try again</Button>
+              <Button onClick={reset}>Try Again</Button>
               <Link
                 href="/"
                 className="inline-flex h-8 items-center rounded-lg border border-zinc-700 px-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800"

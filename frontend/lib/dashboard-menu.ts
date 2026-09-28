@@ -6,6 +6,7 @@ export type DashboardMenuItemKey =
   | "admin"
   | "edit-profile"
   | "billing"
+  | "help"
   | "sign-out";
 
 export interface DashboardMenuItem {
@@ -18,13 +19,14 @@ export interface DashboardMenuItem {
 // Order mirrors the dashboard header row the menu replaces.
 const DASHBOARD_MENU_ITEMS: DashboardMenuItem[] = [
   { key: "upload", label: "Upload New Resume" },
-  { key: "tailor", label: "Tailor resume", href: "/tailor" },
+  { key: "tailor", label: "Tailor Resume", href: "/tailor" },
   { key: "tailored", label: "Tailored Resumes", href: "/tailored" },
-  { key: "export", label: "Export resume" },
+  { key: "export", label: "Export Resume" },
   { key: "admin", label: "Admin Dashboard", href: "/admin", adminOnly: true },
-  { key: "edit-profile", label: "Edit profile", href: "/edit-profile" },
+  { key: "edit-profile", label: "Edit Profile", href: "/edit-profile" },
   { key: "billing", label: "Billing", href: "/billing" },
-  { key: "sign-out", label: "Sign out", href: "/auth/logout" },
+  { key: "help", label: "Help & FAQ", href: "/help" },
+  { key: "sign-out", label: "Sign Out", href: "/auth/logout" },
 ];
 
 export function getDashboardMenuItems(isAdmin: boolean): DashboardMenuItem[] {

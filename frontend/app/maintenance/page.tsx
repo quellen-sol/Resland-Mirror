@@ -6,7 +6,7 @@ import Link from "next/link";
 // that as a temporary outage and keep the existing index, so inherit the root
 // layout's SEO metadata rather than marking anything noindex.
 export const metadata: Metadata = {
-  title: "Down for maintenance",
+  title: "Down for Maintenance",
 };
 
 export default function MaintenancePage() {

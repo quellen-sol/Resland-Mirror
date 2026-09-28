@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  CircleHelp,
   Files,
   LogOut,
   Menu,
@@ -35,6 +36,7 @@ const LINK_ICONS: Partial<Record<DashboardMenuItemKey, LucideIcon>> = {
   admin: ShieldCheck,
   "edit-profile": PenLine,
   billing: Zap,
+  help: CircleHelp,
 };
 
 const menuRowClass =

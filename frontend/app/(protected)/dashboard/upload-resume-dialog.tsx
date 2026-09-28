@@ -45,7 +45,7 @@ export default function UploadResumeDialog({
       <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
         <DialogHeader>
           <DialogTitle className="text-zinc-100">
-            Upload a new resume
+            Upload a New Resume
           </DialogTitle>
           <DialogDescription className="text-zinc-400">
             The file will be parsed and your profile updated.

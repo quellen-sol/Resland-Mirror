@@ -1,14 +1,13 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getAccessTokenOrLogin } from "@/lib/auth";
-import { getUser } from "@/lib/db";
+import { requireOnboardedUser } from "@/lib/db";
 import AdminClient from "./admin-client";
 
 export const metadata: Metadata = { title: "Admin" };
 
 export default async function AdminPage() {
-  const user = await getUser();
-  if (!user) redirect("/auth/login");
+  const user = await requireOnboardedUser();
   // Hidden route — pretend it doesn't exist for non-admins.
   if (!user.site_admin) notFound();
   const accessToken = await getAccessTokenOrLogin("/admin");

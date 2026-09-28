@@ -1,6 +1,5 @@
-import { getUser } from "@/lib/db";
+import { requireOnboardedUser } from "@/lib/db";
 import { getAccessTokenOrLogin } from "@/lib/auth";
-import { redirect } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -11,11 +10,7 @@ import {
 import UploadForm from "@/components/upload-form";
 
 export default async function TestUploadPage() {
-  const user = await getUser();
-
-  if (!user) {
-    redirect("/auth/login");
-  }
+  await requireOnboardedUser();
   const accessToken = await getAccessTokenOrLogin("/test-upload");
 
   return (

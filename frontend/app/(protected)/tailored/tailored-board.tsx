@@ -215,7 +215,7 @@ export default function TailoredBoard({
                         href={`/tailored/${item.id}`}
                         className="hover:text-purple-300 hover:underline underline-offset-4"
                       >
-                        {item.role || "Tailored resume"}
+                        {item.role || "Tailored Resume"}
                       </Link>
                     </td>
                     <td className={td}>{item.company_name ?? "—"}</td>

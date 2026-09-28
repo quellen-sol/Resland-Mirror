@@ -19,7 +19,7 @@ export default function Error({
           We couldn&apos;t load this page. Try again or head back home.
         </p>
         <div className="flex gap-3">
-          <Button onClick={reset}>Try again</Button>
+          <Button onClick={reset}>Try Again</Button>
           <Link
             href="/"
             className="inline-flex h-8 items-center rounded-lg border border-zinc-700 px-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800"

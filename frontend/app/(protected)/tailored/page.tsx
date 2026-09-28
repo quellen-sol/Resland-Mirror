@@ -1,16 +1,15 @@
-import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { getAccessTokenOrLogin } from "@/lib/auth";
-import { getUser, getUserTailoredResumes } from "@/lib/db";
+import { getUserTailoredResumes, requireOnboardedUser } from "@/lib/db";
+import HelpTip from "@/components/help-tip";
 import TailoredBoard from "./tailored-board";
 
-export const metadata: Metadata = { title: "Tailored resumes" };
+export const metadata: Metadata = { title: "Tailored Resumes" };
 
 export default async function TailoredPage() {
-  const user = await getUser();
-  if (!user) redirect("/auth/login");
+  const user = await requireOnboardedUser();
   const accessToken = await getAccessTokenOrLogin("/tailored");
 
   const tailored = await getUserTailoredResumes(user.auth0_id);
@@ -21,8 +20,15 @@ export default async function TailoredPage() {
       <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
         <header className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-              Tailored resumes
+            <h1 className="flex items-center gap-2 bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+              Tailored Resumes
+              <HelpTip title="Tailored Resumes">
+                <p>
+                  Each entry is a version of your resume tailored to a specific
+                  job posting. Open one to edit the content or export it as a
+                  document.
+                </p>
+              </HelpTip>
             </h1>
             <p className="mt-1 text-sm text-zinc-400">
               Saved versions of your resume tailored to a specific job — edit

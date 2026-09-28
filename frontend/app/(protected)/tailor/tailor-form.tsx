@@ -26,6 +26,7 @@ import {
   isInsufficientBalance,
 } from "@/lib/api";
 import ApiUnavailable from "@/components/api-unavailable";
+import HelpTip from "@/components/help-tip";
 import { groupSkills } from "@/lib/skills";
 
 const MAX_JD_CHARS = 10_000;
@@ -192,7 +193,7 @@ export default function TailorForm({
         toast.error("Insufficient balance", {
           description: "Top up to keep going.",
           action: {
-            label: "Top up",
+            label: "Top Up",
             onClick: () => router.push("/billing"),
           },
         });
@@ -335,8 +336,19 @@ export default function TailorForm({
     <div className="flex flex-col gap-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-            Tailor resume
+          <h1 className="flex items-center gap-2 bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+            Tailor Resume
+            <HelpTip title="Tailor Resume">
+              <p>
+                Paste a job description and the agent rewrites and reorders
+                your bullets to match it. The result is saved to your Tailored
+                Resumes board, where you can keep editing and export it.
+              </p>
+              <p>
+                Tailoring draws from your balance — the cost depends on the
+                model you pick.
+              </p>
+            </HelpTip>
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
             Paste a job description — the agent rewrites and reorders your
@@ -371,7 +383,7 @@ export default function TailorForm({
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Sparkles className="size-4 text-purple-400" /> Job description
+              <Sparkles className="size-4 text-purple-400" /> Job Description
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -442,7 +454,7 @@ export default function TailorForm({
           <Card className="h-fit border-zinc-800 bg-zinc-900/80 text-zinc-100 lg:sticky lg:top-6 lg:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Briefcase className="size-4 text-purple-400" /> Job posting
+                <Briefcase className="size-4 text-purple-400" /> Job Posting
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
