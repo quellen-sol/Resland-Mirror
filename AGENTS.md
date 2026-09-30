@@ -78,10 +78,15 @@ cd frontend           && pnpm test          # node --test (explicit file list in
 - `asyncio_mode = "auto"` is set in **api only** (`backend/api/pyproject.toml`). Dispatcher/shared
   async tests use `unittest.IsolatedAsyncioTestCase` (no `pytest-asyncio` dependency there).
 - Tests default to **fakes**, not live infrastructure. Anything Postgres-dependent is gated on
-  `TEST_PG_URL` and skips when unset (set it to `postgres://resland:resland@localhost:5432/resland`).
-- ⚠️ **The live-PG fixtures truncate tables on every run** (per the conftest design:
-  `token_usage`, `model_pricing`, `balance_purchase`, `"user"`, …). Point `TEST_PG_URL` only at a
-  scratch database — never at data you care about.
+  `TEST_PG_URL` and skips when unset (set it to `postgres://resland:resland@localhost:5432/resland_test`).
+- ⚠️ **Destructive live-PG fixtures refuse to run** unless the effective database name's last token
+  is a scratch marker (`resland_test`, `app-scratch`, `test`…) or `ALLOW_DESTRUCTIVE_TESTS=1` is set
+  (see `shared.testing.destructive_db_ok`). When they do run they truncate tables
+  (`token_usage`, `model_pricing`, `balance_purchase`, `"user"`, …), so the default is
+  `.../resland_test` — never point `TEST_PG_URL` at data you care about.
+- `compose.yml` creates `resland_test` via `postgres/init/01-test-db.sql`, but
+  `docker-entrypoint-initdb.d` only runs on an **empty data dir** — an existing `db-data` volume
+  must be recreated for the test DB to appear.
 - Real LLM calls need `OPENROUTER_API_KEY`; without it agents settle into
   `WAITING_FOR_INPUT`/`pending_question`, which is still a valid end-to-end proof of the pipeline.
 
@@ -155,7 +160,8 @@ step 4 gets sent back.
 
 ## Known pitfalls
 
-- Live-PG test fixtures truncate tables (see Tests above).
+- Live-PG test fixtures truncate tables and **refuse to run** unless the target DB is a scratch/test
+  database (or `ALLOW_DESTRUCTIVE_TESTS=1`); see Tests above.
 - `frontend/AGENTS.md` contains a `next dev`-managed block — it is regenerated on every dev run;
   don't delete it from diffs, commit it with your change.
 - RabbitMQ `guest` is localhost-only: host-side connections work, container-to-container does not.
