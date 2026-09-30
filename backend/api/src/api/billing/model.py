@@ -64,7 +64,6 @@ class PurchasesResponse(BaseModel):
 
 class ActionCostEstimate(BaseModel):
     job_kind: str
-    job_count: int
     avg_cents: float
 
 
@@ -75,6 +74,7 @@ class ModelInfo(BaseModel):
     cents_per_1k_output: float
     is_default: bool
     # Historical average charge per action, aggregated from token_usage.
+    # Deliberately no row counts — only the price signal is user-facing.
     action_costs: list[ActionCostEstimate] = []
 
 

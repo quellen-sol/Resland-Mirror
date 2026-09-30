@@ -70,12 +70,7 @@ export default function ModelSelect({
         ))}
       </select>
       {estimate && (
-        <span
-          className="px-0.5 text-[10px] text-zinc-500"
-          title={`Average charged across ${estimate.job_count} past ${
-            estimate.job_count === 1 ? "run" : "runs"
-          }`}
-        >
+        <span className="px-0.5 text-[10px] text-zinc-500">
           ~{fmtAvg(estimate.avg_cents)} avg per run
         </span>
       )}

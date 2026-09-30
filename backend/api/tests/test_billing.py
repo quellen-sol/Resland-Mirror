@@ -282,18 +282,16 @@ async def test_list_models_action_costs_assembly():
                 ("openrouter:b", "B", 0.2, 0.6, False),
             ],
             [
-                ("openrouter:a", "TAILOR", 2, 3.5),
-                ("openrouter:a", "SUGGESTION", 1, 1.0),
+                ("openrouter:a", "TAILOR", 3.5),
+                ("openrouter:a", "SUGGESTION", 1.0),
             ],
         ]
     )
     resp = await service.list_models(pg)
     a, b = resp.models
     assert a.action_costs == [
-        model.ActionCostEstimate(job_kind="TAILOR", job_count=2, avg_cents=3.5),
-        model.ActionCostEstimate(
-            job_kind="SUGGESTION", job_count=1, avg_cents=1.0
-        ),
+        model.ActionCostEstimate(job_kind="TAILOR", avg_cents=3.5),
+        model.ActionCostEstimate(job_kind="SUGGESTION", avg_cents=1.0),
     ]
     assert b.action_costs == []
 
@@ -327,9 +325,7 @@ async def test_list_models_includes_action_costs(pg, user):
     assert "openrouter:off" not in by_id
     costs = {c.job_kind: c for c in by_id["openrouter:a"].action_costs}
     assert costs["TAILOR"].avg_cents == 3.0
-    assert costs["TAILOR"].job_count == 2
     assert costs["SUGGESTION"].avg_cents == 1.0
-    assert costs["SUGGESTION"].job_count == 1
     # No usage history → no estimates.
     assert by_id["openrouter:b"].action_costs == []
 

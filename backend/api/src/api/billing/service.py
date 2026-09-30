@@ -41,7 +41,7 @@ async def list_models(pg_conn: PgConnection) -> model.ModelsResponse:
         avgs = await (
             await cursor.execute(
                 """
-                SELECT model, job_kind, COUNT(*), AVG(amount_cents)
+                SELECT model, job_kind, AVG(amount_cents)
                 FROM token_usage GROUP BY model, job_kind
                 """
             )
@@ -50,9 +50,7 @@ async def list_models(pg_conn: PgConnection) -> model.ModelsResponse:
     costs_by_model: dict[str, list[model.ActionCostEstimate]] = {}
     for r in avgs:
         costs_by_model.setdefault(r[0], []).append(
-            model.ActionCostEstimate(
-                job_kind=r[1], job_count=r[2], avg_cents=float(r[3])
-            )
+            model.ActionCostEstimate(job_kind=r[1], avg_cents=float(r[2]))
         )
 
     return model.ModelsResponse(
