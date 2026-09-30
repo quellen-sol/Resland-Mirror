@@ -603,16 +603,15 @@ def _section_header_idx(
 ) -> int | None:
     """Nearest short, non-empty paragraph right above a section's first
     matched content — treated as that section's header line. A line ending
-    in sentence punctuation is content (e.g. a wrapped bullet tail), never
-    a header."""
+    in sentence punctuation is content (e.g. a wrapped bullet tail), so
+    the scan skips it and keeps looking for the real header above."""
     j = content_idx - 1
     while j >= 0 and content_idx - j <= 6:
         text = paras[j].text.strip()
         if text and len(text) <= 48 and j not in claimed:
             if not text.endswith((".", ",", ";")):
                 return j
-            return None
-        if text:
+        elif text:
             # Hit another section's content — stop looking.
             return None
         j -= 1
