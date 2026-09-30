@@ -1,6 +1,6 @@
 """db_ops tests beyond record_token_usage — real SQL against a live
-Postgres (TEST_PG_URL, default the compose creds). Skips cleanly when no
-database is reachable, matching conftest's convention.
+Postgres (TEST_PG_URL, default the compose creds' resland_test database).
+Skips cleanly when no database is reachable, matching conftest's convention.
 
 Run: .venv/bin/python -m unittest backend.dispatcher.tests.test_db_ops_pg -v
      (from the repo root with the workspace venv)
@@ -13,6 +13,7 @@ import unittest
 import psycopg
 
 from shared.docgen import FormatProfile
+from shared.testing import destructive_db_ok
 
 from dispatcher.agents.docx_parser import (
     UserDocxProfile,
@@ -31,9 +32,15 @@ from dispatcher.agents.tailor import (
 )
 from dispatcher.runners import db_ops
 
+# Default to a *_test database so the safe path is the default path; the
+# destructive setUp() below refuses to run against anything else.
 TEST_PG_URL = os.getenv(
-    "TEST_PG_URL", "postgres://resland:resland@localhost:5432/resland"
+    "TEST_PG_URL", "postgres://resland:resland@localhost:5432/resland_test"
 )
+
+# This suite truncates 14 tables in setUp(), so it needs the same guard the
+# conftest fixtures use — otherwise it would nuke a non-test database.
+_DESTRUCTIVE_OK, _DESTRUCTIVE_REASON = destructive_db_ok(TEST_PG_URL)
 
 
 def _pg_reachable() -> bool:
@@ -56,6 +63,8 @@ class DbOpsPg(unittest.TestCase):
         cls.conn.close()
 
     def setUp(self):
+        if not _DESTRUCTIVE_OK:
+            self.skipTest(_DESTRUCTIVE_REASON)
         self.conn.execute(
             'TRUNCATE user_resume_format, user_suggestion, user_tailor_run,'
             ' user_base_experience_bullet, user_base_experience,'
