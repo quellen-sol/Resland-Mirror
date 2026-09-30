@@ -42,7 +42,7 @@ docs/                 Design docs (billing plan, UX specs)
 | pnpm | 10.33.0 (pinned `packageManager`) |
 | Postgres | 18 (compose + CI service) |
 | RabbitMQ | 4 (`rabbitmq:4-management`, mgmt UI :15672) |
-| Lint | ruff (`backend/.ruff.toml`, `BLE001` ignored) via `./ruff-fix-all.sh` |
+| Lint | ruff (repo-root `.ruff.toml`, `BLE001` ignored) via `./ruff-fix-all.sh` |
 | Frontend lint | `pnpm lint` (eslint-config-next); no typecheck script — run `npx tsc --noEmit` |
 
 ## Local bring-up
