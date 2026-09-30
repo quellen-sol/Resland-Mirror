@@ -1,0 +1,131 @@
+# AGENTS.md — working in this repo as an agent
+
+Resland is a resume-tailoring product: users upload a resume, the API queues jobs over AMQP,
+and LangGraph-based agents in the dispatcher generate tailored documents and suggestions.
+
+This file is the root guide for **automated/agentic contributors**. Package-level pointers:
+`frontend/AGENTS.md` (Next.js agent rules — read it before touching the frontend), and the
+testing playbooks in `.devin/skills/`.
+
+## Repo map
+
+```
+backend/api/          FastAPI app (auth, billing/Stripe, uploads, job submission)   -> pytest
+backend/dispatcher/   AMQP consumers + LangGraph agents (tailor, suggestions, parsers) -> pytest
+backend/shared/       Shared library: AMQP client, job dataclasses, pdfdoc, db helpers -> pytest
+frontend/             Next.js 16 app (UI, Auth0, Prisma-Next contract)              -> node --test
+terraform/            Infra definitions
+compose.yml           Local stack: api, dispatcher, amqp (rabbitmq:4-management), postgres:18
+deploy.sh             Build + push image to ECR, force ECS redeploy (us-east-2), cluster resland-live
+Dockerfile            Single image for both api and dispatcher (`uv run api` / `uv run dispatcher`)
+docs/                 Design docs (billing plan, UX specs)
+.devin/skills/        Rich testing playbooks — read the relevant one before deep testing work
+```
+
+### Data + messaging
+- **Schema is a Prisma-Next contract**: `frontend/prisma/contract.prisma`. There are **no SQL
+  migrations** — apply it with `cd frontend && pnpm prisma db init`. Generated artifacts
+  (`contract.json`, `contract.d.ts`) are committed; regenerate rather than hand-edit.
+- **RabbitMQ topology is declared by the dispatcher on startup** (exchanges, durable queues,
+  `#` topic bindings, DLX args) — no need to start the API first.
+- Job dataclasses live in `backend/shared` (`AmqpResumeJob`, `AmqpSuggestionJob`, `AmqpTailorJob`).
+- `token_usage` is an append-only ledger of charged `amount_cents` per `(model, job_kind)`;
+  billing/admin aggregates read from it.
+
+## Toolchain
+
+| Thing | Version |
+|---|---|
+| Python | 3.14 (uv workspace, `[tool.uv.workspace] members = ["backend/*"]`) |
+| uv | current; each package is its own dist (`uv_build`) |
+| Node | 24 |
+| pnpm | 10.33.0 (pinned `packageManager`) |
+| Postgres | 18 (compose + CI service) |
+| RabbitMQ | 4 (`rabbitmq:4-management`, mgmt UI :15672) |
+| Lint | ruff (`backend/.ruff.toml`, `BLE001` ignored) via `./ruff-fix-all.sh` |
+| Frontend lint | `pnpm lint` (eslint-config-next); no typecheck script — run `npx tsc --noEmit` |
+
+## Local bring-up
+
+```bash
+docker compose up -d amqp postgres                 # infra (host ports 5672/15672/5432)
+cd frontend && pnpm install
+cd frontend && DATABASE_URL=postgres://resland:resland@localhost:5432/resland pnpm prisma db init
+backend/dispatcher: uv run dispatcher   # or: AMQP_URL=amqp://guest:guest@localhost:5672/ PG_URL=... uv run dispatcher
+backend/api:        uv run api          # port 3001
+frontend:           pnpm dev            # port 3000
+```
+
+`uv run` from the repo root does **not** resolve the `dispatcher`/`api` scripts — run from the
+package directory or use `uv run --package <pkg> python ...`.
+
+Set `PYTHONUNBUFFERED=1` when piping dispatcher output, or `print()`/handler logs never appear.
+
+Full-stack UI + Auth0 bypass + moto S3 seeding recipe: `.devin/skills/testing-local-ui-fullstack/SKILL.md`.
+Dispatcher/AMQP/DLQ/reconnect smoke test: `.devin/skills/testing-amqp-stack/SKILL.md`.
+
+## Tests
+
+Run per package (they are separate uv packages):
+
+```bash
+cd backend/shared     && uv run pytest --cov
+cd backend/api        && uv run pytest --cov
+cd backend/dispatcher && uv run pytest --cov
+cd frontend           && pnpm test          # node --test lib/*.test.js
+```
+
+- `asyncio_mode = "auto"` in api/dispatcher — async tests need no decorator.
+- Tests default to **fakes**, not live infrastructure. Anything Postgres-dependent is gated on
+  `TEST_PG_URL` and skips when unset (set it to `postgres://resland:resland@localhost:5432/resland`).
+- ⚠️ **The live-PG fixtures truncate tables on every run** (per the conftest design:
+  `token_usage`, `model_pricing`, `balance_purchase`, `"user"`, …). Point `TEST_PG_URL` only at a
+  scratch database — never at data you care about.
+- Real LLM calls need `OPENROUTER_API_KEY`; without it agents settle into
+  `WAITING_FOR_INPUT`/`pending_question`, which is still a valid end-to-end proof of the pipeline.
+
+## CI (`pull_request` → master)
+
+`.github/workflows/pr-ci.yml` runs a single `backend-tests` job:
+Postgres 18 service → `pnpm install --frozen-lockfile` (frontend install exists **only** to provide
+the Prisma CLI) → `pnpm prisma db init` → `uv lock` → `uv run --frozen pytest --cov` for
+**shared, api, dispatcher** in that order.
+
+Notes for agents:
+- CI runs `uv lock` before testing because dev-group additions have landed without a re-locked
+  `uv.lock` while PyPI was unreachable. If you add dependencies, run `uv lock` and commit the result.
+- CI does **not** currently run frontend tests, eslint, or `tsc`. Run them locally and say so in the PR.
+- `uvx ruff` may be unreachable in sandboxed environments; if so, verify style by other means and
+  state the limitation in the PR instead of silently skipping.
+
+## Conventions
+
+- **Never commit to `master` directly.** Branch, push, open a PR; the human owner merges.
+- Branch naming: `fix/<issue>-slug`, `feat/<issue>-slug`, `docs/<issue>-slug`, or the Devin agent
+  convention `devin/<epoch>-slug`. Keep one issue per branch.
+- Commit messages: imperative subject, body explains *why*. Reference the issue (`Refs #63`).
+- Keep diffs tight: no drive-by reformatting or dependency bumps unrelated to the change.
+- Python: ruff config is authoritative (`BLE001` — blind `except Exception` — is intentionally
+  allowed; don't "fix" it). Prefer typed dataclasses in `shared` over ad-hoc dicts across the wire.
+- Frontend: **read `frontend/AGENTS.md` and `frontend/node_modules/next/dist/docs/` first** — Next 16
+  differs from most training data. Server components by default; keep API access in `lib/api.ts`.
+- Secrets: never commit `.env`/`.env.local` or credentials. AWS/OpenRouter/Stripe/Auth0 values are
+  injected at runtime (ECS task definitions / local env files, both untracked).
+- Deploys: `./deploy.sh` is owner-run; agents build and test locally only unless explicitly asked.
+
+## Reviewing
+
+- Reviewers commandeer PRs, they don't rewrite them: leave review comments with `file:line` and a
+  concrete suggestion, or push a follow-up commit on the author's branch after saying so in the PR.
+- Bot collaborators post their summaries in `#bot-lab` and cross-review each other's PRs.
+
+## Known pitfalls
+
+- Live-PG test fixtures truncate tables (see Tests above).
+- `frontend/AGENTS.md` contains a `next dev`-managed block — it is regenerated on every dev run;
+  don't delete it from diffs, commit it with your change.
+- RabbitMQ `guest` is localhost-only: host-side connections work, container-to-container does not.
+- A `user_suggestion` row needs at least one bullet — the fetch INNER-joins bullets and otherwise
+  reports "Session not found".
+- Non-persistent AMQP messages are lost on broker restart even in durable queues; always publish
+  via the shared `to_message()` path (PERSISTENT).
