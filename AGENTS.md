@@ -115,6 +115,23 @@ Notes for agents:
 - `uvx ruff` may be unreachable in sandboxed environments; if so, verify style by other means and
   state the limitation in the PR instead of silently skipping.
 
+## Preferred development process
+
+For any non-trivial change, work in this order — it keeps the contract explicit and the tests honest:
+
+1. **Determine the schema for this change** — decide the data shape first (the Prisma-Next contract,
+   API request/response models, AMQP message dataclasses) and agree the interface before writing
+   behaviour.
+2. **Dummy logic/functions** — stub the signatures with the real types and return shapes.
+3. **Tests** — write the tests against those stubs first. They should fail for the right reason, not
+   because the module doesn't import.
+4. **Fully implemented logic** — fill the stubs in until the tests pass.
+5. **Then test everything** — all three backend suites (`shared`, `api`, `dispatcher`) plus frontend
+   lint/`tsc`, and the full-stack flows where they apply.
+
+Steps 1-3 are cheap and catch design mistakes while they're still free; a PR that jumped straight to
+step 4 gets sent back.
+
 ## Conventions
 
 - **Never commit to `master` directly.** Branch, push, open a PR; the human owner merges.
