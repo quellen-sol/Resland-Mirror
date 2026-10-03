@@ -1440,12 +1440,20 @@ def _content_width_in(fmt: FormatProfile) -> float:
     return 8.5 - fmt.page_margins_in["left"] - fmt.page_margins_in["right"]
 
 
-def _dates(start: str, end: str | None, fmt: FormatProfile) -> str:
-    if end and end != start:
+def _dates(start: str | None, end: str | None, fmt: FormatProfile) -> str:
+    """"Jan 2020 – Mar 2022"; an open-ended entry gets the source's open
+    label ("Jan 2020 – Present"); an entry with only an end date (a
+    certificate completed in December 2025) shows just that date — never a
+    dangling separator."""
+    start = (start or "").strip()
+    end = (end or "").strip()
+    if start and end and end != start:
         return f"{start}{fmt.dates_separator}{end}"
-    if not end and fmt.dates_open_label:
-        return f"{start}{fmt.dates_separator}{fmt.dates_open_label}"
-    return start
+    if start and not end:
+        if fmt.dates_open_label:
+            return f"{start}{fmt.dates_separator}{fmt.dates_open_label}"
+        return start
+    return end or start
 
 
 def _entry_header(
