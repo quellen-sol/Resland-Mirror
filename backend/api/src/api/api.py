@@ -20,6 +20,7 @@ from . import site_settings
 from .env_vars import AMQP_URL
 from .resume_export.router import router as resume_export_router
 from .resume_upload.router import router as resume_upload_router
+from .system_design.router import router as system_design_router
 from .tailor.router import router as tailor_router
 from .tailored.router import router as tailored_router
 
@@ -78,5 +79,6 @@ app.include_router(resume_export_router)
 app.include_router(bullet_sugg_router)
 app.include_router(tailor_router)
 app.include_router(tailored_router)
+app.include_router(system_design_router)
 app.include_router(billing_router)
 app.include_router(admin_router)
