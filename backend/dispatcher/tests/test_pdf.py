@@ -404,5 +404,63 @@ class ParsePdf(unittest.TestCase):
         self.assertEqual(pdfdoc.column_counts(doc), [1])
 
 
+class _StubFrag:
+    def __init__(self, x0, top, h):
+        self.x0, self.x1, self.top, self.bottom = x0, x0 + 40, top, top + h
+
+    @property
+    def cy(self):
+        return (self.top + self.bottom) / 2
+
+    @property
+    def height(self):
+        return self.bottom - self.top
+
+
+def _reference_row_rows(frags):
+    """The original O(n²) first-fit grouping _row_rows must match."""
+    rows, centers = [], []
+    for frag in sorted(frags, key=lambda f: (f.cy, f.x0)):
+        for i, center in enumerate(centers):
+            row_h = max(f.bottom - f.top for f in rows[i])
+            h = max(row_h, frag.bottom - frag.top, 1.0)
+            if abs(frag.cy - center) <= max(2.5, h * 0.45):
+                rows[i].append(frag)
+                centers[i] = (center * (len(rows[i]) - 1) + frag.cy) / len(rows[i])
+                break
+        else:
+            rows.append([frag])
+            centers.append(frag.cy)
+    return rows
+
+
+class RowRows(unittest.TestCase):
+    def test_matches_first_fit_reference(self):
+        """The windowed scan (finding E) groups exactly like the original
+        scan-every-row loop — random pages with jitter, mixed sizes, near
+        ties, and the occasional tall fragment."""
+        import random
+
+        for seed in range(300):
+            rng = random.Random(seed)
+            frags = []
+            for _ in range(rng.randint(0, 120)):
+                h = rng.choice([8, 10, 11, 12, 14, 24, 40])
+                top = rng.choice([rng.uniform(0, 700), rng.randint(0, 60) * 12.0])
+                frags.append(_StubFrag(rng.uniform(40, 500), top + rng.uniform(-3, 3), h))
+            got = [[id(f) for f in row] for row in pdfdoc._row_rows(frags)]
+            want = [[id(f) for f in row] for row in _reference_row_rows(frags)]
+            self.assertEqual(got, want, f"seed {seed}")
+
+    def test_scales_linearly_enough(self):
+        import time
+
+        frags = [_StubFrag(40 + (i % 3) * 200, (i // 3) * 12.0, 10) for i in range(6000)]
+        start = time.perf_counter()
+        rows = pdfdoc._row_rows(frags)
+        self.assertEqual(len(rows), 2000)
+        self.assertLess(time.perf_counter() - start, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

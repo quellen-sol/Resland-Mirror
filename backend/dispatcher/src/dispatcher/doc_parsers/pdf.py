@@ -191,28 +191,40 @@ class _Frag:
     def cy(self) -> float:
         return (self.top + self.bottom) / 2
 
+    @property
+    def height(self) -> float:
+        return self.bottom - self.top
+
 
 def _row_rows(frags: list[_Frag]) -> list[list[_Frag]]:
     """Group fragments that share a visual row — a title and its
-    right-floated dates, a label and its value, split skill columns —
-    so they join into one line instead of two unrelated-looking rows."""
+    right-floated dates, a label and its value — first-fit against each
+    row's running center. Fragments arrive sorted by center, so rows whose
+    center is already further above than any row could reach are retired
+    instead of rescanned."""
     rows: list[list[_Frag]] = []
     centers: list[float] = []
+    heights: list[float] = []
+    if not frags:
+        return rows
+    # Upper bound of the per-pair tolerance below.
+    reach = max(2.5, max(max(f.height for f in frags), 1.0) * 0.45)
+    start = 0
     for frag in sorted(frags, key=lambda f: (f.cy, f.x0)):
-        placed = False
-        for i, center in enumerate(centers):
-            row_h = max(f.bottom - f.top for f in rows[i])
-            h = max(row_h, frag.bottom - frag.top, 1.0)
-            if abs(frag.cy - center) <= max(2.5, h * 0.45):
+        while start < len(rows) and centers[start] < frag.cy - reach:
+            start += 1
+        for i in range(start, len(rows)):
+            h = max(heights[i], frag.height, 1.0)
+            if abs(frag.cy - centers[i]) <= max(2.5, h * 0.45):
                 rows[i].append(frag)
-                centers[i] = (center * (len(rows[i]) - 1) + frag.cy) / len(
-                    rows[i]
-                )
-                placed = True
+                n = len(rows[i])
+                centers[i] = (centers[i] * (n - 1) + frag.cy) / n
+                heights[i] = max(heights[i], frag.height)
                 break
-        if not placed:
+        else:
             rows.append([frag])
             centers.append(frag.cy)
+            heights.append(frag.height)
     return rows
 
 
