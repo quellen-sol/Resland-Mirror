@@ -1,5 +1,8 @@
 import type { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  return [{ url: "https://resland.org/" }];
+  return [
+    { url: "https://resland.org/" },
+    { url: "https://resland.org/help" },
+  ];
 }

@@ -11,6 +11,7 @@ test("non-admin menu omits the admin link but keeps every other item", () => {
     "export",
     "edit-profile",
     "billing",
+    "help",
     "sign-out",
   ]);
 });
@@ -25,6 +26,7 @@ test("admin menu inserts the admin link between export and edit-profile", () => 
     "admin",
     "edit-profile",
     "billing",
+    "help",
     "sign-out",
   ]);
 });

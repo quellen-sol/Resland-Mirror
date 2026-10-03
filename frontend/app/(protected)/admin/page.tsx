@@ -7,6 +7,8 @@ import AdminClient from "./admin-client";
 export const metadata: Metadata = { title: "Admin" };
 
 export default async function AdminPage() {
+  // Plain getUser(), not requireOnboardedUser(): the site_admin check must run
+  // first so non-admins get the 404 and admins aren't gated on onboarding.
   const user = await getUser();
   if (!user) redirect("/auth/login");
   // Hidden route — pretend it doesn't exist for non-admins.

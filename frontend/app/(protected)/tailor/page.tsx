@@ -1,14 +1,12 @@
-import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getAccessTokenOrLogin } from "@/lib/auth";
-import { getUser, getUserProfileData } from "@/lib/db";
+import { getUserProfileData, requireOnboardedUser } from "@/lib/db";
 import TailorForm from "./tailor-form";
 
-export const metadata: Metadata = { title: "Tailor resume" };
+export const metadata: Metadata = { title: "Tailor Resume" };
 
 export default async function TailorPage() {
-  const user = await getUser();
-  if (!user) redirect("/auth/login");
+  const user = await requireOnboardedUser();
   const accessToken = await getAccessTokenOrLogin("/tailor");
 
   const { experiences, skills } = await getUserProfileData(user.auth0_id);

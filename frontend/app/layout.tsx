@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://resland.org"),
   title: {
-    default: "Resland — AI resume tailoring",
+    default: "Resland — AI Resume Tailoring",
     template: "%s · Resland",
   },
   description:
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     type: "website",
     url: "https://resland.org",
     siteName: "Resland",
-    title: "Resland — AI resume tailoring",
+    title: "Resland — AI Resume Tailoring",
     description:
       "Upload your resume, get AI bullet-point suggestions, and tailor it to any job description in minutes.",
     images: [
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Resland — AI resume tailoring",
+    title: "Resland — AI Resume Tailoring",
     description:
       "Upload your resume, get AI bullet-point suggestions, and tailor it to any job description in minutes.",
     images: ["/resland-logo.png"],

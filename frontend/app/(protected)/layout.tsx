@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
+import SiteFooter from "@/components/site-footer";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -15,6 +16,7 @@ export default async function ProtectedLayout({
   return (
     <>
       {children}
+      <SiteFooter />
       <Toaster theme="dark" richColors position="bottom-right" />
     </>
   );

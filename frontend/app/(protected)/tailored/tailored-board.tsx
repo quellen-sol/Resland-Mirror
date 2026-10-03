@@ -175,7 +175,7 @@ export default function TailoredBoard({
             href="/tailor"
             className="text-sm text-purple-300 underline-offset-4 hover:underline"
           >
-            Tailor a resume
+            Tailor a Resume
           </Link>
         </CardContent>
       </Card>
@@ -215,7 +215,7 @@ export default function TailoredBoard({
                         href={`/tailored/${item.id}`}
                         className="hover:text-purple-300 hover:underline underline-offset-4"
                       >
-                        {item.role || "Tailored resume"}
+                        {item.role || "Tailored Resume"}
                       </Link>
                     </td>
                     <td className={td}>{item.company_name ?? "—"}</td>
@@ -285,7 +285,7 @@ export default function TailoredBoard({
         <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
           <DialogHeader>
             <DialogTitle className="text-zinc-100">
-              Delete tailored resume?
+              Delete Tailored Resume?
             </DialogTitle>
             <DialogDescription className="text-zinc-400">
               {deleteTarget?.role || "This tailored resume"}

@@ -43,7 +43,7 @@ export default function EditProfileForm({
       <ProfileForm
         initial={initial}
         pending={isPending}
-        submitLabel="Save changes"
+        submitLabel="Save Changes"
         cancelHref="/dashboard"
         onSubmit={handleSubmit}
       />

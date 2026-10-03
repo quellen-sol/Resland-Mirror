@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import {
   Briefcase,
@@ -7,13 +6,16 @@ import {
   FolderGit2,
   GraduationCap,
   Link2,
+  UserRound,
 } from "lucide-react";
 import { auth0 } from "@/lib/auth0";
 import { getAccessTokenOrLogin } from "@/lib/auth";
-import { getUser, getUserProfileData } from "@/lib/db";
+import { getUserProfileData, requireOnboardedUser } from "@/lib/db";
 import { groupSkills } from "@/lib/skills";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "cn";
+import CopyButton from "@/components/copy-button";
+import HelpTip from "@/components/help-tip";
 import JobStatusPoller from "@/components/job-status-poller";
 import SuggestionDialog from "@/components/suggestion-dialog";
 import DashboardMenu from "./dashboard-menu";
@@ -30,6 +32,13 @@ function fmtDate(date: string | null) {
   });
 }
 
+// social_link.type values — show the brand name, not the raw enum.
+const SOCIAL_LINK_LABELS: Record<string, string> = {
+  LINKEDIN: "LinkedIn",
+  GITHUB: "GitHub",
+  WEBSITE: "Website",
+};
+
 function Empty({ text }: { text: string }) {
   return <p className="text-sm text-zinc-500">{text}</p>;
 }
@@ -41,8 +50,10 @@ function normalizeHref(url: string) {
 }
 
 export default async function DashboardPage() {
-  const [session, user] = await Promise.all([auth0.getSession(), getUser()]);
-  if (!user) redirect("/auth/login");
+  const [session, user] = await Promise.all([
+    auth0.getSession(),
+    requireOnboardedUser(),
+  ]);
   const accessToken = await getAccessTokenOrLogin("/dashboard");
 
   const {
@@ -70,9 +81,24 @@ export default async function DashboardPage() {
         <JobStatusPoller jobIds={activeJobIds} />
         <header className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-              Dashboard
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+                Dashboard
+              </h1>
+              <HelpTip title="Your Dashboard">
+                <p>
+                  This is your base resume information — the version everything
+                  else builds on. Keep it current, then tailor it to job
+                  postings, improve it with AI suggestions, and re-export it
+                  anytime.
+                </p>
+                <p>
+                  The sparkle icons ask AI for suggestions on a bullet or a
+                  whole job, and the copy icon copies a bullet to your
+                  clipboard.
+                </p>
+              </HelpTip>
+            </div>
             <p className="mt-1 truncate text-sm text-zinc-400">
               {user.full_name ?? session?.user.name ?? session?.user.email}
             </p>
@@ -86,7 +112,12 @@ export default async function DashboardPage() {
 
         {/* Contact */}
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-          <CardContent className="flex flex-col gap-4 pt-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <UserRound className="size-4 text-purple-400" /> Basic Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
             <div className="grid gap-x-8 gap-y-3 sm:grid-cols-2">
               {(
                 [
@@ -122,7 +153,7 @@ export default async function DashboardPage() {
                     className="inline-flex items-center gap-1 text-sm text-purple-300 underline-offset-4 hover:underline"
                   >
                     <Link2 className="size-3.5" />
-                    {link.type.toLowerCase()}
+                    {SOCIAL_LINK_LABELS[link.type] ?? link.type.toLowerCase()}
                   </a>
                 ))}
               </div>
@@ -134,7 +165,7 @@ export default async function DashboardPage() {
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <FileText className="size-4 text-purple-400" /> Professional summary
+              <FileText className="size-4 text-purple-400" /> Professional Summary
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -190,7 +221,7 @@ export default async function DashboardPage() {
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Briefcase className="size-4 text-purple-400" /> Work experience
+              <Briefcase className="size-4 text-purple-400" /> Work Experience
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -222,18 +253,23 @@ export default async function DashboardPage() {
                   <p className="text-sm text-zinc-400">{exp.description}</p>
                 )}
                 {bulletsFor(exp.id).length > 0 && (
-                  <ul className="list-inside list-disc text-sm text-zinc-400">
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-400">
                     {bulletsFor(exp.id).map((b) => (
                       <li key={b.id}>
+                        {/* Actions lead the text so they sit at a fixed spot
+                            no matter how long the bullet runs. */}
+                        <span className="mr-1.5 inline-flex items-center gap-1 align-middle">
+                          <SuggestionDialog
+                            accessToken={accessToken}
+                            experienceId={exp.id}
+                            bulletId={b.id}
+                            targetText={b.bullet}
+                            contextLabel={`${exp.title} · ${exp.company_name}`}
+                            variant="icon"
+                          />
+                          <CopyButton text={b.bullet} />
+                        </span>
                         {b.bullet}
-                        <SuggestionDialog
-                          accessToken={accessToken}
-                          experienceId={exp.id}
-                          bulletId={b.id}
-                          targetText={b.bullet}
-                          contextLabel={`${exp.title} · ${exp.company_name}`}
-                          variant="icon"
-                        />
                       </li>
                     ))}
                   </ul>

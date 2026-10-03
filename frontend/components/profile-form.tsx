@@ -262,7 +262,7 @@ export default function ProfileForm({
       <section>
         <h3 className="text-sm font-medium text-purple-300">Contact</h3>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Field label="Full name">
+          <Field label="Full Name">
             <Input
               value={values.fullName}
               onChange={(e) => set("fullName", e.target.value)}
@@ -347,7 +347,7 @@ export default function ProfileForm({
               ])
             }
           >
-            Add link
+            Add Link
           </AddButton>
         </div>
       </section>
@@ -369,7 +369,7 @@ export default function ProfileForm({
 
       {/* Work experience */}
       <section>
-        <h3 className="text-sm font-medium text-purple-300">Work experience</h3>
+        <h3 className="text-sm font-medium text-purple-300">Work Experience</h3>
         <div className="mt-3 flex flex-col gap-4">
           {values.experiences.map((exp, i) => (
             <div
@@ -400,7 +400,7 @@ export default function ProfileForm({
                   />
                 </Field>
                 <DateField
-                  label="Start date"
+                  label="Start Date"
                   required
                   value={exp.startDate}
                   onChange={(v) =>
@@ -410,7 +410,7 @@ export default function ProfileForm({
                   }
                 />
                 <DateField
-                  label="End date"
+                  label="End Date"
                   value={exp.endDate}
                   onChange={(v) =>
                     updateAt<ExperienceForm>("experiences", i, { endDate: v })
@@ -459,7 +459,7 @@ export default function ProfileForm({
                           })
                         }
                         className="text-zinc-500 hover:text-zinc-200 disabled:cursor-default disabled:opacity-30 disabled:hover:text-zinc-500"
-                        aria-label="Move bullet up"
+                        aria-label="Move Bullet Up"
                       >
                         <ArrowUp className="size-4" />
                       </button>
@@ -478,7 +478,7 @@ export default function ProfileForm({
                           })
                         }
                         className="text-zinc-500 hover:text-zinc-200 disabled:cursor-default disabled:opacity-30 disabled:hover:text-zinc-500"
-                        aria-label="Move bullet down"
+                        aria-label="Move Bullet Down"
                       >
                         <ArrowDown className="size-4" />
                       </button>
@@ -490,7 +490,7 @@ export default function ProfileForm({
                           })
                         }
                         className="text-zinc-500 hover:text-red-400"
-                        aria-label="Remove bullet"
+                        aria-label="Remove Bullet"
                       >
                         <Trash2 className="size-4" />
                       </button>
@@ -503,7 +503,7 @@ export default function ProfileForm({
                       })
                     }
                   >
-                    Add bullet
+                    Add Bullet
                   </AddButton>
                 </div>
               </Field>
@@ -519,7 +519,7 @@ export default function ProfileForm({
               set("experiences", [...values.experiences, { ...emptyExperience }])
             }
           >
-            Add experience
+            Add Experience
           </AddButton>
         </div>
       </section>
@@ -558,7 +558,7 @@ export default function ProfileForm({
                     className={inputCls}
                   />
                 </Field>
-                <Field label="Field of study" required>
+                <Field label="Field of Study" required>
                   <Input
                     value={edu.fieldOfStudy}
                     onChange={(e) =>
@@ -606,7 +606,7 @@ export default function ProfileForm({
               set("education", [...values.education, { ...emptyEducation }])
             }
           >
-            Add education
+            Add Education
           </AddButton>
         </div>
       </section>
@@ -647,7 +647,7 @@ export default function ProfileForm({
                   />
                 </Field>
                 <DateField
-                  label="Start date"
+                  label="Start Date"
                   required
                   value={proj.startDate}
                   onChange={(v) =>
@@ -655,7 +655,7 @@ export default function ProfileForm({
                   }
                 />
                 <DateField
-                  label="End date"
+                  label="End Date"
                   value={proj.endDate}
                   onChange={(v) =>
                     updateAt<ProjectForm>("projects", i, { endDate: v })
@@ -681,7 +681,7 @@ export default function ProfileForm({
               set("projects", [...values.projects, { ...emptyProject }])
             }
           >
-            Add project
+            Add Project
           </AddButton>
         </div>
       </section>

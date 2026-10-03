@@ -39,7 +39,7 @@ export default function UploadForm({
       setResult({
         kind: "error",
         message:
-          "The Resland API is unavailable right now. Please try again in a moment.",
+          "We can't reach Resland's servers right now. Please try again in a moment.",
       });
       return;
     }
@@ -99,10 +99,7 @@ export default function UploadForm({
         <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm text-zinc-400">
           <FileUp className="size-4 text-purple-400" />
           <span className="truncate text-zinc-200">{file.name}</span>
-          <span className="shrink-0">
-            {(file.size / 1024).toFixed(1)} KB
-            {file.type ? ` · ${file.type}` : ""}
-          </span>
+          <span className="shrink-0">{(file.size / 1024).toFixed(1)} KB</span>
         </div>
       )}
 
@@ -127,7 +124,7 @@ export default function UploadForm({
       {result.kind === "success" && !onSuccess && (
         <Alert className="border-purple-500/30 bg-purple-500/10 text-purple-200">
           <CircleCheck className="text-purple-400" />
-          <AlertTitle>Upload succeeded (HTTP {result.status})</AlertTitle>
+          <AlertTitle>Upload Succeeded (HTTP {result.status})</AlertTitle>
           {result.body && (
             <AlertDescription>
               <pre className="mt-1 max-h-64 overflow-auto rounded bg-black/40 p-2 font-mono text-xs whitespace-pre-wrap text-zinc-300">
@@ -144,13 +141,13 @@ export default function UploadForm({
           className="border-red-500/30 bg-red-500/10"
         >
           <CircleAlert />
-          <AlertTitle>Upload failed</AlertTitle>
+          <AlertTitle>Upload Failed</AlertTitle>
           <AlertDescription>
             <p>{result.message}</p>
             {result.raw && (
               <details className="mt-2">
                 <summary className="cursor-pointer text-xs text-zinc-400">
-                  Show technical details
+                  Show Technical Details
                 </summary>
                 <pre className="mt-1 max-h-64 overflow-auto rounded bg-black/40 p-2 font-mono text-xs whitespace-pre-wrap text-zinc-300">
                   {result.raw}

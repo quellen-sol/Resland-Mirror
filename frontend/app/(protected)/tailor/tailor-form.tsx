@@ -26,6 +26,7 @@ import {
   isInsufficientBalance,
 } from "@/lib/api";
 import ApiUnavailable from "@/components/api-unavailable";
+import HelpTip from "@/components/help-tip";
 import { groupSkills } from "@/lib/skills";
 
 const MAX_JD_CHARS = 10_000;
@@ -192,7 +193,7 @@ export default function TailorForm({
         toast.error("Insufficient balance", {
           description: "Top up to keep going.",
           action: {
-            label: "Top up",
+            label: "Top Up",
             onClick: () => router.push("/billing"),
           },
         });
@@ -301,7 +302,7 @@ export default function TailorForm({
         method: "POST",
       })) as { tailored_id: string };
       setSavedId(tailored_id);
-      toast.success("Saved to Tailored resumes", {
+      toast.success("Saved to Tailored Resumes", {
         action: {
           label: "Open",
           onClick: () => router.push(`/tailored/${tailored_id}`),
@@ -335,12 +336,30 @@ export default function TailorForm({
     <div className="flex flex-col gap-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-            Tailor resume
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+              Tailor Resume
+            </h1>
+            <HelpTip title="Tailor Resume">
+              <p>
+                Paste a job description and AI rewrites and reorders your
+                bullets to match it.
+              </p>
+              <p>
+                Results aren&apos;t saved automatically — click Save to
+                Tailored Resumes to keep one. Saved resumes live on your
+                Tailored Resumes board, where you can keep editing and export
+                them.
+              </p>
+              <p>
+                Tailoring draws from your balance — the cost depends on how
+                much work it takes and the model you pick.
+              </p>
+            </HelpTip>
+          </div>
           <p className="mt-1 text-sm text-zinc-400">
-            Paste a job description — the agent rewrites and reorders your
-            bullets to match it.
+            Paste a job description — AI rewrites and reorders your bullets to
+            match it.
           </p>
         </div>
         <Link
@@ -371,7 +390,7 @@ export default function TailorForm({
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Sparkles className="size-4 text-purple-400" /> Job description
+              <Sparkles className="size-4 text-purple-400" /> Job Description
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -443,7 +462,7 @@ export default function TailorForm({
           <Card className="h-fit border-zinc-800 bg-zinc-900/80 text-zinc-100 lg:sticky lg:top-6 lg:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Briefcase className="size-4 text-purple-400" /> Job posting
+                <Briefcase className="size-4 text-purple-400" /> Job Posting
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
@@ -636,7 +655,7 @@ export default function TailorForm({
                     href={`/tailored/${savedId}`}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/10 px-2.5 py-1.5 text-sm font-medium text-purple-200 hover:bg-purple-500/20 [&_svg]:size-4"
                   >
-                    <Check /> Saved — open it
+                    <Check /> Saved — Open It
                   </Link>
                 ) : (
                   <Button
@@ -645,7 +664,7 @@ export default function TailorForm({
                     className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                   >
                     {busy ? <Loader2 className="animate-spin" /> : <Bookmark />}{" "}
-                    Save to Tailored resumes
+                    Save to Tailored Resumes
                   </Button>
                 )}
                 <Button
@@ -673,7 +692,7 @@ export default function TailorForm({
                 onClick={reset}
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start over
+                Start Over
               </Button>
             </div>
           </CardContent>
@@ -692,7 +711,7 @@ export default function TailorForm({
                 onClick={reset}
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start over
+                Start Over
               </Button>
             </div>
           </CardContent>
@@ -710,7 +729,7 @@ export default function TailorForm({
               onClick={reset}
               className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
             >
-              Start over
+              Start Over
             </Button>
           </CardContent>
         </Card>
@@ -730,7 +749,7 @@ export default function TailorForm({
         <Card className="border-red-500/30 bg-zinc-900/80 text-zinc-100">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-red-400">
-              The agent finished but returned an unreadable result — try again.
+              We couldn&apos;t read the tailored result — try again.
             </p>
             <div>
               <Button
@@ -738,7 +757,7 @@ export default function TailorForm({
                 onClick={reset}
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start over
+                Start Over
               </Button>
             </div>
           </CardContent>

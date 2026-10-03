@@ -196,7 +196,7 @@ export default function TailoredEditor({
       <header className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-            Tailored resume
+            Tailored Resume
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
             Edit the tailored content, then export it as a document.
@@ -255,7 +255,7 @@ export default function TailoredEditor({
           </div>
           <details className="text-sm">
             <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
-              Job description
+              Job Description
             </summary>
             <p className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 whitespace-pre-wrap text-zinc-400">
               {jobDescription}
@@ -313,7 +313,7 @@ export default function TailoredEditor({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label="Remove bullet"
+                    aria-label="Remove Bullet"
                     onClick={() => removeBullet(ei, bi)}
                     className="mt-1 text-zinc-500 hover:text-red-300"
                   >
@@ -327,7 +327,7 @@ export default function TailoredEditor({
                 onClick={() => addBullet(ei)}
                 className="self-start text-zinc-400 hover:text-zinc-200"
               >
-                <Plus /> Add bullet
+                <Plus /> Add Bullet
               </Button>
             </div>
           ))}
@@ -385,7 +385,7 @@ export default function TailoredEditor({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    aria-label="Add skill"
+                    aria-label="Add Skill"
                     onClick={() => addSkill(gi)}
                     className="text-zinc-500 hover:text-zinc-200"
                   >
@@ -419,7 +419,7 @@ export default function TailoredEditor({
             className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
           >
             {busy === "save" ? <Loader2 className="animate-spin" /> : <Save />}{" "}
-            Save changes
+            Save Changes
           </Button>
           <Button
             onClick={onExport}
@@ -440,7 +440,7 @@ export default function TailoredEditor({
         <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
           <DialogHeader>
             <DialogTitle className="text-zinc-100">
-              Delete tailored resume?
+              Delete Tailored Resume?
             </DialogTitle>
             <DialogDescription className="text-zinc-400">
               This removes the saved resume and its generated document

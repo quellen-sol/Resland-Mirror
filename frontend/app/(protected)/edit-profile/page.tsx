@@ -1,19 +1,18 @@
-import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { getUser, getUserProfileData } from "@/lib/db";
+import { getUserProfileData, requireOnboardedUser } from "@/lib/db";
 import type { ProfileFormValues } from "@/components/profile-form";
 import { rowsToGroups } from "@/lib/skills";
+import HelpTip from "@/components/help-tip";
 import EditProfileForm from "./edit-profile-form";
 
-export const metadata: Metadata = { title: "Edit profile" };
+export const metadata: Metadata = { title: "Edit Profile" };
 
 function toDateString(date: string | null): string {
   return date ?? "";
 }
 
 export default async function EditProfilePage() {
-  const user = await getUser();
-  if (!user) redirect("/auth/login");
+  const user = await requireOnboardedUser();
 
   const { skills, experiences, bullets, education, projects, socialLinks } =
     await getUserProfileData(user.auth0_id);
@@ -73,9 +72,18 @@ export default async function EditProfilePage() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
 
       <main className="relative w-full max-w-3xl">
-        <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-          Edit profile
-        </h1>
+        <div className="flex items-center gap-2">
+          <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+            Edit Profile
+          </h1>
+          <HelpTip title="Edit Profile">
+            <p>
+              Everything here is your base resume — it&apos;s what AI
+              suggestions, tailoring, and exports all read from. Save to keep
+              it current.
+            </p>
+          </HelpTip>
+        </div>
         <p className="mt-1 text-sm text-zinc-400">
           Update your contact info, links, experience, education, projects, and
           skills.
