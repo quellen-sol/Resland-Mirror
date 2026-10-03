@@ -130,7 +130,7 @@ export default function TailorForm({
     // has to finish or cancel it.
     toast.info("Resumed your in-progress tailoring", {
       description:
-        "An unfinished session is still open — continue it here, or Cancel to discard it.",
+        "You still have an unfinished session. Pick up where you left off, or hit Cancel to drop it.",
     });
   }
 
@@ -342,24 +342,23 @@ export default function TailorForm({
             </h1>
             <HelpTip title="Tailor Resume">
               <p>
-                Paste a job description and AI rewrites and reorders your
-                bullets to match it.
+                Paste a job description and Resland reorders and rewrites your
+                bullets to fit it. If something is vague, it may ask you a
+                question first.
               </p>
               <p>
-                Results aren&apos;t saved automatically — click Save to
-                Tailored Resumes to keep one. Saved resumes live on your
-                Tailored Resumes board, where you can keep editing and export
-                them.
+                Results aren&apos;t saved on their own. Click Save to Tailored
+                Resumes to keep one; saved versions live on your Tailored
+                Resumes board, where you can edit and export them.
               </p>
               <p>
-                Tailoring draws from your balance — the cost depends on how
-                much work it takes and the model you pick.
+                Each run takes a little from your balance. The cost depends on
+                how much work it takes and which model you pick.
               </p>
             </HelpTip>
           </div>
           <p className="mt-1 text-sm text-zinc-400">
-            Paste a job description — AI rewrites and reorders your bullets to
-            match it.
+            Paste a job posting and get a version of your resume written for it.
           </p>
         </div>
         <Link
@@ -373,12 +372,11 @@ export default function TailorForm({
       {checked && !hasProfile && !run && (
         <Card className="bg-amber-500/5 ring-amber-500/30">
           <CardContent className="pt-6 text-sm text-amber-200">
-            You have no work experience yet —{" "}
+            You don&apos;t have any work experience yet.{" "}
             <Link
               href="/dashboard"
               className="underline underline-offset-4 hover:text-amber-100"
-            >
-              upload a resume
+            >               Upload a resume
             </Link>{" "}
             first so there&apos;s something to tailor.
           </CardContent>
@@ -652,7 +650,7 @@ export default function TailorForm({
                     href={`/tailored/${savedId}`}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-brand-500/40 bg-brand-500/10 px-2.5 py-1.5 text-sm font-medium text-brand-200 hover:bg-brand-500/20 [&_svg]:size-4"
                   >
-                    <Check /> Saved — Open It
+                    <Check /> Open Saved Version
                   </Link>
                 ) : (
                   <Button
@@ -680,7 +678,7 @@ export default function TailorForm({
         <Card className="ring-red-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-red-400">
-              Something went wrong while tailoring — try again.
+              Something went wrong while tailoring. Please try again.
             </p>
             <div>
               <Button
@@ -699,7 +697,7 @@ export default function TailorForm({
         <Card className="ring-amber-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-amber-400">
-              This is taking too long — we couldn&apos;t finish the request.
+              This took too long, so we stopped waiting. Start over to try again.
             </p>
             <div>
               <Button
@@ -718,7 +716,7 @@ export default function TailorForm({
         <Card className="ring-amber-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-amber-400">
-              This session no longer exists — start a new one.
+              This session has expired. Start a new one.
             </p>
             <Button
               variant="outline"
@@ -745,7 +743,7 @@ export default function TailorForm({
         <Card className="ring-red-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-red-400">
-              We couldn&apos;t read the tailored result — try again.
+              We couldn&apos;t read the tailored result. Please try again.
             </p>
             <div>
               <Button

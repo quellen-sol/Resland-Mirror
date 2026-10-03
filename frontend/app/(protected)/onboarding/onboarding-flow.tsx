@@ -114,7 +114,7 @@ export default function OnboardingFlow({
             <CardHeader>
               <CardTitle className="text-xl">Upload Your Resume</CardTitle>
               <CardDescription className="text-zinc-400">
-                PDF, DOCX, or whatever you&apos;ve got.
+                A PDF or .docx file.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -138,7 +138,7 @@ export default function OnboardingFlow({
             <CardHeader>
               <CardTitle className="text-xl">Your Information</CardTitle>
               <CardDescription className="text-zinc-400">
-                Fill in as much as you&apos;d like — you can always edit later.
+                Fill in as much as you like. You can change it later.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">

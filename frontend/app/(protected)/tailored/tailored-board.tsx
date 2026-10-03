@@ -169,7 +169,8 @@ export default function TailoredBoard({
         <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
           <Briefcase className="size-8 text-zinc-600" />
           <p className="text-sm text-zinc-400">
-            Nothing saved yet — tailor your resume to a job, then save it here.
+            Nothing here yet. Tailor your resume to a job and save it, and
+            it&apos;ll show up here.
           </p>
           <Link
             href="/tailor"

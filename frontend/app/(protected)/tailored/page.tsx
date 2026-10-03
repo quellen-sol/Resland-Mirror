@@ -34,8 +34,8 @@ export default async function TailoredPage() {
               </HelpTip>
             </div>
             <p className="mt-1 text-sm text-zinc-400">
-              Saved versions of your resume tailored to a specific job — edit
-              one or generate its document.
+              One saved version for each job you&apos;ve tailored for. Open one to
+              edit or export it.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3">

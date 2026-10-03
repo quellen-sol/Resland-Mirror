@@ -24,8 +24,8 @@ export default function MaintenancePage() {
           Down for Maintenance
         </h1>
         <p className="text-zinc-400">
-          Resland is temporarily paused while we make some updates. Your data is
-          safe — please check back shortly.
+          Resland is down for a bit while we make some updates. Your data is
+          safe. Check back soon.
         </p>
         <Link
           href="/auth/login?returnTo=%2Fdashboard"

@@ -32,15 +32,15 @@ const SECTIONS: {
     faqs: [
       [
         "What is Resland?",
-        "Resland keeps your resume as a structured profile — experience, skills, education, and projects — that you can polish with AI suggestions, tailor to specific job postings, and export as a document whenever you need it.",
+        "Resland keeps your resume as an editable profile: your jobs, bullets, skills, education and projects. From there it helps you sharpen individual bullets, tailors the whole thing to specific job postings, and exports it as a Word file.",
       ],
       [
         "How do I set up my profile?",
-        "When you first sign in, you can upload an existing resume (we read it and fill in your profile automatically) or enter your information by hand. If you skipped that step, upload a resume or open Edit Profile from the dashboard menu.",
+        "When you first sign in, you can upload a resume (a PDF or .docx) and Resland fills in your profile from it, or you can enter everything by hand. If you skipped that step, upload a resume or open Edit Profile from the dashboard menu.",
       ],
       [
         "What is the dashboard?",
-        "The dashboard shows your base resume information — the version everything else builds on. Keep it current: it's what gets tailored to job postings, improved by suggestions, and re-exported.",
+        "It's your base resume, the version everything else starts from. Tailoring, suggestions and exports all use it, so keep it current.",
       ],
     ],
   },
@@ -49,15 +49,15 @@ const SECTIONS: {
     faqs: [
       [
         "What does the sparkle icon do?",
-        "The sparkle next to a bullet or job asks the AI for a suggestion. It may ask you a question or two, then proposes a rewrite you can accept or dismiss. You can also tell it what you'd like changed in your own words.",
+        "The sparkle next to a bullet or a job asks Resland for a suggestion. It may ask you a question or two first, then proposes a rewrite you can accept or dismiss. You can also use Ask for Changes to say what you want in your own words.",
       ],
       [
         "How do I tailor my resume to a job?",
-        "Open Tailor Resume from the dashboard menu and paste the job description. The AI rewrites and reorders your bullets to match it. Results aren't saved automatically — click Save to Tailored Resumes to keep one, then edit and export it from your Tailored Resumes board.",
+        "Open Tailor Resume from the dashboard menu and paste the job description. Resland reorders and rewrites your bullets to fit it. Results aren't saved on their own, so click Save to Tailored Resumes to keep one. You can edit and export it later from your Tailored Resumes board.",
       ],
       [
         "Can I copy a bullet point?",
-        "Yes — the copy icon next to each bullet on the dashboard copies its text to your clipboard.",
+        "Yes. The copy icon next to each bullet on the dashboard copies its text to your clipboard.",
       ],
       [
         "Which AI model is used?",
@@ -70,19 +70,19 @@ const SECTIONS: {
     faqs: [
       [
         "How does billing work?",
-        "Resland is pay-as-you-go — no subscription. You buy balance in packs on the Billing page, and AI features (suggestions and tailoring) draw from it. Bigger packs include bonus balance.",
+        "There's no subscription. You buy balance in packs on the Billing page, and suggestions and tailoring draw from it. Bigger packs include bonus balance.",
       ],
       [
         "How much does each action cost?",
-        "You're charged for what each request actually uses: the AI provider's cost for that work, plus a service fee. Longer resumes and job descriptions take more work, and more capable models cost more. Any prices shown next to a model are estimates — your actual charge is based on what was really used.",
+        "You're charged for what each request actually uses: the AI provider's cost for that work, plus a service fee. Longer resumes and job descriptions take more work, and more capable models cost more. Prices shown next to a model are estimates. Your actual charge is based on what was really used.",
       ],
       [
         "What if my balance runs out partway through?",
-        "Anything that's already started is never interrupted — the charge is taken afterward and simply can't take your balance below zero. You just need a balance above zero to start something new.",
+        "Nothing gets cut off. The charge is taken after the work finishes, and your balance stops at zero instead of going negative. You just need a balance above zero to start something new.",
       ],
       [
         "How do purchases work?",
-        "Checkout is handled securely by Stripe — Resland never sees your card details. Your balance usually tops up a few seconds after checkout, and every purchase appears in your purchase history.",
+        "Checkout runs through Stripe, so Resland never sees your card details. Your balance usually updates a few seconds after you pay, and every purchase shows up in your purchase history.",
       ],
     ],
   },
@@ -95,7 +95,7 @@ const SECTIONS: {
       ],
       [
         "Who can see my resume?",
-        "Your profile is private to your account and isn't shared with other users.",
+        "Your profile is private to your account. When you run a suggestion or tailor a resume, the text involved is sent to the AI model you picked so it can do the work.",
       ],
       [
         "What format are exports?",
@@ -138,7 +138,7 @@ export default function HelpPage() {
           Help &amp; FAQ
         </h1>
         <p className="mt-2 text-sm text-zinc-400">
-          Answers to common questions about profiles, AI features, and billing.
+          Answers about your profile, suggestions, tailoring and billing.
         </p>
         <div className="mt-10 flex flex-col gap-10">
           {SECTIONS.map((section) => (

@@ -339,8 +339,8 @@ export default function SuggestionDialog({
             {bulletId ? "Improve This Bullet" : "Improve This Experience"}
           </DialogTitle>
           <DialogDescription className="text-zinc-400">
-            {contextLabel ? `${contextLabel} — ` : ""}
-            The AI may ask you a question or two before suggesting a rewrite.
+            {contextLabel ? `${contextLabel}. ` : ""}             Resland may
+            ask you a question or two before it suggests a rewrite.
           </DialogDescription>
         </DialogHeader>
 
@@ -433,7 +433,7 @@ export default function SuggestionDialog({
                         void submitOwnPrompt();
                       }
                     }}
-                    placeholder="Tell the AI what to change…"
+                    placeholder="Tell Resland what to change…"
                     className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
                   />
                   <Button
@@ -459,7 +459,7 @@ export default function SuggestionDialog({
                   disabled={busy}
                   className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                 >
-                  Enter Own Prompt
+                  Ask for Changes
                 </Button>
                 <Button
                   onClick={accept}
@@ -474,7 +474,7 @@ export default function SuggestionDialog({
           {timedOut && (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-amber-400">
-                This is taking too long — we couldn&apos;t finish the request.
+                This took too long, so we stopped waiting. Start over to try again.
               </p>
               <Button
                 variant="outline"
@@ -511,7 +511,7 @@ export default function SuggestionDialog({
           {gone && (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-amber-400">
-                This session no longer exists — start a new one.
+                This session has expired. Start a new one.
               </p>
               <Button
                 variant="outline"

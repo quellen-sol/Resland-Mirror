@@ -58,9 +58,9 @@ export default function ExportResumeButton({
               Export Your Resume
             </DialogTitle>
             <DialogDescription className="text-zinc-400">
-              We do our best to match your original formatting, but the
-              generated document may differ. Please double-check it before
-              sending it to employers.
+              We try to match your original formatting, but the document may not
+              come out exactly the same. Give it a quick look before you send
+              it.
             </DialogDescription>
             <p className="text-sm text-zinc-500">
               This exports your <span className="text-zinc-300">base</span>{" "}

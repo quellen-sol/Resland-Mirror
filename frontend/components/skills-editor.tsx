@@ -245,7 +245,7 @@ export default function SkillsEditor({
                   onClick={() => removeGroup(gi)}
                   className="text-zinc-500 hover:text-red-400"
                   aria-label={`Remove Category ${group.category}`}
-                  title="Remove category — its skills move to Ungrouped"
+                  title="Remove category (its skills move to Ungrouped)"
                 >
                   <Trash2 className="size-4" />
                 </button>
@@ -305,7 +305,7 @@ export default function SkillsEditor({
               onBlur={() => addSkill(gi)}
               placeholder={
                 group.skills.length === 0
-                  ? "Add a skill — press Enter"
+                  ? "Add a skill and press Enter"
                   : "+ skill"
               }
               className={cn(inputCls, "h-7 w-36 text-sm")}

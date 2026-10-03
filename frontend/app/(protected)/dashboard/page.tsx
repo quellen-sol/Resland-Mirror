@@ -88,15 +88,13 @@ export default async function DashboardPage() {
               </h1>
               <HelpTip title="Your Dashboard">
                 <p>
-                  This is your base resume information — the version everything
-                  else builds on. Keep it current, then tailor it to job
-                  postings, improve it with AI suggestions, and re-export it
-                  anytime.
+                  This is your base resume, the version everything else starts
+                  from. Tailoring, suggestions and exports all use it, so keep
+                  it current.
                 </p>
                 <p>
-                  The sparkle icons ask AI for suggestions on a bullet or a
-                  whole job, and the copy icon copies a bullet to your
-                  clipboard.
+                  The sparkle asks for a suggestion on a bullet or a whole job.
+                  The copy icon copies a bullet to your clipboard.
                 </p>
               </HelpTip>
             </div>
@@ -175,7 +173,7 @@ export default async function DashboardPage() {
                 {user.summary}
               </p>
             ) : (
-              <Empty text="No professional summary yet — upload a resume that includes one." />
+              <Empty text="No summary yet. Upload a resume that has one and it'll show up here." />
             )}
           </CardContent>
         </Card>
@@ -237,7 +235,7 @@ export default async function DashboardPage() {
                     <span className="text-zinc-400"> · {exp.company_name}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2 text-xs text-zinc-500">
-                    {fmtDate(exp.start_date)} — {fmtDate(exp.end_date)}
+                    {fmtDate(exp.start_date)} – {fmtDate(exp.end_date)}
                     <SuggestionDialog
                       accessToken={accessToken}
                       experienceId={exp.id}
@@ -297,7 +295,7 @@ export default async function DashboardPage() {
                     <span className="text-zinc-400"> · {edu.institution}</span>
                   </span>
                   <span className="shrink-0 text-xs text-zinc-500">
-                    {fmtDate(edu.start_date)} — {fmtDate(edu.end_date)}
+                    {fmtDate(edu.start_date)} – {fmtDate(edu.end_date)}
                   </span>
                 </div>
                 <p className="text-sm text-zinc-400">{edu.field_of_study}</p>
@@ -338,7 +336,7 @@ export default async function DashboardPage() {
                     )}
                   </span>
                   <span className="shrink-0 text-xs text-zinc-500">
-                    {fmtDate(proj.start_date)} — {fmtDate(proj.end_date)}
+                    {fmtDate(proj.start_date)} – {fmtDate(proj.end_date)}
                   </span>
                 </div>
                 {proj.description && (

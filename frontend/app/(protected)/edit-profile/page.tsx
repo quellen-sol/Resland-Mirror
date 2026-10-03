@@ -79,9 +79,8 @@ export default async function EditProfilePage() {
           </h1>
           <HelpTip title="Edit Profile">
             <p>
-              Everything here is your base resume — it&apos;s what AI
-              suggestions, tailoring, and exports all read from. Save to keep
-              it current.
+              This is your base resume. Suggestions, tailoring and exports all
+              read from it, so save your changes to keep it current.
             </p>
           </HelpTip>
         </div>

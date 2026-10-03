@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     template: "%s · Resland",
   },
   description:
-    "Upload your resume, get AI bullet-point suggestions, and tailor it to any job description in minutes.",
+    "Resland rewrites your resume for each job you apply to, and asks you for the details instead of making them up.",
   keywords: [
     "resume tailoring",
     "AI resume builder",
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
     siteName: "Resland",
     title: "Resland — AI Resume Tailoring",
     description:
-      "Upload your resume, get AI bullet-point suggestions, and tailor it to any job description in minutes.",
+      "Resland rewrites your resume for each job you apply to, and asks you for the details instead of making them up.",
     images: [
       {
         url: "/resland-logo.png",
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Resland — AI Resume Tailoring",
     description:
-      "Upload your resume, get AI bullet-point suggestions, and tailor it to any job description in minutes.",
+      "Resland rewrites your resume for each job you apply to, and asks you for the details instead of making them up.",
     images: ["/resland-logo.png"],
   },
   icons: {

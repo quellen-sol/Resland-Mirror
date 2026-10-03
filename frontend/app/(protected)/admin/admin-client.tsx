@@ -721,7 +721,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
             </tbody>
           </table>
           <p className="mt-2 text-xs text-zinc-500">
-            Rates are the advertised fallback price — actual charges use
+            Rates are the advertised fallback price. Actual charges use
             OpenRouter&apos;s reported cost ×1.25. Disabled models are rejected
             at job creation.
           </p>

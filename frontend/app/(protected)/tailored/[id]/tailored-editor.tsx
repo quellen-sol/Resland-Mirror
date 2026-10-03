@@ -213,8 +213,8 @@ export default function TailoredEditor({
       {!contentReadable && (
         <Card className="bg-amber-500/5 ring-amber-500/30">
           <CardContent className="pt-6 text-sm text-amber-200">
-            This saved resume&apos;s content is unreadable — you can still edit
-            the fields below and save to replace it.
+            We couldn&apos;t read this saved version. You can still fill in the
+            fields below and save to replace it.
           </CardContent>
         </Card>
       )}
@@ -278,7 +278,7 @@ export default function TailoredEditor({
                 summary: e.target.value || null,
               }))
             }
-            placeholder="No summary — the exported resume won't include one."
+            placeholder="No summary. The exported resume won't have one."
             className={`min-h-24 ${inputClass}`}
           />
         </CardContent>
@@ -300,7 +300,7 @@ export default function TailoredEditor({
                   )}
                 </span>
                 <span className="shrink-0 text-xs text-zinc-500">
-                  {fmtDate(exp.start_date)} — {fmtDate(exp.end_date)}
+                  {fmtDate(exp.start_date)} – {fmtDate(exp.end_date)}
                 </span>
               </div>
               {exp.bullets.map((bullet, bi) => (
