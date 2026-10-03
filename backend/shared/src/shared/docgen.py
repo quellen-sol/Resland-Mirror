@@ -755,6 +755,10 @@ def _dates_inline(text: str, start_date: str) -> bool:
 
 def _skills_category_split(text: str, category: str, first_skill: str):
     """"Languages: Python, …" → (": ", bold-label flag handled by caller)."""
+    if not category:
+        # An uncategorized list has no label to split off ("• Agile …"
+        # would otherwise yield "• " as the separator).
+        return None
     idx = text.find(category)
     if idx < 0:
         return None

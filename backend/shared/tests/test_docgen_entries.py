@@ -27,6 +27,7 @@ from shared.docgen import (
     ResumeHeader,
     ResumeProject,
     _dates,
+    _skills_category_split,
     _title_separator,
     capture_format_profile,
     capture_format_profile_pdf,
@@ -281,6 +282,9 @@ class TitleSeparator(unittest.TestCase):
     def test_strict_needs_both_parts(self):
         self.assertIsNone(_title_separator("Widgetizer | Go", "Widgetizer", "2026", strict=True))
         self.assertEqual(_title_separator("Widgetizer | Go", "Widgetizer", "2026"), (" | ", False))
+
+    def test_empty_skills_category_has_no_separator(self):
+        self.assertIsNone(_skills_category_split("• Agile & Scrum", "", "Agile & Scrum"))
 
 
 class SectionScopedOrder(unittest.TestCase):
