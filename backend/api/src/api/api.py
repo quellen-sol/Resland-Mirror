@@ -16,10 +16,12 @@ from .auth import (
 )
 from .billing.router import router as billing_router
 from .bullet_point_sugg.router import router as bullet_sugg_router
-from .env_vars import AMQP_URL, MAINTENANCE_MODE
+from . import site_settings
+from .env_vars import AMQP_URL
 from .resume_export.router import router as resume_export_router
 from .resume_upload.router import router as resume_upload_router
 from .tailor.router import router as tailor_router
+from .tailored.router import router as tailored_router
 
 
 @asynccontextmanager
@@ -38,7 +40,7 @@ app = FastAPI(lifespan=lifespan)
 @app.middleware("http")
 async def maintenance_mode(request: Request, call_next):
     if (
-        MAINTENANCE_MODE
+        await site_settings.is_maintenance_mode()
         and not is_docs_request(request)
         and not is_stripe_webhook_request(request)
         and not await is_site_admin_request(request)
@@ -75,5 +77,6 @@ app.include_router(resume_upload_router)
 app.include_router(resume_export_router)
 app.include_router(bullet_sugg_router)
 app.include_router(tailor_router)
+app.include_router(tailored_router)
 app.include_router(billing_router)
 app.include_router(admin_router)

@@ -74,6 +74,34 @@ async def update_sugg_session(
         )
 
 
+async def delete_inactive_sugg_sessions(
+    conn: PgConnection, user_id: str, experience_id: int, bullet_id: int | None
+) -> None:
+    """Drop non-active sessions for the same target before a fresh insert.
+
+    user_suggestion is unique on (user_id, experience_id, bullet_id), so a
+    leftover FAILED row would make a retrying start hit a unique violation.
+    Checkpoint rows go too — they are keyed on the doomed session ids."""
+    async with conn.cursor() as cursor:
+        res = await cursor.execute(
+            """
+            DELETE FROM user_suggestion
+            WHERE user_id = %s AND experience_id = %s
+              AND bullet_id IS NOT DISTINCT FROM %s
+              AND status NOT IN ('PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED')
+            RETURNING id
+            """,
+            (user_id, experience_id, bullet_id),
+        )
+        ids = [row[0] for row in await res.fetchall()]
+        for session_id in ids:
+            for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+                await cursor.execute(
+                    f"DELETE FROM {table} WHERE thread_id = %s",
+                    (session_id,),
+                )
+
+
 async def delete_sugg_session(
     conn: PgConnection, session_id: str, user_id: str
 ) -> None:

@@ -254,11 +254,12 @@ class SuggestionsRunnerTask(unittest.TestCase):
             patch.object(suggestions, "build_and_invoke_agent", agent),
             patch.object(suggestions, "set_suggestion_question") as set_q,
             patch.object(suggestions, "set_suggestion_result") as set_r,
+            patch.object(suggestions, "set_suggestion_failed") as set_f,
             patch.object(suggestions, "record_token_usage") as record,
         ):
             handle = suggestions.SuggestionsRunner(job_data).run()
             status = _poll_until(handle, "COMPLETED")
-        return status, agent, set_q, set_r, record
+        return status, agent, set_q, set_r, record, set_f
 
     def test_empty_job_data_fails(self):
         status, *_ = self._run({})
@@ -282,7 +283,7 @@ class SuggestionsRunnerTask(unittest.TestCase):
 
     def test_waiting_outcome_sets_question(self):
         outcome = sugg_agents.SuggestionRunOutcome(status="waiting", question="Team size?")
-        status, _, set_q, set_r, _ = self._run(
+        status, _, set_q, set_r, _, _ = self._run(
             {"session_id": "s1"}, rows=[_sugg_row()], outcome=outcome
         )
         self.assertEqual(status, "COMPLETED")
@@ -295,7 +296,7 @@ class SuggestionsRunnerTask(unittest.TestCase):
             suggestions=[sugg_agents.BulletSuggestion(bullet_id=7, suggestion="x")]
         )
         outcome = sugg_agents.SuggestionRunOutcome(status="completed", result=result)
-        status, _, _, set_r, _ = self._run(
+        status, _, _, set_r, _, _ = self._run(
             {"session_id": "s1"}, rows=[_sugg_row()], outcome=outcome
         )
         self.assertEqual(status, "COMPLETED")
@@ -306,25 +307,45 @@ class SuggestionsRunnerTask(unittest.TestCase):
         status, *_ = self._run({"session_id": "s1"}, rows=[_sugg_row()], outcome=outcome)
         self.assertEqual(status, "FAILED")
 
-    def test_agent_crash_sets_resume_question_and_completes(self):
-        status, _, set_q, _, _ = self._run(
+    def test_agent_crash_marks_session_failed_for_retry(self):
+        status, _, set_q, set_r, _, set_f = self._run(
             {"session_id": "s1"},
             rows=[_sugg_row()],
             agent_exc=RuntimeError("provider down"),
         )
         self.assertEqual(status, "COMPLETED")
-        set_q.assert_called_once()
-        self.assertEqual(set_q.call_args.args[2], suggestions.RESUME_AFTER_ERROR_MESSAGE)
+        set_f.assert_called_once()
+        self.assertEqual(set_f.call_args.args[1], "s1")
+        set_q.assert_not_called()
+        set_r.assert_not_called()
+
+    def test_prompt_is_forwarded_to_agent(self):
+        outcome = sugg_agents.SuggestionRunOutcome(status="waiting", question="Q")
+        status, agent, *_ = self._run(
+            {"session_id": "s1", "prompt": "emphasize metrics"},
+            rows=[_sugg_row()],
+            outcome=outcome,
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.assertEqual(agent.call_args.args[5], "emphasize metrics")
+
+    def test_missing_prompt_passes_none_to_agent(self):
+        outcome = sugg_agents.SuggestionRunOutcome(status="waiting", question="Q")
+        status, agent, *_ = self._run(
+            {"session_id": "s1"}, rows=[_sugg_row()], outcome=outcome
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.assertIsNone(agent.call_args.args[5])
 
     def test_usage_is_recorded_with_suggestion_kind(self):
-        def fake_agent(session_id, answer, rows, model_spec, usage):
+        def fake_agent(session_id, answer, rows, model_spec, usage, prompt):
             usage["input_tokens"] = 100
             usage["output_tokens"] = 20
             usage["cost_usd"] = 0.01
             usage["generation_ids"] = ["g1"]
             return sugg_agents.SuggestionRunOutcome(status="waiting", question="Q")
 
-        status, _, _, _, record = self._run(
+        status, _, _, _, record, _ = self._run(
             {"session_id": "s1"}, rows=[_sugg_row()], agent_fn=fake_agent
         )
         self.assertEqual(status, "COMPLETED")
@@ -337,7 +358,7 @@ class SuggestionsRunnerTask(unittest.TestCase):
 
     def test_no_usage_no_record(self):
         outcome = sugg_agents.SuggestionRunOutcome(status="waiting", question="Q")
-        status, _, _, _, record = self._run(
+        status, _, _, _, record, _ = self._run(
             {"session_id": "s1"}, rows=[_sugg_row()], outcome=outcome
         )
         self.assertEqual(status, "COMPLETED")
@@ -345,7 +366,7 @@ class SuggestionsRunnerTask(unittest.TestCase):
 
 
 class TailorRunnerTask(unittest.TestCase):
-    def _run(self, job_data, run=None, profile=None, outcome=None, agent_exc=None, agent_fn=None):
+    def _run(self, job_data, run=None, profile=None, outcome=None, agent_exc=None, agent_fn=None, complete_ret=True):
         conn = MagicMock()
         agent = MagicMock()
         if agent_exc is not None:
@@ -362,11 +383,12 @@ class TailorRunnerTask(unittest.TestCase):
             patch.object(tailor, "build_and_invoke_agent", agent),
             patch.object(tailor, "set_tailor_question") as set_q,
             patch.object(tailor, "set_tailor_result") as set_r,
+            patch.object(tailor, "complete_tailor_run", return_value=complete_ret) as complete,
             patch.object(tailor, "record_token_usage") as record,
         ):
             handle = tailor.TailorRunner(job_data).run()
             status = _poll_until(handle, "COMPLETED")
-        return status, set_q, set_r, record
+        return status, set_q, set_r, complete, record
 
     def test_missing_run_id_fails(self):
         status, *_ = self._run({})
@@ -394,7 +416,7 @@ class TailorRunnerTask(unittest.TestCase):
 
     def test_waiting_outcome_sets_question(self):
         outcome = tailor_agents.TailorRunOutcome(status="waiting", question="Summary?")
-        status, set_q, set_r, _ = self._run(
+        status, set_q, set_r, _, _ = self._run(
             {"run_id": "r1"}, run=_tailor_run(), profile=_tailor_profile(), outcome=outcome
         )
         self.assertEqual(status, "COMPLETED")
@@ -413,14 +435,62 @@ class TailorRunnerTask(unittest.TestCase):
             skills=[],
         )
         outcome = tailor_agents.TailorRunOutcome(status="completed", result=result)
-        status, _, set_r, _ = self._run(
+        status, _, set_r, complete, _ = self._run(
             {"run_id": "r1"}, run=_tailor_run(), profile=_tailor_profile(), outcome=outcome
         )
         self.assertEqual(status, "COMPLETED")
         set_r.assert_called_once()
+        complete.assert_not_called()
+
+    def test_waiting_with_result_stores_both(self):
+        # Post-submit review interrupt — the resume is stored while the run
+        # waits for feedback.
+        result = tailor_agents.TailoredResume(
+            summary=None,
+            experiences=[
+                tailor_agents.TailoredExperience(
+                    experience_id=1,
+                    bullets=[tailor_agents.TailoredBullet(bullet_id=10, text="x")],
+                )
+            ],
+            skills=[],
+        )
+        outcome = tailor_agents.TailorRunOutcome(
+            status="waiting", question="Review it", result=result
+        )
+        status, set_q, set_r, _, _ = self._run(
+            {"run_id": "r1"}, run=_tailor_run(), profile=_tailor_profile(), outcome=outcome
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.assertEqual(set_q.call_args.args[2:], ("Review it", result))
+        set_r.assert_not_called()
+
+    def test_completed_without_result_marks_existing_done(self):
+        # The user accepted the resume — the agent ended without resubmitting.
+        outcome = tailor_agents.TailorRunOutcome(status="completed")
+        status, _, set_r, complete, _ = self._run(
+            {"run_id": "r1"}, run=_tailor_run(), profile=_tailor_profile(), outcome=outcome
+        )
+        self.assertEqual(status, "COMPLETED")
+        complete.assert_called_once()
+        set_r.assert_not_called()
+
+    def test_completed_without_any_result_fails(self):
+        # Agent ended having never submitted — nothing to complete, so the
+        # run errors out.
+        outcome = tailor_agents.TailorRunOutcome(status="completed")
+        status, _, _, complete, _ = self._run(
+            {"run_id": "r1"},
+            run=_tailor_run(),
+            profile=_tailor_profile(),
+            outcome=outcome,
+            complete_ret=False,
+        )
+        self.assertEqual(status, "FAILED")
+        complete.assert_called_once()
 
     def test_agent_crash_sets_resume_question(self):
-        status, set_q, _, _ = self._run(
+        status, set_q, _, _, _ = self._run(
             {"run_id": "r1"},
             run=_tailor_run(),
             profile=_tailor_profile(),
@@ -438,7 +508,7 @@ class TailorRunnerTask(unittest.TestCase):
             usage["all_costed"] = True
             return tailor_agents.TailorRunOutcome(status="waiting", question="Q")
 
-        status, _, _, record = self._run(
+        status, _, _, _, record = self._run(
             {"run_id": "r1"},
             run=_tailor_run(),
             profile=_tailor_profile(),
@@ -452,7 +522,7 @@ class TailorRunnerTask(unittest.TestCase):
         self.assertEqual(kw["generation_ids"], ["gen-1"])
 
     def test_zero_usage_skips_billing_record(self):
-        status, _, _, record = self._run(
+        status, _, _, _, record = self._run(
             {"run_id": "r1"},
             run=_tailor_run(),
             profile=_tailor_profile(),

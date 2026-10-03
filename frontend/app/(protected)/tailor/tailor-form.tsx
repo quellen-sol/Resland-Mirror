@@ -3,7 +3,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Send, Sparkles } from "lucide-react";
+import {
+  ArrowLeft,
+  Bookmark,
+  Briefcase,
+  Check,
+  Loader2,
+  Send,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +44,9 @@ type TailorStatus =
 interface TailorRun {
   run_id: string;
   status: TailorStatus;
+  job_description?: string;
+  company_name?: string | null;
+  role?: string | null;
   pending_question?: string | null;
   result?: string | null;
 }
@@ -79,14 +90,19 @@ export default function TailorForm({
   hasProfile: boolean;
 }) {
   const router = useRouter();
+  const [company, setCompany] = useState("");
+  const [role, setRole] = useState("");
   const [jd, setJd] = useState("");
   const [model, setModel] = useState("");
   const [run, setRun] = useState<TailorRun | null>(null);
+  const [checked, setChecked] = useState(false);
   const [answer, setAnswer] = useState("");
   const [busy, setBusy] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const finishedRef = useRef(false);
   const startedAtRef = useRef<number>(0);
   const consecutiveFailuresRef = useRef(0);
+  const resumeNotifiedRef = useRef(false);
 
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 
@@ -106,18 +122,62 @@ export default function TailorForm({
     return apiRequest(accessToken, `/tailor${path}`, init);
   }
 
+  function notifyResumed() {
+    if (resumeNotifiedRef.current) return;
+    resumeNotifiedRef.current = true;
+    // An unfinished run resumes — its credits weren't lost; the user still
+    // has to finish or cancel it.
+    toast.info("Resumed your in-progress tailoring", {
+      description:
+        "An unfinished session is still open — continue it here, or Cancel to discard it.",
+    });
+  }
+
+  // An outstanding (non-COMPLETED) run is unresolved work — reattach to it
+  // on mount instead of offering a fresh form.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = (await apiFetch("/active")) as TailorRun;
+        if (cancelled) return;
+        startedAtRef.current = Date.now();
+        consecutiveFailuresRef.current = 0;
+        setRun(status);
+        notifyResumed();
+      } catch {
+        // 404 = nothing outstanding; anything else also falls through to
+        // the entry form (a failed start will toast its own error).
+      } finally {
+        if (!cancelled) setChecked(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function start() {
     const text = jd.trim();
-    if (!text || run || !apiBaseUrl) return;
+    const companyName = company.trim();
+    const roleName = role.trim();
+    if (!text || !companyName || !roleName || run || !apiBaseUrl) return;
     setBusy(true);
     finishedRef.current = false;
     consecutiveFailuresRef.current = 0;
     try {
       startedAtRef.current = Date.now();
-      const { run_id } = (await apiFetch("", {
+      const { run_id, resumed } = (await apiFetch("", {
         method: "POST",
-        body: JSON.stringify({ job_description: text, model: model || null }),
-      })) as { run_id: string };
+        body: JSON.stringify({
+          job_description: text,
+          company_name: companyName,
+          role: roleName,
+          model: model || null,
+        }),
+      })) as { run_id: string; resumed?: boolean };
+      if (resumed) notifyResumed();
       try {
         const status = (await apiFetch(`/${run_id}`)) as Omit<
           TailorRun,
@@ -227,7 +287,31 @@ export default function TailorForm({
     }
     setRun(null);
     setJd("");
+    setCompany("");
+    setRole("");
     setAnswer("");
+    setSavedId(null);
+  }
+
+  async function save() {
+    if (!run || savedId) return;
+    setBusy(true);
+    try {
+      const { tailored_id } = (await apiFetch(`/${run.run_id}/save`, {
+        method: "POST",
+      })) as { tailored_id: string };
+      setSavedId(tailored_id);
+      toast.success("Saved to Tailored resumes", {
+        action: {
+          label: "Open",
+          onClick: () => router.push(`/tailored/${tailored_id}`),
+        },
+      });
+    } catch (error) {
+      toast.error("Couldn't save", { description: describeApiError(error) });
+    } finally {
+      setBusy(false);
+    }
   }
 
   let tailored: TailoredResume | null = null;
@@ -267,7 +351,7 @@ export default function TailorForm({
         </Link>
       </header>
 
-      {!hasProfile && !run && (
+      {checked && !hasProfile && !run && (
         <Card className="border-amber-500/30 bg-amber-500/5 text-zinc-100">
           <CardContent className="pt-6 text-sm text-amber-200">
             You have no work experience yet —{" "}
@@ -283,7 +367,7 @@ export default function TailorForm({
       )}
 
       {/* Job description input */}
-      {!run && hasProfile && (
+      {checked && !run && hasProfile && (
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
@@ -291,6 +375,22 @@ export default function TailorForm({
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="Company name"
+                aria-label="Company name"
+                className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+              />
+              <Input
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                placeholder="Role (e.g. Senior Backend Engineer)"
+                aria-label="Role"
+                className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+              />
+            </div>
             <Textarea
               value={jd}
               onChange={(e) => setJd(e.target.value.slice(0, MAX_JD_CHARS))}
@@ -317,7 +417,9 @@ export default function TailorForm({
                 />
                 <Button
                   onClick={start}
-                  disabled={busy || !jd.trim()}
+                  disabled={
+                    busy || !jd.trim() || !company.trim() || !role.trim()
+                  }
                   className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                 >
                   {busy ? (
@@ -334,43 +436,228 @@ export default function TailorForm({
         </Card>
       )}
 
-      {/* In-flight states */}
-      {running && (
-        <div className="flex items-center gap-2 text-sm text-zinc-400">
-          <Loader2 className="size-4 animate-spin text-purple-400" />
-          Tailoring your resume…
-        </div>
-      )}
+      {/* Active run — job posting next to the live status/result */}
+      {run && (running || waiting || done) && (
+        <div className="grid gap-6 lg:grid-cols-5">
+          <Card className="h-fit border-zinc-800 bg-zinc-900/80 text-zinc-100 lg:sticky lg:top-6 lg:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Briefcase className="size-4 text-purple-400" /> Job posting
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 text-sm">
+              <dl className="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-1.5">
+                <dt className="text-zinc-500">Role</dt>
+                <dd className="text-zinc-100">{run.role || "—"}</dd>
+                <dt className="text-zinc-500">Company</dt>
+                <dd className="text-zinc-100">{run.company_name || "—"}</dd>
+              </dl>
+              <p className="max-h-96 overflow-y-auto rounded-md border border-zinc-800 bg-zinc-950/50 p-3 whitespace-pre-wrap text-zinc-300">
+                {run.job_description}
+              </p>
+            </CardContent>
+          </Card>
 
-      {waiting && (
-        <Card className="border-purple-500/30 bg-zinc-900/80 text-zinc-100">
-          <CardContent className="flex flex-col gap-3 pt-6">
-            <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-sm text-purple-200">
-              {run.pending_question}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void sendAnswer();
-                  }
-                }}
-                placeholder="Your answer…"
-                className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
-              />
-              <Button
-                onClick={sendAnswer}
-                disabled={busy || !answer.trim()}
-                className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
-              >
-                <Send />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="flex flex-col gap-6 lg:col-span-3">
+            {running && (
+              <div className="flex items-center gap-2 text-sm text-zinc-400">
+                <Loader2 className="size-4 animate-spin text-purple-400" />
+                {tailored
+                  ? "Refining your resume…"
+                  : "Tailoring your resume…"}
+              </div>
+            )}
+
+            {waiting && !tailored && (
+              <Card className="border-purple-500/30 bg-zinc-900/80 text-zinc-100">
+                <CardContent className="flex flex-col gap-3 pt-6">
+                  <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-sm text-purple-200">
+                    {run.pending_question}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void sendAnswer();
+                        }
+                      }}
+                      placeholder="Your answer…"
+                      className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                    />
+                    <Button
+                      onClick={sendAnswer}
+                      disabled={busy || !answer.trim()}
+                      className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
+                    >
+                      <Send />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={reset}
+                      className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {tailored && (
+              <>
+                {tailored.summary && (
+                  <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Summary</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm whitespace-pre-wrap text-zinc-300">
+                        {tailored.summary}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Experience</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-4">
+                    {tailored.experiences.map((exp) => {
+                      const meta = expById.get(exp.experience_id);
+                      return (
+                        <div
+                          key={exp.experience_id}
+                          className="flex flex-col gap-1.5"
+                        >
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="font-medium text-zinc-100">
+                              {meta?.title ?? `Experience #${exp.experience_id}`}
+                              {meta && (
+                                <span className="text-zinc-400">
+                                  {" "}
+                                  · {meta.company_name}
+                                </span>
+                              )}
+                            </span>
+                            {meta && (
+                              <span className="shrink-0 text-xs text-zinc-500">
+                                {fmtDate(meta.start_date)} —{" "}
+                                {fmtDate(meta.end_date)}
+                              </span>
+                            )}
+                          </div>
+                          <ul className="list-inside list-disc text-sm text-zinc-300">
+                            {exp.bullets.map((b) => (
+                              <li key={b.bullet_id}>{b.text}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })}
+                  </CardContent>
+                </Card>
+
+                {tailored.skills.length > 0 && (
+                  <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Skills</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-3">
+                      {groupSkills(
+                        tailored.skills.map((name) => ({
+                          name,
+                          category: skillCategory.get(name) ?? null,
+                        })),
+                      ).map((group, gi) => (
+                        <div key={group.category ?? `ungrouped-${gi}`}>
+                          {group.category !== null && (
+                            <p className="mb-1.5 text-xs font-medium tracking-wide text-zinc-500 uppercase">
+                              {group.category}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {group.skills.map((skill) => (
+                              <span
+                                key={skill}
+                                className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
+                              >
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
+
+            {waiting && tailored && (
+              <Card className="border-purple-500/30 bg-zinc-900/80 text-zinc-100">
+                <CardContent className="flex flex-col gap-3 pt-6">
+                  <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-sm text-purple-200">
+                    {run.pending_question}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void sendAnswer();
+                        }
+                      }}
+                      placeholder="Describe a tweak, or reply 'done'…"
+                      className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                    />
+                    <Button
+                      onClick={sendAnswer}
+                      disabled={busy || !answer.trim()}
+                      className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
+                    >
+                      <Send />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {tailored && (waiting || done) && (
+              <div className="flex justify-end gap-2">
+                {savedId ? (
+                  <Link
+                    href={`/tailored/${savedId}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/10 px-2.5 py-1.5 text-sm font-medium text-purple-200 hover:bg-purple-500/20 [&_svg]:size-4"
+                  >
+                    <Check /> Saved — open it
+                  </Link>
+                ) : (
+                  <Button
+                    onClick={save}
+                    disabled={busy}
+                    className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
+                  >
+                    {busy ? <Loader2 className="animate-spin" /> : <Bookmark />}{" "}
+                    Save to Tailored resumes
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={reset}
+                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       {failed && (
@@ -436,107 +723,6 @@ export default function TailorForm({
             setRun((r) => (r ? { ...r, status: "PROCESSING" } : r));
           }}
         />
-      )}
-
-      {/* Tailored result */}
-      {done && tailored && (
-        <div className="flex flex-col gap-6">
-          {tailored.summary && (
-            <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-              <CardHeader>
-                <CardTitle className="text-lg">Summary</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm whitespace-pre-wrap text-zinc-300">
-                  {tailored.summary}
-                </p>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-            <CardHeader>
-              <CardTitle className="text-lg">Experience</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              {tailored.experiences.map((exp) => {
-                const meta = expById.get(exp.experience_id);
-                return (
-                  <div
-                    key={exp.experience_id}
-                    className="flex flex-col gap-1.5"
-                  >
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="font-medium text-zinc-100">
-                        {meta?.title ?? `Experience #${exp.experience_id}`}
-                        {meta && (
-                          <span className="text-zinc-400">
-                            {" "}
-                            · {meta.company_name}
-                          </span>
-                        )}
-                      </span>
-                      {meta && (
-                        <span className="shrink-0 text-xs text-zinc-500">
-                          {fmtDate(meta.start_date)} — {fmtDate(meta.end_date)}
-                        </span>
-                      )}
-                    </div>
-                    <ul className="list-inside list-disc text-sm text-zinc-300">
-                      {exp.bullets.map((b) => (
-                        <li key={b.bullet_id}>{b.text}</li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-
-          {tailored.skills.length > 0 && (
-            <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-              <CardHeader>
-                <CardTitle className="text-lg">Skills</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {groupSkills(
-                  tailored.skills.map((name) => ({
-                    name,
-                    category: skillCategory.get(name) ?? null,
-                  })),
-                ).map((group, gi) => (
-                  <div key={group.category ?? `ungrouped-${gi}`}>
-                    {group.category !== null && (
-                      <p className="mb-1.5 text-xs font-medium tracking-wide text-zinc-500 uppercase">
-                        {group.category}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {group.skills.map((skill) => (
-                        <span
-                          key={skill}
-                          className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              onClick={reset}
-              className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-            >
-              Tailor another job
-            </Button>
-          </div>
-        </div>
       )}
 
       {done && !tailored && (

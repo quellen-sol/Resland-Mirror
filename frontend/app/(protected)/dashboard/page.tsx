@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import Link from "next/link";
 import {
   Briefcase,
   ClipboardCheck,
@@ -8,21 +7,16 @@ import {
   FolderGit2,
   GraduationCap,
   Link2,
-  PenLine,
-  Sparkles,
 } from "lucide-react";
 import { auth0 } from "@/lib/auth0";
 import { getAccessTokenOrLogin } from "@/lib/auth";
 import { getUser, getUserProfileData } from "@/lib/db";
 import { groupSkills } from "@/lib/skills";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "cn";
 import JobStatusPoller from "@/components/job-status-poller";
 import SuggestionDialog from "@/components/suggestion-dialog";
-import BalanceChip from "@/components/balance-chip";
-import ExportResumeButton from "./export-resume-button";
-import UploadResumeDialog from "./upload-resume-dialog";
+import DashboardMenu from "./dashboard-menu";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -72,61 +66,22 @@ export default async function DashboardPage() {
     <div className="relative flex flex-1 overflow-hidden bg-zinc-950 font-sans">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
 
-      {/* A future <aside> sidemenu can slot in here as a flex sibling */}
       <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
         <JobStatusPoller jobIds={activeJobIds} />
-        <header className="flex items-center justify-between">
-          <div>
+        <header className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
             <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
               Dashboard
             </h1>
-            <p className="mt-1 text-sm text-zinc-400">
+            <p className="mt-1 truncate text-sm text-zinc-400">
               {user.full_name ?? session?.user.name ?? session?.user.email}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            <BalanceChip accessToken={accessToken} />
-            <UploadResumeDialog
-              accessToken={accessToken}
-              disabled={activeJobIds.length > 0}
-            />
-            <Link
-              href="/tailor"
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                "border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800/60 hover:text-zinc-100",
-              )}
-            >
-              <Sparkles /> Tailor resume
-            </Link>
-            <ExportResumeButton accessToken={accessToken} />
-            {user.site_admin && (
-              <Link
-                href="/admin"
-                className={cn(
-                  buttonVariants({ variant: "outline", size: "sm" }),
-                  "border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800/60 hover:text-zinc-100",
-                )}
-              >
-                Admin Dashboard
-              </Link>
-            )}
-            <Link
-              href="/edit-profile"
-              className={cn(
-                buttonVariants({ variant: "outline", size: "sm" }),
-                "border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800/60 hover:text-zinc-100",
-              )}
-            >
-              <PenLine /> Edit profile
-            </Link>
-            <a
-              href="/auth/logout"
-              className="px-1 text-sm text-zinc-500 underline-offset-4 hover:text-zinc-300 hover:underline"
-            >
-              Sign out
-            </a>
-          </div>
+          <DashboardMenu
+            accessToken={accessToken}
+            isAdmin={user.site_admin}
+            uploadDisabled={activeJobIds.length > 0}
+          />
         </header>
 
         {/* Contact */}
@@ -254,6 +209,12 @@ export default async function DashboardPage() {
                     <SuggestionDialog
                       accessToken={accessToken}
                       experienceId={exp.id}
+                      contextLabel={`${exp.title} · ${exp.company_name}`}
+                      targetText={
+                        bulletsFor(exp.id)
+                          .map((b) => b.bullet)
+                          .join("\n") || undefined
+                      }
                     />
                   </span>
                 </div>
@@ -270,6 +231,7 @@ export default async function DashboardPage() {
                           experienceId={exp.id}
                           bulletId={b.id}
                           targetText={b.bullet}
+                          contextLabel={`${exp.title} · ${exp.company_name}`}
                           variant="icon"
                         />
                       </li>

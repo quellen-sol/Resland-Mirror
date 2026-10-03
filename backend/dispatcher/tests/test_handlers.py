@@ -1,17 +1,18 @@
 """Handler tests — parse_event guards, dispatch bookkeeping, the cleanup
-loop's accept/discard, and each handler's id extraction + status writes.
+task's ack/nack, and each handler's id extraction + status writes.
 
-The cleanup thread is a daemon polling ~1/s, so accept/discard assertions
+The cleanup loop is an asyncio task polling ~1/s, so ack/nack assertions
 poll briefly instead of sleeping.
 
 Run: .venv/bin/python -m unittest backend.dispatcher.tests.test_handlers -v
      (from the repo root with the workspace venv)
 """
 
+import asyncio
 import json
 import time
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from dispatcher.handlers.generic import (
     DispatchJobParams,
@@ -24,21 +25,20 @@ from dispatcher.handlers.tailor_handler import TailorHandler
 from dispatcher.runners.generic import JobHandle
 
 
-def _event(body: dict | None) -> MagicMock:
-    event = MagicMock()
-    if body is None:
-        event.message.body = None
-    else:
-        event.message.body = json.dumps(body).encode()
-    return event
+def _message(body: dict | None) -> MagicMock:
+    msg = MagicMock()
+    msg.body = json.dumps(body).encode() if body is not None else b""
+    msg.ack = AsyncMock()
+    msg.nack = AsyncMock()
+    return msg
 
 
-def _wait_for(predicate, timeout=5.0):
+async def _wait_for(predicate, timeout=5.0):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if predicate():
             return True
-        time.sleep(0.05)
+        await asyncio.sleep(0.05)
     return False
 
 
@@ -77,115 +77,160 @@ class ParseEvent(unittest.TestCase):
         self.handler = _Handler()
 
     def test_parses_body_json(self):
-        event = _event({"job_id": "j1", "extra": [1, 2]})
-        data = self.handler.parse_event(event)
+        msg = _message({"job_id": "j1", "extra": [1, 2]})
+        data = self.handler.parse_event(msg)
         self.assertEqual(data["job_id"], "j1")
         self.assertEqual(data["extra"], [1, 2])
 
-    def test_missing_message_raises(self):
-        event = MagicMock()
-        event.message = None
-        with self.assertRaises(HandlerError):
-            self.handler.parse_event(event)
-
     def test_missing_body_raises(self):
         with self.assertRaises(HandlerError):
-            self.handler.parse_event(_event(None))
+            self.handler.parse_event(_message(None))
 
 
-class DispatchJob(unittest.TestCase):
-    def test_registers_handle_under_job_id(self):
+class DispatchJob(unittest.IsolatedAsyncioTestCase):
+    async def test_registers_handle_under_job_id(self):
         handler = _Handler()
         handle = _Handle("PROCESSING")
-        event = _event({})
-        handler.dispatch_job(
+        msg = _message({})
+        await handler.dispatch_job(
             DispatchJobParams(
-                job_id="j1", runner=_Runner(handle), event=event
+                job_id="j1", runner=_Runner(handle), message=msg
             )
         )
         self.assertIs(handler.running_jobs["j1"][0], handle)
-        self.assertIs(handler.running_jobs["j1"][1], event)
+        self.assertIs(handler.running_jobs["j1"][1], msg)
 
-
-class CleanupLoop(unittest.TestCase):
-    def test_completed_job_is_accepted_and_dropped(self):
+    async def test_redelivery_of_in_flight_job_is_acked_not_redispatched(self):
         handler = _Handler()
-        handler.delivery_context = MagicMock()
-        event = _event({})
-        handler.running_jobs["j1"] = (_Handle("COMPLETED"), event)
-        self.assertTrue(
-            _wait_for(lambda: "j1" not in handler.running_jobs)
+        msg = _message({})
+        handler.running_jobs["j1"] = (_Handle("PROCESSING"), msg)
+
+        runner = _Runner(_Handle("PROCESSING"))
+        dup = _message({})
+        await handler.dispatch_job(
+            DispatchJobParams(job_id="j1", runner=runner, message=dup)
         )
-        handler.delivery_context.accept.assert_called_with(event)
+
+        dup.ack.assert_awaited_once()
+        self.assertIs(handler.running_jobs["j1"][1], msg)
+
+    async def test_failed_settle_retries_then_gives_up(self):
+        handler = _Handler()
+        msg = _message({})
+        msg.ack = AsyncMock(side_effect=RuntimeError("channel closed"))
+        handle = _Handle("COMPLETED")
+        handler.running_jobs["j1"] = (handle, msg)
+        handler.last_statuses["j1"] = "COMPLETED"
+
+        # 9 failures keep the job tracked; the 10th drops it — the broker
+        # already requeued the delivery when its channel died.
+        for _ in range(9):
+            with self.assertRaises(RuntimeError):
+                await handler._reap_job("j1", handle, msg)
+            self.assertIn("j1", handler.running_jobs)
+        await handler._reap_job("j1", handle, msg)
+        self.assertNotIn("j1", handler.running_jobs)
+        self.assertEqual(msg.ack.await_count, 10)
+
+    async def test_db_update_failure_retries_write_next_tick(self):
+        handler = _Handler()
+        handler.update_db_status = MagicMock(
+            side_effect=[RuntimeError("db down"), None]
+        )
+        handle = _Handle("PROCESSING")
+        handler.running_jobs["j1"] = (handle, _message({}))
+
+        with self.assertRaises(RuntimeError):
+            await handler._reap_job("j1", handle, handler.running_jobs["j1"][1])
+        self.assertNotIn("j1", handler.last_statuses)
+
+        await handler._reap_job("j1", handle, handler.running_jobs["j1"][1])
+        self.assertEqual(handler.last_statuses["j1"], "PROCESSING")
+        self.assertEqual(handler.update_db_status.call_count, 2)
+
+
+class CleanupLoop(unittest.IsolatedAsyncioTestCase):
+    async def test_completed_job_is_acked_and_dropped(self):
+        handler = _Handler()
+        handler._ensure_cleanup_task()
+        msg = _message({})
+        handler.running_jobs["j1"] = (_Handle("COMPLETED"), msg)
+        self.assertTrue(
+            await _wait_for(lambda: "j1" not in handler.running_jobs)
+        )
+        msg.ack.assert_awaited_once()
         self.assertIn(("j1", "COMPLETED"), handler.status_updates)
 
-    def test_failed_job_is_discarded_and_dropped(self):
+    async def test_failed_job_is_nacked_and_dropped(self):
         handler = _Handler()
-        handler.delivery_context = MagicMock()
-        event = _event({})
-        handler.running_jobs["j2"] = (_Handle("FAILED"), event)
+        handler._ensure_cleanup_task()
+        msg = _message({})
+        handler.running_jobs["j2"] = (_Handle("FAILED"), msg)
         self.assertTrue(
-            _wait_for(lambda: "j2" not in handler.running_jobs)
+            await _wait_for(lambda: "j2" not in handler.running_jobs)
         )
-        handler.delivery_context.discard.assert_called_with(event)
+        msg.nack.assert_awaited_once_with(requeue=False)
 
-    def test_processing_job_is_polled_not_dropped(self):
+    async def test_processing_job_is_polled_not_dropped(self):
         handler = _Handler()
-        handler.delivery_context = MagicMock()
-        event = _event({})
-        handler.running_jobs["j3"] = (_Handle("PROCESSING"), event)
-        time.sleep(1.3)
+        handler._ensure_cleanup_task()
+        msg = _message({})
+        handler.running_jobs["j3"] = (_Handle("PROCESSING"), msg)
+        await asyncio.sleep(1.3)
         self.assertIn("j3", handler.running_jobs)
-        handler.delivery_context.accept.assert_not_called()
-        handler.delivery_context.discard.assert_not_called()
+        msg.ack.assert_not_awaited()
+        msg.nack.assert_not_awaited()
 
-    def test_repeated_status_writes_db_once(self):
+    async def test_repeated_status_writes_db_once(self):
         handler = _Handler()
-        handler.delivery_context = MagicMock()
-        handler.running_jobs["j4"] = (_Handle("PROCESSING"), _event({}))
-        time.sleep(2.2)
+        handler._ensure_cleanup_task()
+        handler.running_jobs["j4"] = (_Handle("PROCESSING"), _message({}))
+        await asyncio.sleep(2.2)
         self.assertIn("j4", handler.running_jobs)
         self.assertEqual(
             handler.status_updates.count(("j4", "PROCESSING")), 1
         )
 
-    def test_status_change_writes_db_again(self):
+    async def test_status_change_writes_db_again(self):
         handler = _Handler()
-        handler.delivery_context = MagicMock()
+        handler._ensure_cleanup_task()
         handle = _Handle("PROCESSING")
-        handler.running_jobs["j5"] = (handle, _event({}))
+        handler.running_jobs["j5"] = (handle, _message({}))
         self.assertTrue(
-            _wait_for(lambda: ("j5", "PROCESSING") in handler.status_updates)
+            await _wait_for(
+                lambda: ("j5", "PROCESSING") in handler.status_updates
+            )
         )
         handle._result = "COMPLETED"
-        self.assertTrue(_wait_for(lambda: "j5" not in handler.running_jobs))
+        self.assertTrue(
+            await _wait_for(lambda: "j5" not in handler.running_jobs)
+        )
         self.assertEqual(
             handler.status_updates,
             [("j5", "PROCESSING"), ("j5", "COMPLETED")],
         )
 
 
-class ResumeHandlerMessages(unittest.TestCase):
+class ResumeHandlerMessages(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.handler = ResumeHandler()
-        self.handler.delivery_context = MagicMock()
 
-    def test_missing_job_id_discards(self):
-        self.handler.on_amqp_message(_event({"s3_key": "k"}))
-        self.handler.delivery_context.discard.assert_called_once()
+    async def test_missing_job_id_nacks(self):
+        msg = _message({"s3_key": "k"})
+        await self.handler.on_message(msg)
+        msg.nack.assert_awaited_once_with(requeue=False)
         self.assertEqual(self.handler.running_jobs, {})
 
-    def test_valid_message_dispatches_runner(self):
+    async def test_valid_message_dispatches_runner(self):
+        msg = _message({"job_id": "j1", "s3_key": "k", "user_id": "u"})
         with patch(
             "dispatcher.handlers.resume_handler.ResumeRunner"
         ) as runner_cls:
             runner_cls.return_value = _Runner(_Handle("PROCESSING"))
-            self.handler.on_amqp_message(
-                _event({"job_id": "j1", "s3_key": "k", "user_id": "u"})
-            )
+            await self.handler.on_message(msg)
         self.assertIn("j1", self.handler.running_jobs)
         runner_cls.assert_called_once()
-        self.handler.delivery_context.discard.assert_not_called()
+        msg.nack.assert_not_awaited()
 
     def test_update_db_status_writes_row(self):
         conn = MagicMock()
@@ -203,39 +248,54 @@ class ResumeHandlerMessages(unittest.TestCase):
         )
 
 
-class SuggestionHandlerMessages(unittest.TestCase):
+class SuggestionHandlerMessages(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.handler = SuggestionHandler()
-        self.handler.delivery_context = MagicMock()
 
-    def test_missing_session_id_discards(self):
-        self.handler.on_amqp_message(_event({"answer": "hi"}))
-        self.handler.delivery_context.discard.assert_called_once()
+    async def test_missing_session_id_nacks(self):
+        msg = _message({"answer": "hi"})
+        await self.handler.on_message(msg)
+        msg.nack.assert_awaited_once_with(requeue=False)
 
-    def test_valid_message_dispatches_runner(self):
+    async def test_valid_message_dispatches_runner(self):
+        msg = _message({"session_id": "s1"})
         with patch(
             "dispatcher.handlers.suggestion_handler.SuggestionsRunner"
         ) as runner_cls:
             runner_cls.return_value = _Runner(_Handle("PROCESSING"))
-            self.handler.on_amqp_message(_event({"session_id": "s1"}))
+            await self.handler.on_message(msg)
         self.assertIn("s1", self.handler.running_jobs)
 
+    def test_update_db_status_only_acts_on_failed(self):
+        with patch(
+            "dispatcher.handlers.suggestion_handler.set_suggestion_failed"
+        ) as failed, patch(
+            "dispatcher.handlers.suggestion_handler.get_pg_client"
+        ) as get_pg:
+            self.handler.update_db_status("s1", "COMPLETED")
+            failed.assert_not_called()
+            get_pg.assert_not_called()
 
-class TailorHandlerMessages(unittest.TestCase):
+            self.handler.update_db_status("s1", "FAILED")
+            failed.assert_called_once()
+
+
+class TailorHandlerMessages(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.handler = TailorHandler()
-        self.handler.delivery_context = MagicMock()
 
-    def test_missing_run_id_discards(self):
-        self.handler.on_amqp_message(_event({"nope": 1}))
-        self.handler.delivery_context.discard.assert_called_once()
+    async def test_missing_run_id_nacks(self):
+        msg = _message({"nope": 1})
+        await self.handler.on_message(msg)
+        msg.nack.assert_awaited_once_with(requeue=False)
 
-    def test_valid_message_dispatches_runner(self):
+    async def test_valid_message_dispatches_runner(self):
+        msg = _message({"run_id": "r1"})
         with patch(
             "dispatcher.handlers.tailor_handler.TailorRunner"
         ) as runner_cls:
             runner_cls.return_value = _Runner(_Handle("PROCESSING"))
-            self.handler.on_amqp_message(_event({"run_id": "r1"}))
+            await self.handler.on_message(msg)
         self.assertIn("r1", self.handler.running_jobs)
 
     def test_update_db_status_only_acts_on_failed(self):

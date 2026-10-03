@@ -1,6 +1,6 @@
 """db_ops tests beyond record_token_usage — real SQL against a live
-Postgres (TEST_PG_URL, default the compose creds). Skips cleanly when no
-database is reachable, matching conftest's convention.
+Postgres (TEST_PG_URL, default the compose creds' resland_test database).
+Skips cleanly when no database is reachable, matching conftest's convention.
 
 Run: .venv/bin/python -m unittest backend.dispatcher.tests.test_db_ops_pg -v
      (from the repo root with the workspace venv)
@@ -13,6 +13,7 @@ import unittest
 import psycopg
 
 from shared.docgen import FormatProfile
+from shared.testing import destructive_db_ok
 
 from dispatcher.agents.docx_parser import (
     UserDocxProfile,
@@ -31,9 +32,15 @@ from dispatcher.agents.tailor import (
 )
 from dispatcher.runners import db_ops
 
+# Default to a *_test database so the safe path is the default path; the
+# destructive setUp() below refuses to run against anything else.
 TEST_PG_URL = os.getenv(
-    "TEST_PG_URL", "postgres://resland:resland@localhost:5432/resland"
+    "TEST_PG_URL", "postgres://resland:resland@localhost:5432/resland_test"
 )
+
+# This suite truncates 14 tables in setUp(), so it needs the same guard the
+# conftest fixtures use — otherwise it would nuke a non-test database.
+_DESTRUCTIVE_OK, _DESTRUCTIVE_REASON = destructive_db_ok(TEST_PG_URL)
 
 
 def _pg_reachable() -> bool:
@@ -56,6 +63,8 @@ class DbOpsPg(unittest.TestCase):
         cls.conn.close()
 
     def setUp(self):
+        if not _DESTRUCTIVE_OK:
+            self.skipTest(_DESTRUCTIVE_REASON)
         self.conn.execute(
             'TRUNCATE user_resume_format, user_suggestion, user_tailor_run,'
             ' user_base_experience_bullet, user_base_experience,'
@@ -207,6 +216,36 @@ class DbOpsPg(unittest.TestCase):
             [{"bullet_id": 3, "suggestion": "rewrote it"}],
         )
 
+    def test_set_suggestion_failed_marks_failed(self):
+        self._user()
+        exp = self._experience()
+        self._suggestion("s1", "u1", exp)
+        db_ops.set_suggestion_failed(self.conn, "s1")
+        status = self.conn.execute(
+            "SELECT status FROM user_suggestion WHERE id='s1'"
+        ).fetchone()[0]
+        self.assertEqual(status, "FAILED")
+
+    def test_set_suggestion_failed_preserves_completed_and_waiting(self):
+        self._user()
+        exp = self._experience()
+        self._suggestion("s1", "u1", exp)
+        self._suggestion("s2", "u1", exp)
+        self.conn.execute(
+            "UPDATE user_suggestion SET status='COMPLETED' WHERE id='s1'"
+        )
+        self.conn.execute(
+            "UPDATE user_suggestion SET status='WAITING_FOR_INPUT' WHERE id='s2'"
+        )
+        db_ops.set_suggestion_failed(self.conn, "s1")
+        db_ops.set_suggestion_failed(self.conn, "s2")
+        statuses = self.conn.execute(
+            "SELECT id, status FROM user_suggestion ORDER BY id"
+        ).fetchall()
+        self.assertEqual(
+            statuses, [("s1", "COMPLETED"), ("s2", "WAITING_FOR_INPUT")]
+        )
+
     # tailor ------------------------------------------------------------
 
     def test_fetch_tailor_run(self):
@@ -320,6 +359,66 @@ class DbOpsPg(unittest.TestCase):
         ).fetchone()
         self.assertEqual(row[0], "COMPLETED")
         self.assertEqual(json.loads(row[1])["skills"], ["Python"])
+
+    def test_set_tailor_question_can_store_result(self):
+        self._user()
+        self._tailor_run("r1", "u1")
+        resume = TailoredResume(
+            summary=None,
+            experiences=[
+                TailoredExperience(
+                    experience_id=1,
+                    bullets=[TailoredBullet(bullet_id=2, text="x")],
+                )
+            ],
+            skills=["Go"],
+        )
+        db_ops.set_tailor_question(self.conn, "r1", "Review?", result=resume)
+        row = self.conn.execute(
+            "SELECT pending_question, status, result"
+            " FROM user_tailor_run WHERE id='r1'"
+        ).fetchone()
+        self.assertEqual(row[0], "Review?")
+        self.assertEqual(row[1], "WAITING_FOR_INPUT")
+        self.assertEqual(json.loads(row[2])["skills"], ["Go"])
+
+        # A later waiting write without a result keeps the stored one.
+        db_ops.set_tailor_question(self.conn, "r1", "Review again?")
+        row = self.conn.execute(
+            "SELECT result FROM user_tailor_run WHERE id='r1'"
+        ).fetchone()
+        self.assertEqual(json.loads(row[0])["skills"], ["Go"])
+
+    def test_complete_tailor_run_requires_result(self):
+        self._user()
+        self._tailor_run("r1", "u1")
+        # No result yet — nothing to complete.
+        self.assertFalse(db_ops.complete_tailor_run(self.conn, "r1"))
+        status = self.conn.execute(
+            "SELECT status FROM user_tailor_run WHERE id='r1'"
+        ).fetchone()[0]
+        self.assertEqual(status, "PROCESSING")
+
+        db_ops.set_tailor_question(
+            self.conn,
+            "r1",
+            "Review?",
+            result=TailoredResume(
+                summary=None,
+                experiences=[
+                    TailoredExperience(
+                        experience_id=1,
+                        bullets=[TailoredBullet(bullet_id=2, text="x")],
+                    )
+                ],
+                skills=[],
+            ),
+        )
+        self.assertTrue(db_ops.complete_tailor_run(self.conn, "r1"))
+        row = self.conn.execute(
+            "SELECT status, pending_question FROM user_tailor_run WHERE id='r1'"
+        ).fetchone()
+        self.assertEqual(row, ("COMPLETED", None))
 
     def test_set_tailor_failed_marks_failed(self):
         self._user()

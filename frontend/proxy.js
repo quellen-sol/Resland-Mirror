@@ -1,14 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { auth0 } from "./lib/auth0";
+import { getSiteSettings } from "./lib/settings";
 import { db } from "./prisma/db";
 
 const MAINTENANCE_PATH = "/maintenance";
-
-function isMaintenanceMode() {
-  const value = (process.env.MAINTENANCE_MODE ?? "").trim().toLowerCase();
-  return value === "1" || value === "true" || value === "on" || value === "yes";
-}
 
 async function isSiteAdmin(request) {
   try {
@@ -26,7 +22,8 @@ async function isSiteAdmin(request) {
 export async function proxy(request) {
   const { pathname } = request.nextUrl;
 
-  if (isMaintenanceMode()) {
+  const { maintenance_mode } = await getSiteSettings();
+  if (maintenance_mode) {
     if (pathname === MAINTENANCE_PATH) return NextResponse.next();
     // Auth routes stay open so admins can sign in during maintenance.
     console.log(pathname);

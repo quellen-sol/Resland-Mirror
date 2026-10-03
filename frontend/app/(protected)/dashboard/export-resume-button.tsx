@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,17 @@ export default function ExportResumeButton({
               generated document may differ. Please double-check it before
               sending it to employers.
             </DialogDescription>
+            <p className="text-sm text-zinc-500">
+              This exports your <span className="text-zinc-300">base</span>{" "}
+              resume. For a version tailored to a specific job, head to{" "}
+              <Link
+                href="/tailored"
+                className="text-purple-300 underline-offset-4 hover:underline"
+              >
+                Tailored Resumes
+              </Link>
+              .
+            </p>
           </DialogHeader>
           <div className="flex justify-end gap-2">
             <Button

@@ -87,6 +87,7 @@ def build_and_invoke_agent(
     rows: list[FetchSuggestionRow],
     model_spec: str,
     usage: dict,
+    prompt: str | None = None,
 ) -> SuggestionRunOutcome:
     model = init_chat_model(model=model_spec)
     result_queue: queue.Queue[SuggestionsResult] = queue.Queue()
@@ -210,15 +211,18 @@ def build_and_invoke_agent(
                 # Command(resume) has nothing to feed. None resumes the
                 # pending nodes from the checkpoint instead.
                 agent.invoke(input=None, config=config)
+        elif agent.get_state(config).next:
+            # A retried run: the checkpoint still has pending nodes, so resume
+            # them — injecting a fresh start message would duplicate the kickoff.
+            agent.invoke(input=None, config=config)
         else:
-            invoke_param = {
-                "messages": [
-                    HumanMessage(
-                        content="Review my resume bullets for this experience and "
-                        "suggest improvements. Start by calling get_user_bullet_points."
-                    )
-                ]
-            }
+            kickoff = (
+                "Review my resume bullets for this experience and "
+                "suggest improvements. Start by calling get_user_bullet_points."
+            )
+            if prompt:
+                kickoff += f"\n\nGuidance from the user: {prompt}"
+            invoke_param = {"messages": [HumanMessage(content=kickoff)]}
             agent.invoke(input=invoke_param, config=config)
         snapshot = agent.get_state(config)
 
