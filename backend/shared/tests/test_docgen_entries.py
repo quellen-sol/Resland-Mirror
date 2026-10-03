@@ -1,7 +1,7 @@
 """Entry-line and header capture/render: per-section title order and
 separator, head/tail styles that follow the source's positions, date
-ranges without a start, and loading profiles written by older or newer
-capturers.
+ranges without a start, stacked/labelled contact blocks, and loading
+profiles written by older or newer capturers.
 """
 
 import io
@@ -11,7 +11,11 @@ from dataclasses import asdict, dataclass, field
 
 import docx
 from docx import Document
+from docx.enum.text import WD_TAB_ALIGNMENT
+from docx.shared import Inches
 from shared.docgen import (
+    CONTACT_INLINE,
+    CONTACT_STACKED,
     ROLE_DATES,
     ROLE_EDUCATION_SUB,
     ROLE_ENTRY_SUB,
@@ -224,10 +228,12 @@ def _company_first_pdf() -> PdfDoc:
 class FormatProfileCompat(unittest.TestCase):
     def test_profile_from_before_these_fields_loads_with_old_behavior(self):
         old = asdict(default_format_profile())
-        for key in [k for k in old if k.startswith(("education_title", "project_title"))]:
-            del old[key]
+        for key in [k for k in old if k.startswith(("education_title", "project_title", "contact_"))]:
+            if key != "contact_separator":
+                del old[key]
         del old["entry_title_tail_first"]
         fmt = FormatProfile.from_dict(json.loads(json.dumps(old)))
+        self.assertEqual(fmt.contact_layout, CONTACT_INLINE)
         self.assertIsNone(fmt.education_title_separator)
         self.assertIsNone(fmt.project_title_tail_sub)
         # Education/projects fall back to the experience separator and the
@@ -409,6 +415,82 @@ class Dates(unittest.TestCase):
         content.education[0].end_date = None
         para = _para(_paras(render_docx(content, default_format_profile())), "State University")
         self.assertEqual(para.text, "BS — State University")
+
+
+class StackedContact(unittest.TestCase):
+    """Finding G: a labelled, one-field-per-line contact block (#49's
+    "Address: / Phone: / Email:") round-trips instead of collapsing into
+    "email | phone"."""
+
+    def test_docx_labelled_block_with_tab(self):
+        doc = Document()
+        doc.add_paragraph("Jane Doe")
+        for label, value in (("Address:", "Denver, CO"), ("Phone:", "555-1234"), ("Email:", "jane@x.com")):
+            para = doc.add_paragraph()
+            para.paragraph_format.tab_stops.add_tab_stop(Inches(1.0), WD_TAB_ALIGNMENT.LEFT)
+            _runs(para, (f"{label}\t", True, False), (value, False, False))
+        doc.add_paragraph("EXPERIENCE")
+        fmt = capture_format_profile(doc, _profile())
+        self.assertEqual(fmt.contact_layout, CONTACT_STACKED)
+        self.assertEqual(fmt.contact_order, ["location", "phone", "email"])
+        self.assertEqual(
+            fmt.contact_labels, {"location": "Address:", "phone": "Phone:", "email": "Email:"}
+        )
+        self.assertTrue(fmt.contact_label_bold)
+        self.assertEqual(fmt.contact_value_tab_in, 1.0)
+        paras = _paras(render_docx(_content(), fmt))
+        self.assertEqual(
+            [p.text for p in paras[1:4]],
+            ["Address:\tDenver, CO", "Phone:\t555-1234", "Email:\tjane@x.com"],
+        )
+        self.assertTrue(paras[1].runs[0].font.bold)
+        self.assertFalse(paras[1].runs[1].font.bold)
+        self.assertAlmostEqual(paras[1].paragraph_format.tab_stops[0].position.inches, 1.0)
+
+    def test_pdf_label_column_gives_tab(self):
+        """Values starting their own run at one shared x (#49's layout)."""
+        lines = [_pdf_line("Jane Doe", 40, size=20, bold=True, x0=165)]
+        for i, (label, value) in enumerate(
+            (("Address:", "Denver, CO"), ("Phone:", "555-1234"), ("Email:", "jane@x.com"))
+        ):
+            lines.append(
+                _pdf_line(
+                    f"{label}    {value}",
+                    70 + i * 14,
+                    [_run(f"{label}    ", bold=True, x0=165), _run(value, x0=228.4)],
+                    x0=165,
+                )
+            )
+        doc = PdfDoc(pages=[PdfPage(number=0, width=612.0, height=792.0, lines=lines)])
+        fmt = capture_format_profile_pdf(doc, _profile())
+        self.assertEqual(fmt.contact_layout, CONTACT_STACKED)
+        self.assertTrue(fmt.contact_label_bold)
+        self.assertEqual(fmt.contact_value_tab_in, 0.88)
+
+    def test_unlabelled_stack_and_city_repeated_on_entry_lines(self):
+        """One field per line, no labels; the city also appears on an
+        entry line read earlier (a right sidebar read after the main
+        column) — the copy beside email/phone wins."""
+        lines = [
+            _pdf_line("Jane Doe", 40, size=20, bold=True),
+            _pdf_line("Acme Corp    Denver, CO", 70),
+            _pdf_line("jane@x.com", 100, x0=440),
+            _pdf_line("555-1234", 114, x0=440),
+            _pdf_line("Denver, CO", 128, x0=440),
+        ]
+        doc = PdfDoc(pages=[PdfPage(number=0, width=612.0, height=792.0, lines=lines)])
+        fmt = capture_format_profile_pdf(doc, _profile())
+        self.assertEqual(fmt.contact_layout, CONTACT_STACKED)
+        self.assertEqual(fmt.contact_order, ["email", "phone", "location"])
+        self.assertEqual(fmt.contact_labels, {})
+        paras = _paras(render_docx(_content(), fmt))
+        self.assertEqual([p.text for p in paras[1:4]], ["jane@x.com", "555-1234", "Denver, CO"])
+
+    def test_inline_contact_line_stays_inline(self):
+        fmt = capture_format_profile(_company_first_doc(), _profile())
+        self.assertEqual(fmt.contact_layout, CONTACT_INLINE)
+        paras = _paras(render_docx(_content(), fmt))
+        self.assertEqual(paras[1].text, "jane@x.com | 555-1234 | Denver, CO")
 
 
 if __name__ == "__main__":

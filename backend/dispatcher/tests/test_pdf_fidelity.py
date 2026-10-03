@@ -18,9 +18,12 @@ import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dispatcher.doc_parsers.pdf import column_counts, parse_pdf
 from docx import Document
 from docx.oxml.ns import qn
 from shared.docgen import (
+    CONTACT_STACKED,
+    ROLE_CONTACT,
     ROLE_ENTRY_TITLE,
     ROLE_LOCATION,
     ROLE_NAME,
@@ -35,8 +38,6 @@ from shared.docgen import (
     capture_format_profile_pdf,
     render_docx,
 )
-
-from dispatcher.doc_parsers.pdf import column_counts, parse_pdf, raw_text
 
 try:
     import pdfminer.layout  # noqa: F401
@@ -355,7 +356,6 @@ class FixtureParse(unittest.TestCase):
         self.assertAlmostEqual(line.run_at(value_at).x0, 228.7, delta=0.5)
 
 
-
 @unittest.skipUnless(HAS_PDFMINER, "pdfminer.six not installed")
 class FixtureCapture(unittest.TestCase):
     """capture_format_profile_pdf on the real uploaded pdf."""
@@ -423,10 +423,18 @@ class FixtureCapture(unittest.TestCase):
             self.fmt.roles[ROLE_LOCATION].font_name, "Inter"
         )
 
-    def test_profile_serializes(self):
+    def test_stacked_labelled_contact_block(self):
+        """'Address: / Phone: / Email:' one per line, labels semibold,
+        values aligned at a shared x (issue #49's header)."""
+        self.assertEqual(self.fmt.contact_layout, CONTACT_STACKED)
+        self.assertEqual(self.fmt.contact_order, ["location", "phone", "email"])
         self.assertEqual(
-            FormatProfile.from_json(self.fmt.to_json()), self.fmt
+            self.fmt.contact_labels,
+            {"location": "Address:", "phone": "Phone:", "email": "Email:"},
         )
+        self.assertTrue(self.fmt.contact_label_bold)
+        self.assertAlmostEqual(self.fmt.contact_value_tab_in, 0.88, places=2)
+        self.assertFalse(self.fmt.roles[ROLE_CONTACT].bold)
 
     def test_sections_keep_their_own_entry_order(self):
         # Experience is company-first; the education line is
@@ -439,7 +447,6 @@ class FixtureCapture(unittest.TestCase):
         self.assertEqual(
             FormatProfile.from_json(self.fmt.to_json()), self.fmt
         )
-
 
 
 @unittest.skipUnless(HAS_PDFMINER, "pdfminer.six not installed")
@@ -502,6 +509,22 @@ class FixtureRender(unittest.TestCase):
         cols = self.rendered.sections[0]._sectPr.find(qn("w:cols"))
         num = cols.get(qn("w:num")) if cols is not None else None
         self.assertIn(num, (None, "1"))
+
+    def test_header_block_matches_source(self):
+        self.assertEqual(
+            self.texts[1:4],
+            [
+                "Address:\tCedar Hollow Falls, Idaho",
+                "Phone:\t(208) 555-0142",
+                "Email:\tdprescott@example.com",
+            ],
+        )
+        phone = next(p for p in self.paras if p.text.startswith("Phone:"))
+        self.assertTrue(phone.runs[0].font.bold)
+        self.assertFalse(phone.runs[1].font.bold)
+        self.assertAlmostEqual(
+            phone.paragraph_format.tab_stops[0].position.inches, 0.88, places=2
+        )
 
     def test_education_entry_keeps_brackets_and_drops_dangling_dash(self):
         edu = next(p for p in self.paras if "Hartwell Academy" in p.text)
@@ -685,6 +708,19 @@ class FoodServiceFixture(unittest.TestCase):
         self.assertEqual(edu.text, "The Charter School of Merriton - High School")
         self.assertTrue(edu.runs[0].font.bold)
         self.assertTrue(edu.runs[1].font.italic)
+
+    def test_stacked_contact_labels(self):
+        self.assertEqual(self.fmt.contact_layout, CONTACT_STACKED)
+        self.assertEqual(
+            self.fmt.contact_labels, {"phone": "Phone:", "email": "Email:"}
+        )
+        rendered = Document(
+            io.BytesIO(render_docx(_food_service_content(), self.fmt))
+        )
+        texts = [p.text for p in rendered.paragraphs if p.text.strip()]
+        self.assertEqual(
+            texts[1:3], ["Phone: 208.555.0142", "Email: dprescott@example.com"]
+        )
 
 
 

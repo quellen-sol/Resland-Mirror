@@ -99,6 +99,16 @@ DEFAULT_SECTION_TITLES = {
 SKILLS_LAYOUT_GROUPED = "grouped"
 SKILLS_LAYOUT_FLAT = "flat"
 
+# Header contact block layouts: every field on one line joined by
+# contact_separator, or one field per line ("Phone: …" / "Email: …").
+CONTACT_INLINE = "inline"
+CONTACT_STACKED = "stacked"
+CONTACT_EMAIL = "email"
+CONTACT_PHONE = "phone"
+CONTACT_LOCATION = "location"
+CONTACT_LINKS = "links"
+_CONTACT_FIELDS = (CONTACT_EMAIL, CONTACT_PHONE, CONTACT_LOCATION, CONTACT_LINKS)
+
 _ALIGNMENTS = {
     "left": WD_ALIGN_PARAGRAPH.LEFT,
     "center": WD_ALIGN_PARAGRAPH.CENTER,
@@ -135,6 +145,15 @@ class FormatProfile:
     columns: int = 1
     contact_separator: str = "|"
     location_on_own_line: bool = False
+    # Stacked layout: contact_order lists the fields top to bottom,
+    # contact_labels maps field → the label printed before it ("Phone:"),
+    # and labelled values align at contact_value_tab_in when the source
+    # tab-aligns them.
+    contact_layout: str = CONTACT_INLINE
+    contact_order: list[str] = field(default_factory=list)
+    contact_labels: dict[str, str] = field(default_factory=dict)
+    contact_label_bold: bool = False
+    contact_value_tab_in: float | None = None
     # Experience entry lines: the separator between title and company.
     entry_title_separator: str = " — "
     # When the entry line splits into a styled leading part (bold title,
@@ -568,6 +587,67 @@ def _styles_differ(a: RoleStyle, b: RoleStyle) -> bool:
     )
 
 
+def _contact_block(lines: list, basic: Any) -> tuple[list[str], dict[str, int]] | None:
+    """Stacked contact block: (field order, field → line index) when each
+    contact field sits on a line of its own and the lines form one block —
+    "Phone: …" / "Email: …" / "Address: …" under the name. None for the
+    inline "a | b | c" layout."""
+    hits = {
+        name: _match_all(lines, getattr(basic, name, None))
+        for name in (CONTACT_EMAIL, CONTACT_PHONE, CONTACT_LOCATION)
+    }
+    anchors = hits[CONTACT_EMAIL][:1] + hits[CONTACT_PHONE][:1]
+    if not anchors:
+        return None
+
+    def _nearest(idxs: list[int], value: str) -> int:
+        # A city also shows up on entry lines ("Acme    Denver, CO"); the
+        # header's copy is the one next to the email/phone lines, and on a
+        # tie the line holding little besides the value.
+        return min(
+            idxs,
+            key=lambda i: (
+                sum(abs(i - a) for a in anchors),
+                len(_norm(lines[i].text)) - len(_norm(value)),
+                i,
+            ),
+        )
+
+    found = {
+        name: _nearest(idxs, getattr(basic, name))
+        for name, idxs in hits.items()
+        if idxs
+    }
+    link_idx = [
+        _nearest(idxs, link)
+        for link, idxs in (
+            (link, _match_all(lines, link))
+            for link in getattr(basic, "links", None) or []
+        )
+        if idxs
+    ]
+    if link_idx:
+        found[CONTACT_LINKS] = min(link_idx)
+    taken = [i for name, i in found.items() if name != CONTACT_LINKS] + link_idx
+    if len(found) < 2 or len(set(taken)) != len(taken):
+        return None
+    if max(taken) - min(taken) > len(taken):
+        # Scattered across the document, not one block.
+        return None
+    return sorted(found, key=found.get), found
+
+
+def _contact_label(text: str, value: str | None) -> tuple[str, int] | None:
+    """("Phone:", value offset) when a short label precedes the value."""
+    pos = _offset_after(text, value)
+    if pos <= 0:
+        return None
+    label = text[:pos].strip()
+    if label.endswith(":") and len(label) <= 24:
+        return label, pos
+    return None
+
+
 _DATE_RANGE = re.compile(
     r"\d{4}\s*([-–—])\s*(?:\d{4}|\w{3,9}\s*\d{4}|Present|Current|Now)",
     re.IGNORECASE,
@@ -695,6 +775,14 @@ def _match_idx(paras: list[Paragraph], needle: str | None) -> int | None:
     return None
 
 
+def _match_all(paras: list, needle: str | None) -> list[int]:
+    """Every paragraph index whose text contains `needle` (normalized)."""
+    target = _norm(needle)
+    if not target:
+        return []
+    return [i for i, para in enumerate(paras) if target in _norm(para.text)]
+
+
 def _match_any_idx(paras: list[Paragraph], needles: list[str | None]) -> int | None:
     hits = [_match_idx(paras, n) for n in needles if n]
     hits = [h for h in hits if h is not None]
@@ -765,6 +853,49 @@ def _project_separator(text: str, proj: Any) -> tuple[str, bool] | None:
     if _offset_after(text, proj.name) >= 0:
         return _title_separator(text, proj.name, None)
     return None
+
+
+def _capture_contact_docx(
+    paras: list[Paragraph], basic: Any
+) -> tuple[dict[str, Any], dict[str, RoleStyle]]:
+    """(FormatProfile contact_* fields, contact/location roles read from
+    the value runs) for a stacked contact block; ({}, {}) keeps the inline
+    defaults. A labelled line's first run is its label, so the field's own
+    look comes from the run holding the value."""
+    block = _contact_block(paras, basic)
+    if block is None:
+        return {}, {}
+    order, at = block
+    labels: dict[str, str] = {}
+    roles: dict[str, RoleStyle] = {}
+    label_bold = False
+    tab_in: float | None = None
+    for name in order:
+        if name == CONTACT_LINKS:
+            continue
+        para = paras[at[name]]
+        hit = _contact_label(para.text, getattr(basic, name, None))
+        if hit is None:
+            continue
+        label, pos = hit
+        value_run = _run_at_offset(para, pos)
+        if value_run is not None:
+            role = ROLE_LOCATION if name == CONTACT_LOCATION else ROLE_CONTACT
+            roles.setdefault(role, _run_style(value_run, para))
+        if not labels:
+            run = _run_at_offset(para, 0)
+            label_bold = run is not None and _run_style(run, para).bold
+            stops = list(para.paragraph_format.tab_stops)
+            if "\t" in para.text[:pos] and stops:
+                tab_in = round(stops[0].position.inches, 2)
+        labels[name] = label
+    return {
+        "contact_layout": CONTACT_STACKED,
+        "contact_order": order,
+        "contact_labels": labels,
+        "contact_label_bold": label_bold,
+        "contact_value_tab_in": tab_in,
+    }, roles
 
 
 def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
@@ -1015,6 +1146,9 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
     location_on_own_line = (
         location_idx is not None and location_idx != contact_idx
     )
+    contact, contact_roles = _capture_contact_docx(paras, basic)
+    for role, style in contact_roles.items():
+        roles.setdefault(role, style)
 
     # Hyperlinks carry their own look (blue, underlined) distinct from
     # the contact text around them — capture the first hyperlink run.
@@ -1174,6 +1308,7 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
         columns=columns,
         contact_separator=separator,
         location_on_own_line=location_on_own_line,
+        **contact,
         entry_title_separator=entry_title_separator,
         entry_title_tail_sub=tail_sub,
         entry_title_tail_first=tail_first,
@@ -1285,6 +1420,57 @@ def _pdf_style_role(style, base: RoleStyle | None = None) -> RoleStyle:
         role.alignment = base.alignment
         role.space_before_pt = base.space_before_pt
     return role
+
+
+def _capture_contact_pdf(
+    lines: list[PdfLine], basic: Any, base: Any
+) -> tuple[dict[str, Any], dict[str, RoleStyle]]:
+    """pdf analogue of _capture_contact_docx. Values that start their own
+    run at one shared x (a label column, then the values) give the tab
+    position. `base` maps a line to its paragraph-level RoleStyle."""
+    block = _contact_block(lines, basic)
+    if block is None:
+        return {}, {}
+    order, at = block
+    labels: dict[str, str] = {}
+    roles: dict[str, RoleStyle] = {}
+    label_bold = False
+    offsets: list[float] = []
+    for name in order:
+        if name == CONTACT_LINKS:
+            continue
+        line = lines[at[name]]
+        hit = _contact_label(line.text, getattr(basic, name, None))
+        if hit is None:
+            continue
+        label, pos = hit
+        role = ROLE_LOCATION if name == CONTACT_LOCATION else ROLE_CONTACT
+        roles.setdefault(role, _pdf_style_role(line.style_at(pos), base=base(line)))
+        if not labels:
+            label_bold = line.style_at(0).bold
+        labels[name] = label
+        start = 0
+        for run in line.runs:
+            if start <= pos < start + len(run.text):
+                if not line.text[start:pos].strip() and run.x0 is not None:
+                    offsets.append(run.x0 - line.x0)
+                break
+            start += len(run.text)
+    tab_in = None
+    if (
+        labels
+        and len(offsets) == len(labels)
+        and min(offsets) > 0
+        and max(offsets) - min(offsets) <= 2.0
+    ):
+        tab_in = round(sum(offsets) / len(offsets) / 72.0, 2)
+    return {
+        "contact_layout": CONTACT_STACKED,
+        "contact_order": order,
+        "contact_labels": labels,
+        "contact_label_bold": label_bold,
+        "contact_value_tab_in": tab_in,
+    }, roles
 
 
 def _pdf_margins(page, lines) -> dict[str, float]:
@@ -1528,6 +1714,9 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
     location_on_own_line = (
         location_idx is not None and location_idx != contact_idx
     )
+    contact, contact_roles = _capture_contact_pdf(lines, basic, _style)
+    for role, style in contact_roles.items():
+        roles.setdefault(role, style)
 
     # Skills: how the source separates category from items.
     skills_category_separator = ": "
@@ -1651,6 +1840,7 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
         columns=columns,
         contact_separator=separator,
         location_on_own_line=location_on_own_line,
+        **contact,
         entry_title_separator=entry_title_separator,
         entry_title_tail_sub=tail_sub,
         entry_title_tail_first=tail_first,
@@ -1876,21 +2066,9 @@ def _bullet_para(doc: _Document, text: str, fmt: FormatProfile):
         _write_run(para, f"{prefix}{text}", style)
 
 
-def render_docx(content: ResumeContent, fmt: FormatProfile) -> bytes:
-    """Rebuild a resume .docx from canonical content through a
-    FormatProfile. Sections with no content are skipped; everything else
-    follows the captured order and styles."""
-    doc = Document()
-    section = doc.sections[0]
-    section.top_margin = Inches(fmt.page_margins_in["top"])
-    section.right_margin = Inches(fmt.page_margins_in["right"])
-    section.bottom_margin = Inches(fmt.page_margins_in["bottom"])
-    section.left_margin = Inches(fmt.page_margins_in["left"])
-    _set_columns(section, fmt.columns)
-
-    header = content.header
-    if header.name:
-        _role_para(doc, header.name, fmt.role(ROLE_NAME))
+def _inline_contact(doc: _Document, header: ResumeHeader, fmt: FormatProfile):
+    """email | phone | location | links on one line (location optionally
+    on its own line below)."""
     contact_bits = [
         bit for bit in [header.email, header.phone] if bit
     ]
@@ -1915,6 +2093,69 @@ def render_docx(content: ResumeContent, fmt: FormatProfile) -> bytes:
             _write_run(para, bit, style)
     if fmt.location_on_own_line and header.location:
         _role_para(doc, header.location, fmt.role(ROLE_LOCATION))
+
+
+def _stacked_contact(doc: _Document, header: ResumeHeader, fmt: FormatProfile):
+    """One contact field per line in the source's order, each behind its
+    captured label ("Phone:"), values tab-aligned when the source aligns
+    them. Fields the source didn't show follow in the default order."""
+    contact_style = fmt.role(ROLE_CONTACT)
+    link_style = fmt.roles.get(ROLE_LINK)
+    order = [f for f in fmt.contact_order if f in _CONTACT_FIELDS]
+    order += [f for f in _CONTACT_FIELDS if f not in order]
+    values = {
+        CONTACT_EMAIL: [header.email],
+        CONTACT_PHONE: [header.phone],
+        CONTACT_LOCATION: [header.location],
+        CONTACT_LINKS: list(header.links),
+    }
+    for name in order:
+        style = (
+            fmt.role(ROLE_LOCATION) if name == CONTACT_LOCATION else contact_style
+        )
+        value_style = (
+            _overlay_link(style, link_style)
+            if name == CONTACT_LINKS and link_style
+            else style
+        )
+        for value in values[name]:
+            if not value:
+                continue
+            para = doc.add_paragraph()
+            _apply_role(para, style)
+            label = fmt.contact_labels.get(name)
+            if label:
+                label_style = RoleStyle(**asdict(style))
+                label_style.bold = label_style.bold or fmt.contact_label_bold
+                if fmt.contact_value_tab_in:
+                    para.paragraph_format.tab_stops.add_tab_stop(
+                        Inches(fmt.contact_value_tab_in), WD_TAB_ALIGNMENT.LEFT
+                    )
+                    _write_run(para, f"{label}\t", label_style)
+                else:
+                    _write_run(para, f"{label} ", label_style)
+            _write_run(para, value, value_style)
+
+
+def render_docx(content: ResumeContent, fmt: FormatProfile) -> bytes:
+    """Rebuild a resume .docx from canonical content through a
+    FormatProfile. Sections with no content are skipped; everything else
+    follows the captured order and styles."""
+    doc = Document()
+    section = doc.sections[0]
+    section.top_margin = Inches(fmt.page_margins_in["top"])
+    section.right_margin = Inches(fmt.page_margins_in["right"])
+    section.bottom_margin = Inches(fmt.page_margins_in["bottom"])
+    section.left_margin = Inches(fmt.page_margins_in["left"])
+    _set_columns(section, fmt.columns)
+
+    header = content.header
+    if header.name:
+        _role_para(doc, header.name, fmt.role(ROLE_NAME))
+    if fmt.contact_layout == CONTACT_STACKED:
+        _stacked_contact(doc, header, fmt)
+    else:
+        _inline_contact(doc, header, fmt)
 
     body_style = fmt.role(ROLE_BODY)
     sub_style = fmt.role(ROLE_ENTRY_SUB)
