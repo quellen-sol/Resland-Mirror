@@ -1,6 +1,7 @@
 import json
+import uuid
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import aio_pika
@@ -68,11 +69,16 @@ class AmqpResumeJob(BaseAmqpJob):
     job_type: str = "resume"
 
 
+# Sessions and tailor runs are multi-turn: start, every answer, and every retry
+# publish a new job for the same session_id/run_id. turn_id is fresh per
+# publish, so the dispatcher bills each turn once — a redelivered message keeps
+# its turn_id and can't charge twice.
 @dataclass
 class AmqpSuggestionJob(BaseAmqpJob):
     session_id: str
     answer: str | None = None
     prompt: str | None = None
+    turn_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     job_type: str = "suggestion"
 
 
@@ -80,6 +86,7 @@ class AmqpSuggestionJob(BaseAmqpJob):
 class AmqpTailorJob(BaseAmqpJob):
     run_id: str
     answer: str | None = None
+    turn_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     job_type: str = "tailor"
 
 

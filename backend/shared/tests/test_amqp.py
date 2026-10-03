@@ -67,6 +67,18 @@ class JobSerialization(unittest.TestCase):
         self.assertEqual(payload["answer"], "include a summary")
         self.assertEqual(payload["job_type"], "tailor")
 
+    def test_each_turn_gets_its_own_turn_id(self):
+        # Billing keys each turn on turn_id, so two publishes for the same
+        # session/run must never share one — and it must be on the wire.
+        for make in (
+            lambda: AmqpSuggestionJob(session_id="s1"),
+            lambda: AmqpTailorJob(run_id="r1"),
+        ):
+            first = json.loads(make().to_bytes())["turn_id"]
+            second = json.loads(make().to_bytes())["turn_id"]
+            self.assertTrue(first)
+            self.assertNotEqual(first, second)
+
     def test_to_message_wraps_bytes(self):
         job = AmqpResumeJob(s3_key="k", job_id="j", user_id="u")
         msg = job.to_message()
