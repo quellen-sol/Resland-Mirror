@@ -660,6 +660,32 @@ class FoodServiceFixture(unittest.TestCase):
         )
         self.assertTrue(title.text.startswith("Corvia Inc"))
 
+    def test_company_first_bold_attribution(self):
+        """'Corvia Inc' is bold dark gray, ' - Executive Assistant' italic
+        light gray (ProximaNova-RegularIt), dates 10pt gray on their own
+        line — the render keeps each look on its own part."""
+        self.assertTrue(self.fmt.entry_title_tail_sub)
+        rendered = Document(
+            io.BytesIO(render_docx(_food_service_content(), self.fmt))
+        )
+        paras = rendered.paragraphs
+        title = next(p for p in paras if "Executive Assistant" in p.text)
+        head, tail = title.runs[0], title.runs[1]
+        self.assertEqual(head.text, "Corvia Inc")
+        self.assertTrue(head.font.bold)
+        self.assertEqual(str(head.font.color.rgb), "353744")
+        self.assertEqual(tail.text, " - Executive Assistant")
+        self.assertFalse(tail.font.bold)
+        self.assertTrue(tail.font.italic)
+        self.assertEqual(str(tail.font.color.rgb), "666666")
+        dates = next(p for p in paras if p.text == "December 2023 - Current")
+        self.assertEqual(dates.runs[0].font.size.pt, 10.0)
+        # Education is institution-first in this source.
+        edu = next(p for p in paras if "High School" in p.text)
+        self.assertEqual(edu.text, "The Charter School of Merriton - High School")
+        self.assertTrue(edu.runs[0].font.bold)
+        self.assertTrue(edu.runs[1].font.italic)
+
 
 
 class GeneratedBadRegression(unittest.TestCase):

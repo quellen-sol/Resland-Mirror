@@ -1,6 +1,7 @@
 """Entry-line and header capture/render: per-section title order and
-separator, date ranges without a start, and loading profiles written by
-older or newer capturers.
+separator, head/tail styles that follow the source's positions, date
+ranges without a start, and loading profiles written by older or newer
+capturers.
 """
 
 import io
@@ -11,6 +12,10 @@ from dataclasses import asdict, dataclass, field
 import docx
 from docx import Document
 from shared.docgen import (
+    ROLE_DATES,
+    ROLE_EDUCATION_SUB,
+    ROLE_ENTRY_SUB,
+    ROLE_ENTRY_TITLE,
     FormatProfile,
     ResumeContent,
     ResumeEducation,
@@ -224,6 +229,7 @@ class FormatProfileCompat(unittest.TestCase):
         del old["entry_title_tail_first"]
         fmt = FormatProfile.from_dict(json.loads(json.dumps(old)))
         self.assertIsNone(fmt.education_title_separator)
+        self.assertIsNone(fmt.project_title_tail_sub)
         # Education/projects fall back to the experience separator and the
         # title-first order, as before.
         paras = _paras(render_docx(_content(), fmt))
@@ -325,6 +331,53 @@ class SectionScopedOrder(unittest.TestCase):
         profile.experience[0].company = "Nowhere Inc"
         fmt = capture_format_profile(doc, profile)
         self.assertEqual(fmt.entry_title_separator, " | ")
+
+
+class HeadTailStyles(unittest.TestCase):
+    """Finding C: styles follow the source's positions, so a bold company
+    in a company-first source stays bold and the title stays plain."""
+
+    def _check_experience(self, fmt):
+        self.assertTrue(fmt.entry_title_tail_sub)
+        self.assertTrue(fmt.roles[ROLE_ENTRY_TITLE].bold)
+        self.assertFalse(fmt.roles[ROLE_ENTRY_SUB].bold)
+        para = _para(_paras(render_docx(_content(), fmt)), "Software Engineer")
+        self.assertEqual(para.runs[0].text, "Acme Corp")
+        self.assertTrue(para.runs[0].font.bold)
+        self.assertEqual(para.runs[1].text, " - Software Engineer")
+        self.assertFalse(para.runs[1].font.bold)
+
+    def test_docx_company_first(self):
+        self._check_experience(capture_format_profile(_company_first_doc(), _profile()))
+
+    def test_pdf_company_first_from_style_runs(self):
+        fmt = capture_format_profile_pdf(_company_first_pdf(), _profile())
+        self._check_experience(fmt)
+        # The gray dates run is its own role.
+        self.assertEqual(fmt.roles[ROLE_DATES].color, "666666")
+        para = _para(_paras(render_docx(_content(), fmt)), "Software Engineer")
+        self.assertEqual(str(para.runs[-1].font.color.rgb), "666666")
+
+    def test_education_keeps_its_own_tail_look(self):
+        # Education "BS" (bold) + ", State University" (italic): its own
+        # roles, not the experience ones.
+        for fmt in (
+            capture_format_profile(_company_first_doc(), _profile()),
+            capture_format_profile_pdf(_company_first_pdf(), _profile()),
+        ):
+            self.assertTrue(fmt.education_title_tail_sub)
+            self.assertTrue(fmt.roles[ROLE_EDUCATION_SUB].italic)
+            para = _para(_paras(render_docx(_content(), fmt)), "State University")
+            self.assertTrue(para.runs[0].font.bold)
+            self.assertTrue(para.runs[1].font.italic)
+            self.assertFalse(para.runs[1].font.bold)
+
+    def test_project_tail_follows_project_look_not_experience(self):
+        fmt = default_format_profile()
+        fmt.entry_title_tail_sub = True
+        fmt.project_title_tail_sub = False
+        para = _para(_paras(render_docx(_content(), fmt)), "Widgetizer")
+        self.assertTrue(para.runs[1].font.bold)
 
 
 class Dates(unittest.TestCase):
