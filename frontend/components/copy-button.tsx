@@ -1,9 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "cn";
+
+const RESET_MS = 1500;
+
+/** Pre-Clipboard-API copy via a hidden textarea. navigator.clipboard is
+ *  undefined outside secure contexts (plain-http hosts, some embeds). */
+function copyWithExecCommand(text: string): boolean {
+  const previousFocus = document.activeElement as HTMLElement | null;
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "0";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+    previousFocus?.focus();
+  }
+}
+
+async function copyText(text: string): Promise<boolean> {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      // Permission denied or similar — fall through to the legacy path.
+    }
+  }
+  return copyWithExecCommand(text);
+}
 
 export default function CopyButton({
   text,
@@ -13,14 +50,22 @@ export default function CopyButton({
   className?: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+    },
+    [],
+  );
 
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
+    if (await copyText(text)) {
       setCopied(true);
       toast.success("Copied to clipboard");
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
+      if (resetTimer.current) clearTimeout(resetTimer.current);
+      resetTimer.current = setTimeout(() => setCopied(false), RESET_MS);
+    } else {
       toast.error("Couldn't copy to clipboard");
     }
   }
@@ -30,7 +75,7 @@ export default function CopyButton({
       type="button"
       onClick={copy}
       title="Copy"
-      aria-label="Copy to clipboard"
+      aria-label="Copy to Clipboard"
       className={cn(
         "inline-flex shrink-0 align-middle text-zinc-500 hover:text-purple-300",
         className,
