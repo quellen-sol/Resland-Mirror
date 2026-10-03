@@ -114,6 +114,48 @@ def _pdf_bytes(ops, extra_objs=(), extra_resources=b""):
     return out.getvalue()
 
 
+def _pdf_pages_bytes(pages):
+    """Like _pdf_bytes, one page per ops list, sharing the Helvetica fonts."""
+    n = len(pages)
+    fonts = [3 + 2 * n, 4 + 2 * n]
+    resources = b"/Resources << /Font << /F1 %d 0 R /F2 %d 0 R >> >>" % tuple(fonts)
+    kids = b" ".join(b"%d 0 R" % (3 + i) for i in range(n))
+    objs = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [" + kids + b"] /Count %d >>" % n,
+    ]
+    objs += [
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        + resources
+        + b" /Contents %d 0 R >>" % (3 + n + i)
+        for i in range(n)
+    ]
+    for ops in pages:
+        content = "\n".join(ops).encode()
+        objs.append(
+            b"<< /Length %d >>\nstream\n" % len(content) + content + b"\nendstream"
+        )
+    objs += [
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",
+    ]
+    out = io.BytesIO()
+    out.write(b"%PDF-1.4\n")
+    offsets = []
+    for i, body in enumerate(objs, 1):
+        offsets.append(out.tell())
+        out.write(b"%d 0 obj\n" % i + body + b"\nendobj\n")
+    xref = out.tell()
+    out.write(b"xref\n0 %d\n0000000000 65535 f \n" % (len(objs) + 1))
+    for off in offsets:
+        out.write(b"%010d 00000 n \n" % off)
+    out.write(
+        b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n"
+        % (len(objs) + 1, xref)
+    )
+    return out.getvalue()
+
+
 def _text(x, y, text, font="F1", size=11):
     return f"BT /{font} {size} Tf {x} {y} Td ({text}) Tj ET"
 
@@ -444,6 +486,61 @@ class ParsePdf(unittest.TestCase):
             texts,
             ["• Shipped the billing rewrite two weeks early", "Denver, CO"],
         )
+
+    def test_short_item_after_a_long_wrapped_item_keeps_its_bullet(self):
+        """A bullet that wraps onto several lines pushes the next dot well
+        past the plain list gap; a short last item must still read as part
+        of the list (not as a lone dot before short text)."""
+        ops = [
+            _circle(66, 643, 1.5),
+            _text(75, 640, "Led a cross-functional team of six across"),
+            _text(75, 626, "three regional offices and the migration to"),
+            _text(75, 612, "a new point of sale system for every store"),
+            _text(75, 598, "in the region, on time and under budget"),
+            _circle(66, 587, 1.5),
+            _text(75, 584, "Cut costs 12%"),
+        ]
+        texts = [l.text for l in pdfdoc.parse_pdf(_pdf_bytes(ops)).lines]
+        self.assertEqual(texts[0][:2], "• ")
+        self.assertEqual(texts[-1], "• Cut costs 12%")
+
+    def test_list_running_over_a_page_break_keeps_its_last_bullet(self):
+        """The first item wraps onto the next page, leaving the short last
+        item alone at the top of it — still the same list."""
+        page1 = [
+            _circle(66, 87, 1.5),
+            _text(75, 84, "Shipped the billing rewrite two weeks early"),
+            _circle(66, 73, 1.5),
+            _text(75, 70, "Led a cross-functional team of six across"),
+            _text(75, 56, "three regional offices and the migration to"),
+        ]
+        page2 = [
+            _text(75, 740, "a new point of sale system for every store"),
+            _circle(66, 729, 1.5),
+            _text(75, 726, "Cut costs 12%"),
+            _text(60, 700, "EDUCATION", font="F2"),
+        ]
+        texts = [
+            l.text for l in pdfdoc.parse_pdf(_pdf_pages_bytes([page1, page2])).lines
+        ]
+        self.assertIn("• Cut costs 12%", texts)
+
+    def test_heading_between_dots_still_ends_the_list(self):
+        """Only wrapped continuation lines bridge a long gap — a heading at
+        the margin between a contact icon and a list keeps them apart."""
+        ops = [
+            _circle(66, 703, 2.0),
+            _text(75, 700, "Denver, CO"),
+            _text(60, 680, "EXPERIENCE", font="F2"),
+            _text(60, 664, "Engineer - Acme"),
+            _circle(66, 651, 1.5),
+            _text(75, 648, "Shipped the billing rewrite"),
+            _circle(66, 637, 1.5),
+            _text(75, 634, "Cut costs 12%"),
+        ]
+        texts = [l.text for l in pdfdoc.parse_pdf(_pdf_bytes(ops)).lines]
+        self.assertEqual(texts[0], "Denver, CO")
+        self.assertIn("• Cut costs 12%", texts)
 
     def test_contact_icons_are_not_bullets(self):
         """5pt icons stacked beside email/phone/location lines are dot-

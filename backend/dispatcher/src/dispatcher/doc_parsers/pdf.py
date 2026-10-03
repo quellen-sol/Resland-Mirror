@@ -6,6 +6,7 @@ IR to build the resume's FormatProfile."""
 
 import bisect
 import io
+import math
 import re
 from collections import Counter
 from itertools import pairwise
@@ -39,6 +40,9 @@ _DOT_GAP_MAX_PT = 18.0
 # starts a new list.
 _DOT_SAME_X_PT = 2.0
 _DOT_LIST_GAP_LINES = 4.0
+# ...unless everything between the two dots is the first item's wrapped
+# continuation lines (a bullet running over several lines), up to this far.
+_DOT_LIST_WRAP_LINES = 12.0
 # A lone dot (a one-bullet list) counts only before sentence-length text;
 # a lone icon sits beside a short field ("Denver, CO").
 _LONE_BULLET_CHARS = 30
@@ -362,7 +366,49 @@ def _match_dots(dots: list[_Dot], frags: list[_Frag]) -> None:
             best[id(frag)] = (gap, dot)
 
 
-def _attach_bullets(dots: list[_Dot]) -> None:
+def _only_wraps_between(
+    prev: _Dot, dot: _Dot, frags_by_page: dict[int, list[_Frag]]
+) -> bool:
+    """True when every line between two same-x dots — on one page, or
+    across a page break — is a wrapped continuation of prev's item,
+    hanging-indented to (or past) its text. A heading, or any line reaching
+    back over the marker column, ends the list; lines in another column
+    (left of the markers, or right of the item text) don't count."""
+    text_x0 = prev.frag.x0
+    if prev.page == dot.page:
+        spans = [(prev.page, prev.cy, dot.cy)]
+    else:
+        spans = [(prev.page, prev.cy, math.inf), (dot.page, -math.inf, dot.cy)]
+    for page, lo, hi in spans:
+        for frag in frags_by_page.get(page, []):
+            if frag is prev.frag or frag is dot.frag or not lo < frag.cy < hi:
+                continue
+            if frag.x0 < text_x0 - _DOT_SAME_X_PT and frag.x1 > prev.x0:
+                return False
+    return True
+
+
+def _same_list(
+    prev: _Dot, dot: _Dot, frags_by_page: dict[int, list[_Frag]]
+) -> bool:
+    if dot.page == prev.page + 1:
+        # A list running over a page break: the last item can land alone
+        # at the top of the next page.
+        return _only_wraps_between(prev, dot, frags_by_page)
+    if prev.page != dot.page:
+        return False
+    gap = dot.cy - prev.cy
+    height = max(prev.frag.height, dot.frag.height)
+    if gap <= _DOT_LIST_GAP_LINES * height:
+        return True
+    return gap <= _DOT_LIST_WRAP_LINES * height and _only_wraps_between(
+        prev, dot, frags_by_page
+    )
+
+
+def _attach_bullets(
+    dots: list[_Dot], frags_by_page: dict[int, list[_Frag]]
+) -> None:
     """Turn drawn bullet dots into glyph prefixes ("• ", "▪ ", "○ ") — the
     pdf analogue of a literal list marker in docx text. Icons beside contact lines look
     exactly like bullets geometrically, so a dot only counts when it marks
@@ -384,12 +430,7 @@ def _attach_bullets(dots: list[_Dot]) -> None:
         clusters: list[list[_Dot]] = []
         for dot in group:
             prev = clusters[-1][-1] if clusters else None
-            if (
-                prev is not None
-                and prev.page == dot.page
-                and dot.cy - prev.cy
-                <= _DOT_LIST_GAP_LINES * max(prev.frag.height, dot.frag.height)
-            ):
+            if prev is not None and _same_list(prev, dot, frags_by_page):
                 clusters[-1].append(dot)
             else:
                 clusters.append([dot])
@@ -796,7 +837,7 @@ def parse_pdf(file_data: bytes) -> PdfDoc:
         staged.append((page, frags))
     # Bullet lists are recognized document-wide (a list continued on the
     # next page shares its x with the first page's).
-    _attach_bullets(dots)
+    _attach_bullets(dots, {page.number: frags for page, frags in staged})
     last_text_page = max((p.number for p, frags in staged if frags), default=-1)
     for page, frags in staged:
         groups = _reading_order(frags, continues=page.number < last_text_page)
