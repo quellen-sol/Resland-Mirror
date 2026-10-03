@@ -38,11 +38,21 @@ async def list_models(pg_conn: PgConnection) -> model.ModelsResponse:
 
         # What each action has actually cost per model — the picker shows
         # this so users see the average price of "this action" up front.
+        # An action (suggestion session / tailor run) is billed once per
+        # turn under "<id>:<turn_id>", so sum its turns before averaging.
+        # The 90-day window tracks current provider prices and bounds the
+        # scan (token_usage is indexed on created_at).
         avgs = await (
             await cursor.execute(
                 """
-                SELECT model, job_kind, AVG(amount_cents)
-                FROM token_usage GROUP BY model, job_kind
+                SELECT model, job_kind, AVG(action_cents)
+                FROM (
+                    SELECT model, job_kind, SUM(amount_cents) AS action_cents
+                    FROM token_usage
+                    WHERE created_at > now() - interval '90 days'
+                    GROUP BY model, job_kind, split_part(job_id, ':', 1)
+                ) per_action
+                GROUP BY model, job_kind
                 """
             )
         ).fetchall()

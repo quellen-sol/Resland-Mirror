@@ -23,16 +23,16 @@ export default function ModelSelect({
   onChange: (modelId: string) => void;
   disabled?: boolean;
   className?: string;
-  /** When set, shows what that action has historically averaged in cost
-   *  for the effective model, under the picker. */
+  /** When set, shows what that action has recently averaged in cost per
+   *  model (in the options and under the picker). */
   jobKind?: "SUGGESTION" | "TAILOR";
 }) {
   const [models, setModels] = useState<PricedModel[]>([]);
   const defaultModel = models.find((m) => m.is_default);
   const effective = models.find((m) => m.id === value) ?? defaultModel;
-  const estimate = jobKind
-    ? effective?.action_costs.find((c) => c.job_kind === jobKind)
-    : undefined;
+  const estimateFor = (m: PricedModel | undefined) =>
+    jobKind ? m?.action_costs.find((c) => c.job_kind === jobKind) : undefined;
+  const estimate = estimateFor(effective);
 
   useEffect(() => {
     let cancelled = false;
@@ -62,16 +62,23 @@ export default function ModelSelect({
         <option value="">
           Default{defaultModel ? ` (${defaultModel.display_name})` : ""}
         </option>
-        {models.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.display_name} — {m.cents_per_1k_input}/{m.cents_per_1k_output}¢
-            per 1K tok
-          </option>
-        ))}
+        {models.map((m) => {
+          // What users actually pay per use beats a raw token rate; the rate
+          // card only shows for models with no recent history.
+          const avg = estimateFor(m);
+          return (
+            <option key={m.id} value={m.id}>
+              {m.display_name} —{" "}
+              {avg
+                ? `~${fmtAvg(avg.avg_cents)} on average`
+                : `${m.cents_per_1k_input}¢ in / ${m.cents_per_1k_output}¢ out per 1K tokens`}
+            </option>
+          );
+        })}
       </select>
       {estimate && (
         <span className="px-0.5 text-[10px] text-zinc-500">
-          ~{fmtAvg(estimate.avg_cents)} avg per run
+          ~{fmtAvg(estimate.avg_cents)} on average with this model
         </span>
       )}
     </span>

@@ -311,12 +311,17 @@ async def test_list_models_includes_action_costs(pg, user):
         """
         INSERT INTO token_usage
           (user_id, job_kind, job_id, model, input_tokens, output_tokens,
-           amount_cents)
+           amount_cents, created_at)
         VALUES
-          ('u1', 'TAILOR', 't1', 'openrouter:a', 100, 50, 2.0),
-          ('u1', 'TAILOR', 't2', 'openrouter:a', 100, 50, 4.0),
-          ('u1', 'SUGGESTION', 's1', 'openrouter:a', 100, 50, 1.0),
-          ('u1', 'TAILOR', 't3', 'openrouter:off', 100, 50, 9.0)
+          ('u1', 'TAILOR', 't1', 'openrouter:a', 100, 50, 2.0, now()),
+          -- one run billed over two turns: counts as a single 4.0¢ action
+          ('u1', 'TAILOR', 't2:turn1', 'openrouter:a', 100, 50, 1.5, now()),
+          ('u1', 'TAILOR', 't2:turn2', 'openrouter:a', 100, 50, 2.5, now()),
+          ('u1', 'SUGGESTION', 's1', 'openrouter:a', 100, 50, 1.0, now()),
+          -- outside the 90-day window: stale prices don't skew the estimate
+          ('u1', 'SUGGESTION', 's0', 'openrouter:a', 100, 50, 50.0,
+           now() - interval '120 days'),
+          ('u1', 'TAILOR', 't3', 'openrouter:off', 100, 50, 9.0, now())
         """
     )
     resp = await service.list_models(pg)
