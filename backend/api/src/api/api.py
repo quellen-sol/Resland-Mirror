@@ -61,6 +61,7 @@ origins = [
     "http://192.168.1.8:3000",
     "https://resland.org",
     "https://www.resland.org",
+    "https://resland-frontned-production.up.railway.app",
 ]
 
 vercel_preview_origin = "https://resland.*\\.vercel\\.app"
