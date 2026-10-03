@@ -27,6 +27,8 @@ from fastapi import HTTPException
 from api.balance import require_balance, validate_model_choice
 from api.billing import model, service
 
+from .helpers import _Pg
+
 
 @pytest.fixture(autouse=True)
 def stripe_env(monkeypatch):
@@ -268,6 +270,69 @@ async def test_require_balance(pg, user):
         'UPDATE "user" SET balance_cents = 0.5 WHERE auth0_id = %s', ("u1",)
     )
     assert await require_balance(pg, "u1") == 0.5
+
+
+async def test_list_models_action_costs_assembly():
+    """Mapping check that runs without Postgres — the SQL itself is covered
+    by test_list_models_includes_action_costs when TEST_PG_URL is set."""
+    pg = _Pg(
+        [
+            [
+                ("openrouter:a", "A", 0.1, 0.5, True),
+                ("openrouter:b", "B", 0.2, 0.6, False),
+            ],
+            [
+                ("openrouter:a", "TAILOR", 3.5),
+                ("openrouter:a", "SUGGESTION", 1.0),
+            ],
+        ]
+    )
+    resp = await service.list_models(pg)
+    a, b = resp.models
+    assert a.action_costs == [
+        model.ActionCostEstimate(job_kind="TAILOR", avg_cents=3.5),
+        model.ActionCostEstimate(job_kind="SUGGESTION", avg_cents=1.0),
+    ]
+    assert b.action_costs == []
+
+
+async def test_list_models_includes_action_costs(pg, user):
+    await pg.execute(
+        """
+        INSERT INTO model_pricing
+          (id, display_name, cents_per_1k_input, cents_per_1k_output,
+           enabled, is_default, sort_order)
+        VALUES ('openrouter:a', 'A', 0.10, 0.50, true, true, 0),
+               ('openrouter:b', 'B', 0.20, 0.60, true, false, 1),
+               ('openrouter:off', 'Off', 0.10, 0.10, false, false, 2)
+        """
+    )
+    await pg.execute(
+        """
+        INSERT INTO token_usage
+          (user_id, job_kind, job_id, model, input_tokens, output_tokens,
+           amount_cents, created_at)
+        VALUES
+          ('u1', 'TAILOR', 't1', 'openrouter:a', 100, 50, 2.0, now()),
+          -- one run billed over two turns: counts as a single 4.0¢ action
+          ('u1', 'TAILOR', 't2:turn1', 'openrouter:a', 100, 50, 1.5, now()),
+          ('u1', 'TAILOR', 't2:turn2', 'openrouter:a', 100, 50, 2.5, now()),
+          ('u1', 'SUGGESTION', 's1', 'openrouter:a', 100, 50, 1.0, now()),
+          -- outside the 90-day window: stale prices don't skew the estimate
+          ('u1', 'SUGGESTION', 's0', 'openrouter:a', 100, 50, 50.0,
+           now() - interval '120 days'),
+          ('u1', 'TAILOR', 't3', 'openrouter:off', 100, 50, 9.0, now())
+        """
+    )
+    resp = await service.list_models(pg)
+    by_id = {m.id: m for m in resp.models}
+    # Disabled models stay hidden even though they have usage history.
+    assert "openrouter:off" not in by_id
+    costs = {c.job_kind: c for c in by_id["openrouter:a"].action_costs}
+    assert costs["TAILOR"].avg_cents == 3.0
+    assert costs["SUGGESTION"].avg_cents == 1.0
+    # No usage history → no estimates.
+    assert by_id["openrouter:b"].action_costs == []
 
 
 async def test_validate_model_choice(pg):

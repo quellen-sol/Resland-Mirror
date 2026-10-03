@@ -433,6 +433,7 @@ export default function TailorForm({
                   value={model}
                   onChange={setModel}
                   disabled={busy}
+                  jobKind="TAILOR"
                 />
                 <Button
                   onClick={start}

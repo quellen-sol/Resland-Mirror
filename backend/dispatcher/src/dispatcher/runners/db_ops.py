@@ -82,6 +82,19 @@ def fetch_generation_cost_cents(generation_ids: list[str]) -> float | None:
     return total * 100
 
 
+def usage_job_id(base_id: str, job_data: dict) -> str:
+    """token_usage key for one turn of a multi-turn session/run.
+
+    Each published turn carries its own turn_id (see shared.amqp), so every
+    turn gets its own ledger row while a redelivery of the same turn still
+    conflicts. Jobs published before turn ids existed fall back to the bare
+    id — one row per session, as before."""
+    turn_id = job_data.get("turn_id")
+    if isinstance(turn_id, str) and turn_id:
+        return f"{base_id}:{turn_id}"
+    return base_id
+
+
 def record_token_usage(
     pg_client: Connection,
     *,

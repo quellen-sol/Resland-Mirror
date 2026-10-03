@@ -352,6 +352,7 @@ export default function SuggestionDialog({
                 value={model}
                 onChange={setModel}
                 disabled={busy}
+                jobKind="SUGGESTION"
               />
               <Button
                 onClick={start}

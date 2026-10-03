@@ -9,10 +9,15 @@ import os
 
 import psycopg
 import pytest
+from shared.testing import destructive_db_ok
 
+# Default to a *_test database so the safe path is the default path; the
+# destructive fixtures below refuse to run against anything else.
 TEST_PG_URL = os.getenv(
-    "TEST_PG_URL", "postgres://resland:resland@localhost:5432/resland"
+    "TEST_PG_URL", "postgres://resland:resland@localhost:5432/resland_test"
 )
+
+_DESTRUCTIVE_OK, _DESTRUCTIVE_REASON = destructive_db_ok(TEST_PG_URL)
 
 _conn = None
 try:
@@ -31,6 +36,8 @@ if _conn is not None:
 async def pg():
     if not PG_AVAILABLE:
         pytest.skip(f"needs Postgres at TEST_PG_URL ({TEST_PG_URL})")
+    if not _DESTRUCTIVE_OK:
+        pytest.skip(_DESTRUCTIVE_REASON)
     conn = await psycopg.AsyncConnection.connect(TEST_PG_URL, autocommit=True)
     await conn.execute(
         'TRUNCATE balance_purchase, token_usage, model_pricing, "user" CASCADE'
