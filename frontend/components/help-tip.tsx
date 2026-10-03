@@ -13,6 +13,9 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "cn";
 
+/** A "?" button that opens a short help dialog. Render it beside a heading
+ *  (e.g. in a flex row), not inside it — inside an <h1> screen readers
+ *  announce the button as part of the heading text. */
 export default function HelpTip({
   title,
   children,

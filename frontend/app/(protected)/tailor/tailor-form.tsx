@@ -336,23 +336,30 @@ export default function TailorForm({
     <div className="flex flex-col gap-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="flex items-center gap-2 bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-            Tailor Resume
+          <div className="flex items-center gap-2">
+            <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+              Tailor Resume
+            </h1>
             <HelpTip title="Tailor Resume">
               <p>
-                Paste a job description and the agent rewrites and reorders
-                your bullets to match it. The result is saved to your Tailored
-                Resumes board, where you can keep editing and export it.
+                Paste a job description and AI rewrites and reorders your
+                bullets to match it.
               </p>
               <p>
-                Tailoring draws from your balance — the cost depends on the
-                model you pick.
+                Results aren&apos;t saved automatically — click Save to
+                Tailored Resumes to keep one. Saved resumes live on your
+                Tailored Resumes board, where you can keep editing and export
+                them.
+              </p>
+              <p>
+                Tailoring draws from your balance — the cost depends on how
+                much work it takes and the model you pick.
               </p>
             </HelpTip>
-          </h1>
+          </div>
           <p className="mt-1 text-sm text-zinc-400">
-            Paste a job description — the agent rewrites and reorders your
-            bullets to match it.
+            Paste a job description — AI rewrites and reorders your bullets to
+            match it.
           </p>
         </div>
         <Link

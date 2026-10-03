@@ -74,8 +74,10 @@ export default async function DashboardPage() {
         <JobStatusPoller jobIds={activeJobIds} />
         <header className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="flex items-center gap-2 bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-              Dashboard
+            <div className="flex items-center gap-2">
+              <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+                Dashboard
+              </h1>
               <HelpTip title="Your Dashboard">
                 <p>
                   This is your base resume information — the version everything
@@ -84,11 +86,12 @@ export default async function DashboardPage() {
                   anytime.
                 </p>
                 <p>
-                  The sparkle icons open suggestion sessions, and the copy icon
-                  copies a bullet to your clipboard.
+                  The sparkle icons ask AI for suggestions on a bullet or a
+                  whole job, and the copy icon copies a bullet to your
+                  clipboard.
                 </p>
               </HelpTip>
-            </h1>
+            </div>
             <p className="mt-1 truncate text-sm text-zinc-400">
               {user.full_name ?? session?.user.name ?? session?.user.email}
             </p>

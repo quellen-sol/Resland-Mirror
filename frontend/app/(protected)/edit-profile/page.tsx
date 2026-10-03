@@ -72,8 +72,10 @@ export default async function EditProfilePage() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
 
       <main className="relative w-full max-w-3xl">
-        <h1 className="flex items-center gap-2 bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-          Edit Profile
+        <div className="flex items-center gap-2">
+          <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+            Edit Profile
+          </h1>
           <HelpTip title="Edit Profile">
             <p>
               Everything here is your base resume — it&apos;s what AI
@@ -81,7 +83,7 @@ export default async function EditProfilePage() {
               it current.
             </p>
           </HelpTip>
-        </h1>
+        </div>
         <p className="mt-1 text-sm text-zinc-400">
           Update your contact info, links, experience, education, projects, and
           skills.

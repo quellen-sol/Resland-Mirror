@@ -20,8 +20,10 @@ export default async function TailoredPage() {
       <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
         <header className="flex items-center justify-between gap-4">
           <div className="min-w-0">
-            <h1 className="flex items-center gap-2 bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-              Tailored Resumes
+            <div className="flex items-center gap-2">
+              <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+                Tailored Resumes
+              </h1>
               <HelpTip title="Tailored Resumes">
                 <p>
                   Each entry is a version of your resume tailored to a specific
@@ -29,7 +31,7 @@ export default async function TailoredPage() {
                   document.
                 </p>
               </HelpTip>
-            </h1>
+            </div>
             <p className="mt-1 text-sm text-zinc-400">
               Saved versions of your resume tailored to a specific job — edit
               one or generate its document.

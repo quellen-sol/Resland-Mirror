@@ -148,25 +148,34 @@ export default function BillingClient({
     <div className="flex flex-col gap-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="flex items-center gap-2 bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-            Billing
+          <div className="flex items-center gap-2">
+            <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+              Billing
+            </h1>
             <HelpTip title="How Billing Works">
               <p>
                 Resland is pay-as-you-go — no subscription. Buy a pack below to
                 add to your balance, and AI features like suggestions and
-                tailoring draw from it based on the model&apos;s token usage.
+                tailoring draw from it.
               </p>
               <p>
-                Bigger packs include bonus balance. A job that already started
-                is never cut off mid-run; the charge just can&apos;t take your
-                balance below zero.
+                Each request is charged for what it actually uses: the AI
+                provider&apos;s cost for that work, plus a service fee. More
+                capable models cost more, and any prices shown next to a model
+                are estimates.
+              </p>
+              <p>
+                Bigger packs include bonus balance. Anything that&apos;s already
+                started is never cut off partway through — the charge just
+                can&apos;t take your balance below zero. You need a balance
+                above zero to start something new.
               </p>
               <p>
                 Checkout is handled securely by Stripe, and every purchase
                 shows up in your history below.
               </p>
             </HelpTip>
-          </h1>
+          </div>
           <p className="mt-1 text-sm text-zinc-400">
             Balance powers suggestions and tailoring — top up when you run low.
           </p>
