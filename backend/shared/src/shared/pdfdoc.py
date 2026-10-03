@@ -24,6 +24,16 @@ class PdfStyle:
 
 
 @dataclass
+class PdfRun:
+    """A stretch of a line's text in one character style — the pdf
+    analogue of a docx run. `x0` is where the stretch starts on the page."""
+
+    text: str
+    style: PdfStyle
+    x0: float | None = None
+
+
+@dataclass
 class PdfLine:
     """One visually-contiguous text line. `top`/`bottom` are distances from
     the page's top edge in points (PDF origin is bottom-left; these are
@@ -35,13 +45,29 @@ class PdfLine:
     x1: float  # right edge
     top: float  # pt below page top
     bottom: float  # pt below page top (top + line height)
-    style: PdfStyle
+    style: PdfStyle  # dominant style across the line's glyphs
     gap_before_pt: float = 0.0  # vertical gap above this line on the same page
     ends_page: bool = False
+    # Per-style stretches whose texts concatenate to `text`; empty when the
+    # producer didn't record them (hand-built IR) — `style` covers it all.
+    runs: list[PdfRun] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
         return not self.text.strip()
+
+    def run_at(self, offset: int) -> PdfRun | None:
+        """The run covering character `offset` of `text`, if runs exist."""
+        pos = 0
+        for run in self.runs:
+            pos += len(run.text)
+            if offset < pos:
+                return run
+        return None
+
+    def style_at(self, offset: int) -> PdfStyle:
+        run = self.run_at(offset)
+        return run.style if run is not None else self.style
 
 
 @dataclass
@@ -66,21 +92,37 @@ class PdfDoc:
         return [line for page in self.pages for line in page.lines]
 
 
-def page_columns(page: PdfPage) -> int:
-    """Estimated text-column count for a page. A second column exists when a
+def column_gutter(lines: list[PdfLine]) -> float | None:
+    """x position of a real second column's left edge, or None when the
+    lines form a single-column page. A second column exists when a
     substantial group of lines starts right of where the bulk of lines end —
     a gutter of white space no text crosses. Right-aligned dates share the
-    main column's right edge, so they don't count as a column."""
-    non_empty = [line for line in page.lines if not line.empty]
+    main column's right edge, so they don't count as a column, and neither
+    does a localized two-column grid (e.g. a skills block) on an otherwise
+    single-column page — both columns must run for a real vertical stretch."""
+    non_empty = [line for line in lines if not line.empty]
     if len(non_empty) < 6:
-        return 1
+        return None
     lefts = sorted(line.x0 for line in non_empty)
     gutter = lefts[int(len(lefts) * 0.75)]
     left_col = [line for line in non_empty if line.x1 <= gutter - 12]
     right_col = [line for line in non_empty if line.x0 >= gutter - 4]
-    if (
-        len(left_col) >= max(3, len(non_empty) * 0.25)
-        and len(right_col) >= max(3, len(non_empty) * 0.25)
+    if len(left_col) < max(3, len(non_empty) * 0.25) or len(right_col) < max(
+        3, len(non_empty) * 0.25
     ):
-        return 2
-    return 1
+        return None
+    span = max(line.bottom for line in non_empty) - min(
+        line.top for line in non_empty
+    )
+    for col in (left_col, right_col):
+        col_span = max(line.bottom for line in col) - min(
+            line.top for line in col
+        )
+        if span > 0 and col_span < span * 0.35:
+            return None
+    return gutter
+
+
+def page_columns(page: PdfPage) -> int:
+    """Estimated text-column count for a page (see column_gutter)."""
+    return 2 if column_gutter(page.lines) is not None else 1

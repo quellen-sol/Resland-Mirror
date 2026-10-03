@@ -25,6 +25,7 @@ from shared.docgen import (
     SECTION_SUMMARY,
     FormatProfile,
     ResumeContent,
+    _section_header_idx,
     ResumeEducation,
     ResumeExperience,
     ResumeHeader,
@@ -238,6 +239,27 @@ class Capture(unittest.TestCase):
     def test_serializes_to_json(self):
         # The DB stores fmt.to_json() — it must round-trip without loss.
         self.assertEqual(FormatProfile.from_json(self.fmt.to_json()), self.fmt)
+
+
+class SectionHeaderIdx(unittest.TestCase):
+    class _P:
+        """Duck-typed paragraph — the scan only reads .text."""
+
+        def __init__(self, text):
+            self.text = text
+
+    def test_punctuated_tail_does_not_shadow_header(self):
+        paras = [
+            self._P("EXPERIENCE"),
+            self._P(""),
+            self._P("A stray short line."),
+            self._P("First entry title"),
+        ]
+        self.assertEqual(_section_header_idx(paras, 3, set()), 0)
+
+    def test_punctuated_only_gives_none(self):
+        paras = [self._P("A stray short line."), self._P("First entry")]
+        self.assertIsNone(_section_header_idx(paras, 1, set()))
 
 
 class Render(unittest.TestCase):
