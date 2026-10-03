@@ -89,12 +89,18 @@ export async function apiFetch(
   return res.json();
 }
 
+export interface ModelActionCost {
+  job_kind: "SUGGESTION" | "TAILOR";
+  avg_cents: number;
+}
+
 export interface PricedModel {
   id: string;
   display_name: string;
   cents_per_1k_input: number;
   cents_per_1k_output: number;
   is_default: boolean;
+  action_costs: ModelActionCost[];
 }
 
 export function fmtCents(cents: number) {
