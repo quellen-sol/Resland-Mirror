@@ -8,6 +8,7 @@ import bisect
 import io
 import re
 from collections import Counter
+from itertools import pairwise
 from typing import Any
 
 from shared.pdfdoc import (
@@ -16,7 +17,6 @@ from shared.pdfdoc import (
     PdfPage,
     PdfRun,
     PdfStyle,
-    column_gutter,
     page_columns,
 )
 
@@ -46,6 +46,21 @@ _LONE_BULLET_CHARS = 30
 # single space, wider gaps get four — so a right-floated date reads as a
 # gap, not as inline text.
 _ROW_JOIN_GAP_PT = 14.0
+# Narrowest vertical strip of white space that can separate text bands.
+_CHANNEL_MIN_PT = 6.0
+# Two lines of one band read as a continuous block when the white space
+# between them is at most this many line heights.
+_TIGHT_GAP_LINES = 1.0
+# Cells of a floated column (dates, locations) or a label column are short.
+_SHORT_CELL_CHARS = 40
+_LABEL_MAX_CHARS = 30
+_RIGHT_ALIGN_TOL_PT = 4.0
+_MAX_LAYOUT_DEPTH = 32
+
+_DATE_LIKE = re.compile(
+    r"\b(?:19|20)\d{2}\b|\b(?:present|current|now)\b",
+    re.IGNORECASE,
+)
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _PHONE = re.compile(r"^\+?[\d\s().\-/]{7,}$")
 _URL = re.compile(
@@ -88,7 +103,6 @@ def _font_flags(font_name: str) -> tuple[bool, bool]:
     style = re.split(r"[-,]", lower)[-1] if re.search(r"[-,]", lower) else ""
     italic = any(w in lower for w in _ITALIC_WORDS) or style.endswith("it")
     return bold, italic
-
 
 
 def _font_family(font_name: str) -> str:
@@ -154,7 +168,6 @@ def _dot_glyph(item) -> str | None:
     return None
 
 
-
 def _iter_dots(container):
     """Small dot-like shapes — how bullet glyphs are typically drawn in
     generated PDFs — as (shape, glyph) pairs."""
@@ -166,7 +179,6 @@ def _iter_dots(container):
             glyph = _dot_glyph(item)
             if glyph is not None:
                 yield item, glyph
-
 
 
 def _iter_rules(container, min_width: float):
@@ -191,7 +203,6 @@ def _char_key(char) -> tuple:
     )
 
 
-
 def _key_style(key: tuple | None) -> PdfStyle:
     if key is None:
         return PdfStyle()
@@ -204,7 +215,6 @@ def _key_style(key: tuple | None) -> PdfStyle:
         italic=italic,
         color=color,
     )
-
 
 
 def _pieces(item) -> list[list]:
@@ -230,7 +240,6 @@ def _pieces(item) -> list[list]:
         pieces[0][0] = pieces[0][0].lstrip()
         pieces[-1][0] = pieces[-1][0].rstrip()
     return pieces
-
 
 
 class _Frag:
@@ -263,7 +272,6 @@ class _Frag:
         if self.pieces:
             self.pieces[0][0] = f"{glyph} {self.pieces[0][0]}"
         self.x0 = min(self.x0, x0)
-
 
 
 def _row_rows(frags: list[_Frag]) -> list[list[_Frag]]:
@@ -313,7 +321,6 @@ class _Dot:
         self.frag: _Frag | None = None
 
 
-
 def _contact_like(text: str) -> bool:
     """An email, phone number, or bare URL/handle — what icons sit next to
     in a contact block, never what a bullet list holds."""
@@ -323,7 +330,6 @@ def _contact_like(text: str) -> bool:
     if _PHONE.match(body) and sum(c.isdigit() for c in body) >= 7:
         return True
     return bool(_URL.match(body))
-
 
 
 def _match_dots(dots: list[_Dot], frags: list[_Frag]) -> None:
@@ -354,7 +360,6 @@ def _match_dots(dots: list[_Dot], frags: list[_Frag]) -> None:
                 held[1].frag = None
             dot.frag = frag
             best[id(frag)] = (gap, dot)
-
 
 
 def _attach_bullets(dots: list[_Dot]) -> None:
@@ -399,6 +404,325 @@ def _attach_bullets(dots: list[_Dot]) -> None:
                     dot.frag.prefix(dot.glyph, dot.x0)
 
 
+# ---------- reading order ----------
+#
+# Fragments on one visual row normally merge into one line (a title and its
+# right-floated dates, "Label:" and its value). That must never fuse text
+# from two independent bands — a sidebar beside the main column, two page
+# columns — so each page is searched for vertical channels: strips of white
+# space that separate cells on some row and that no cell crosses for a run
+# of consecutive rows. Right-floated cells (dates, locations right-aligned
+# at their column's edge) are first joined to the cell on their left, so a
+# title + date row reads as one cell that crosses any channel between them.
+# Each channel's band layout decides how its rows are read:
+#   merge   — the left band is "Label:" cells or lone list markers, or the
+#             right band is isolated or floated cells: rows join across the
+#             channel as before.
+#   rows    — a grid/table (row-aligned cells that start and stop together)
+#             or isolated left cells beside a text block (a name beside a
+#             stacked contact block, dates in a left margin): every cell is
+#             its own line, in row order.
+#   columns — two independent text flows (sidebar + main, page columns):
+#             one band entirely, then the other.
+
+_MERGE = "merge"
+_ROWS = "rows"
+_COLUMNS = "columns"
+_FLOAT_X1_TOL_PT = 2.0
+_RAGGED_X0_PT = 3.0
+_LIST_MARKER = re.compile(r"^(?:[^\w\s]{1,2}|\(?\d{1,2}[.)]|[a-z][.)])$")
+
+
+class _Seg:
+    """Cells of one row that read as a unit for channel detection — a
+    fragment plus any right-floated cells joined to it."""
+
+    __slots__ = ("bottom", "frags", "top", "x0", "x1")
+
+    def __init__(self, frag: _Frag):
+        self.x0 = frag.x0
+        self.x1 = frag.x1
+        self.top = frag.top
+        self.bottom = frag.bottom
+        self.frags = [frag]
+
+    def join(self, frag: _Frag) -> None:
+        self.x1 = max(self.x1, frag.x1)
+        self.top = min(self.top, frag.top)
+        self.bottom = max(self.bottom, frag.bottom)
+        self.frags.append(frag)
+
+    @property
+    def text(self) -> str:
+        return " ".join(f.text for f in self.frags)
+
+
+def _floated(rows: list[list[_Frag]]) -> set[int]:
+    """ids of right-floated cells: the short rightmost cell of a row that
+    ends at the right edge of its column (no text above or below reaches
+    further right) — a date-like cell on its own, otherwise several whose
+    right edges line up while their left edges don't (right-aligned dates
+    and locations). Three or more on consecutive rows read as a column
+    instead — that's for the channel analysis."""
+    frags = [f for row in rows for f in row]
+    cands: list[tuple[int, _Frag]] = []
+    for i, row in enumerate(rows):
+        if len(row) < 2:
+            continue
+        cell = max(row, key=lambda f: f.x1)
+        if cell is min(row, key=lambda f: f.x0) or len(cell.text) > _SHORT_CELL_CHARS:
+            continue
+        edge = max(f.x1 for f in frags if f.x0 < cell.x1 and f.x1 > cell.x0)
+        if cell.x1 >= edge - _RIGHT_ALIGN_TOL_PT:
+            cands.append((i, cell))
+    cands.sort(key=lambda c: c[1].x1)
+    groups: list[list[tuple[int, _Frag]]] = []
+    for cand in cands:
+        if groups and cand[1].x1 - groups[-1][0][1].x1 <= _FLOAT_X1_TOL_PT:
+            groups[-1].append(cand)
+        else:
+            groups.append([cand])
+    out: set[int] = set()
+    for group in groups:
+        if len(group) == 1:
+            if _DATE_LIKE.search(group[0][1].text):
+                out.add(id(group[0][1]))
+            continue
+        x0s = [f.x0 for _, f in group]
+        if max(x0s) - min(x0s) <= _RAGGED_X0_PT and not all(
+            _DATE_LIKE.search(f.text) for _, f in group
+        ):
+            # Aligned on both edges: a column of cells, unless they're
+            # equal-width date ranges.
+            continue
+        idx = sorted(i for i, _ in group)
+        run = longest = 1
+        for a, b in pairwise(idx):
+            run = run + 1 if b == a + 1 else 1
+            longest = max(longest, run)
+        if longest < 3:
+            out.update(id(f) for _, f in group)
+    return out
+
+
+def _segments(rows: list[list[_Frag]]) -> list[list[_Seg]]:
+    floated = _floated(rows)
+    out: list[list[_Seg]] = []
+    for row in rows:
+        segs: list[_Seg] = []
+        for frag in sorted(row, key=lambda f: f.x0):
+            if id(frag) in floated and segs:
+                segs[-1].join(frag)
+            else:
+                segs.append(_Seg(frag))
+        out.append(segs)
+    return out
+
+
+class _Channel:
+    __slots__ = ("crossed_below", "end", "hi", "lo", "mode", "start")
+
+    def __init__(self, lo, hi, start, end, crossed_below):
+        self.lo = lo
+        self.hi = hi
+        self.start = start
+        self.end = end
+        self.crossed_below = crossed_below
+        self.mode = _MERGE
+
+
+def _clip(row: list[_Seg], lo: float, hi: float) -> tuple[float, float] | None:
+    """Narrow the channel (lo, hi) around the row's cells; None when a cell
+    crosses it or leaves too little white space."""
+    for s in row:
+        if s.x1 <= lo or s.x0 >= hi:
+            continue
+        if s.x0 <= lo:
+            lo = s.x1
+        elif s.x1 >= hi:
+            hi = s.x0
+        else:
+            return None
+        if hi - lo < _CHANNEL_MIN_PT:
+            return None
+    return lo, hi
+
+
+def _grow(rows: list[list[_Seg]], i: int, lo: float, hi: float) -> _Channel:
+    """Extend a seed gap on row i up and down while no cell crosses."""
+    end = i
+    j = i + 1
+    while j < len(rows):
+        clipped = _clip(rows[j], lo, hi)
+        if clipped is None:
+            break
+        lo, hi = clipped
+        end = j
+        j += 1
+    crossed_below = j < len(rows)
+    start = i
+    j = i - 1
+    while j >= 0:
+        clipped = _clip(rows[j], lo, hi)
+        if clipped is None:
+            break
+        lo, hi = clipped
+        start = j
+        j -= 1
+    return _Channel(lo, hi, start, end, crossed_below)
+
+
+def _channels(rows: list[list[_Seg]]) -> list[_Channel]:
+    found: list[_Channel] = []
+    for i, row in enumerate(rows):
+        reach = row[0].x1
+        for seg in row[1:]:
+            if seg.x0 - reach >= _CHANNEL_MIN_PT and not any(
+                ch.start <= i <= ch.end and reach < ch.hi and seg.x0 > ch.lo
+                for ch in found
+            ):
+                found.append(_grow(rows, i, reach, seg.x0))
+            reach = max(reach, seg.x1)
+    return found
+
+
+def _is_label(text: str) -> bool:
+    text = text.strip()
+    return text.endswith(":") and len(text) <= _LABEL_MAX_CHARS
+
+
+def _tight(band: list[list[_Seg]]) -> bool:
+    """Whether some two consecutive lines of the band sit a normal line
+    gap apart — a block of text rather than isolated cells."""
+    lines = [
+        (min(s.top for s in cells), max(s.bottom for s in cells))
+        for cells in band
+        if cells
+    ]
+    for (top0, bot0), (top1, bot1) in pairwise(lines):
+        h = max(bot0 - top0, bot1 - top1, 1.0)
+        if top1 - bot0 <= h * _TIGHT_GAP_LINES:
+            return True
+    return False
+
+
+def _sides(region: list[list[_Seg]], ch: _Channel):
+    lefts = [[s for s in row if s.x1 <= ch.lo] for row in region]
+    rights = [[s for s in row if s.x0 >= ch.hi] for row in region]
+    paired = [k for k in range(len(region)) if lefts[k] and rights[k]]
+    return lefts, rights, paired
+
+
+def _classify(rows: list[list[_Seg]], ch: _Channel) -> str:
+    region = rows[ch.start : ch.end + 1]
+    lefts, rights, paired = _sides(region, ch)
+    if not paired:
+        return _MERGE
+    first, last = paired[0], paired[-1]
+    nearest_left = [max(lefts[k], key=lambda s: s.x1).text.strip() for k in paired]
+    # "Phone:" / "Email:" label cells beside their values, and list markers
+    # ("•", "1.") drawn apart from their item text.
+    if all(_is_label(t) for t in nearest_left) or all(
+        _LIST_MARKER.match(t) for t in nearest_left
+    ):
+        return _MERGE
+    right_cells = [s for cells in rights for s in cells]
+    right_only = any(rights[k] and not lefts[k] for k in range(len(region)))
+    if not right_only and all(
+        len(s.text) <= _SHORT_CELL_CHARS for s in right_cells
+    ):
+        x1s = [s.x1 for s in right_cells]
+        x0s = [s.x0 for s in right_cells]
+        right_aligned = max(x1s) - min(x1s) <= _RIGHT_ALIGN_TOL_PT and (
+            len(right_cells) == 1 or max(x0s) - min(x0s) > _RAGGED_X0_PT
+        )
+        if right_aligned or all(_DATE_LIKE.search(s.text) for s in right_cells):
+            # Right-floated dates/locations beside entry titles.
+            return _MERGE
+    if not _tight(rights):
+        # Isolated right cells beside left text (tab-aligned entry tails).
+        return _MERGE
+    if not _tight(lefts):
+        # Isolated left cells beside a right text block: a name beside a
+        # stacked contact block, dates or section labels in a left margin.
+        return _ROWS
+    post = len(region) - 1 - last
+    right_pre = sum(1 for k in range(first) if rights[k])
+    unpaired = sum(
+        1 for k in range(first, last + 1) if not (lefts[k] and rights[k])
+    )
+    if (
+        len(paired) >= 2
+        and post <= 2
+        and right_pre <= 1
+        and unpaired <= max(1, (last - first + 1) // 5)
+        and all(len(s.text) <= _LABEL_MAX_CHARS for k in paired for s in lefts[k])
+    ):
+        # Row-aligned cells that start and stop together, short on the left
+        # (skills grid, "Languages    Python, Go" table) — not two prose
+        # columns that happen to line up.
+        return _ROWS
+    return _COLUMNS
+
+
+def _split_channel(rows: list[list[_Seg]]) -> _Channel | None:
+    candidates = _channels(rows)
+    candidates.sort(key=lambda ch: (ch.end - ch.start, ch.hi - ch.lo), reverse=True)
+    for ch in candidates:
+        ch.mode = _classify(rows, ch)
+        if ch.mode == _MERGE:
+            continue
+        if ch.mode == _COLUMNS and ch.crossed_below:
+            _, _, paired = _sides(rows[ch.start : ch.end + 1], ch)
+            # A short tail of one-sided rows before the crossing row (the
+            # next section's header) belongs after the bands, not in one.
+            if ch.end - ch.start - paired[-1] <= 2:
+                ch.end = ch.start + paired[-1]
+        return ch
+    return None
+
+
+def _reading_order(
+    frags: list[_Frag], continues: bool = False, depth: int = 0
+) -> list[list[_Frag]]:
+    """Fragments → line groups in reading order (each group merges into
+    one PdfLine). `continues`: the page's text runs on to the next page."""
+    rows = _row_rows(frags)
+    if depth >= _MAX_LAYOUT_DEPTH:
+        return rows
+    segs = _segments(rows)
+    ch = _split_channel(segs)
+    if ch is None:
+        return rows
+    region = segs[ch.start : ch.end + 1]
+    pre = [f for row in rows[: ch.start] for f in row]
+    post = [f for row in rows[ch.end + 1 :] for f in row]
+    left = [f for row in region for s in row if s.x1 <= ch.lo for f in s.frags]
+    right = [f for row in region for s in row if s.x0 >= ch.hi for f in s.frags]
+    out = _reading_order(pre, continues, depth + 1)
+    left_lines = _reading_order(left, continues, depth + 1)
+    right_lines = _reading_order(right, continues, depth + 1)
+    if ch.mode == _COLUMNS:
+        # Left band first — unless the page continues and the left band
+        # runs further down than the right one (a main column beside a
+        # shorter right sidebar): that band carries on onto the next page,
+        # so it reads last and stays contiguous across the break.
+        line_h = max(f.height for f in frags)
+        left_end = max(f.bottom for f in left)
+        right_end = max(f.bottom for f in right)
+        if continues and not post and left_end > right_end + line_h:
+            out += right_lines + left_lines
+        else:
+            out += left_lines + right_lines
+    else:
+        row_of = {id(f): k for k, row in enumerate(region) for s in row for f in s.frags}
+        out += sorted(
+            left_lines + right_lines,
+            key=lambda g: (min(row_of[id(f)] for f in g), min(f.x0 for f in g)),
+        )
+    out += _reading_order(post, continues, depth + 1)
+    return out
+
 
 def _merge_row(page_number: int, frags: list[_Frag]) -> PdfLine | None:
     """Join a row's fragments left-to-right into one PdfLine — the pdf
@@ -438,7 +762,6 @@ def _merge_row(page_number: int, frags: list[_Frag]) -> PdfLine | None:
     )
 
 
-
 def parse_pdf(file_data: bytes) -> PdfDoc:
     from pdfminer.high_level import extract_pages
 
@@ -474,38 +797,14 @@ def parse_pdf(file_data: bytes) -> PdfDoc:
     # Bullet lists are recognized document-wide (a list continued on the
     # next page shares its x with the first page's).
     _attach_bullets(dots)
+    last_text_page = max((p.number for p, frags in staged if frags), default=-1)
     for page, frags in staged:
-        # Merge fragments that share a visual row. On a genuine two-column
-        # page the columns stay separate; everywhere else a title and its
-        # right-floated dates (or a label and its value) read as one line.
-        gutter = column_gutter(list(frags))
-        merged: list[PdfLine] = []
-        for row in _row_rows(frags):
-            if gutter is None:
-                line = _merge_row(page.number, row)
-                if line is not None:
-                    merged.append(line)
-                continue
-            left = [f for f in row if (f.x0 + f.x1) / 2 < gutter]
-            right = [f for f in row if (f.x0 + f.x1) / 2 >= gutter]
-            for band in (left, right):
-                line = _merge_row(page.number, band) if band else None
-                if line is not None:
-                    merged.append(line)
-        if gutter is None:
-            page.lines = sorted(merged, key=lambda l: (l.top, l.x0))
-        else:
-            # Column-major order keeps each column's sections contiguous.
-            page.lines = [
-                *sorted(
-                    (l for l in merged if (l.x0 + l.x1) / 2 < gutter),
-                    key=lambda l: (l.top, l.x0),
-                ),
-                *sorted(
-                    (l for l in merged if (l.x0 + l.x1) / 2 >= gutter),
-                    key=lambda l: (l.top, l.x0),
-                ),
-            ]
+        groups = _reading_order(frags, continues=page.number < last_text_page)
+        page.lines = [
+            line
+            for line in (_merge_row(page.number, group) for group in groups)
+            if line is not None
+        ]
         prev: PdfLine | None = None
         for line in page.lines:
             if prev is not None:

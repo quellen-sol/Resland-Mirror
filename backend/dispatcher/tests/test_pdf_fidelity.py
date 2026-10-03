@@ -316,6 +316,37 @@ class FixtureParse(unittest.TestCase):
     def test_first_line_is_the_name(self):
         self.assertEqual(self.doc.lines[0].text, "DANA PRESCOTT")
 
+    def test_skills_grid_cells_are_separate_lines(self):
+        """The two-band skills grid: every cell its own bulleted line, all
+        between SKILLS and WORK EXPERIENCE — no '• A    • B' rows and no
+        page-wide column split."""
+        texts = [line.text for line in self.doc.lines]
+        start = texts.index("SKILLS")
+        self.assertEqual(texts[start + 11], "WORK EXPERIENCE")
+        cells = texts[start + 1 : start + 11]
+        self.assertEqual(
+            sorted(cells),
+            sorted(
+                "• " + s
+                for s in (
+                    "Agile & Scrum Fundamentals",
+                    "Project Scheduling & Coordination",
+                    "Documentation & Record Keeping",
+                    "Client & Stakeholder Communication",
+                    "Vendor & Cross-Team Collaboration",
+                    "Timeline & Task Management",
+                    "Budgeting & Resource Allocation",
+                    "Process Improvement",
+                    "Self-Directed & Cross-Functional Leadership",
+                    "Content Creation Through Multiple Platforms",
+                )
+            ),
+        )
+        # Each band keeps its own top-to-bottom order.
+        left = [t for t in cells if "Agile" in t or "Documentation" in t or "Vendor" in t]
+        self.assertEqual(left, [c for c in cells if c in left])
+        self.assertLess(cells.index(left[0]), cells.index(left[1]))
+
     def test_contact_labels_keep_their_own_runs(self):
         line = next(l for l in self.doc.lines if l.text.startswith("Phone:"))
         self.assertTrue(line.style_at(0).bold)  # Inter-SemiBold label

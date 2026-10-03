@@ -8,12 +8,12 @@ Run: .venv/bin/python -m unittest backend.dispatcher.tests.test_pdf -v
 
 import io
 import unittest
+from itertools import pairwise
 from unittest.mock import MagicMock, patch
-
-from shared.pdfdoc import PdfDoc, PdfLine, PdfPage, PdfStyle
 
 from dispatcher.agents import docx_parser, pdf_parser
 from dispatcher.doc_parsers import pdf as pdfdoc
+from shared.pdfdoc import PdfDoc, PdfLine, PdfPage, PdfStyle
 
 try:
     import pdfminer.layout  # noqa: F401
@@ -518,6 +518,143 @@ class ParsePdf(unittest.TestCase):
             ops.append(_text(72, 440 - i * 14, f"more wide content {i}"))
         doc = pdfdoc.parse_pdf(_pdf_bytes(ops))
         self.assertEqual(pdfdoc.column_counts(doc), [1])
+
+
+def _sidebar_ops(side_lines, main_lines=45, side="left", leading=14):
+    """A sidebar of `side_lines` items beside a main column of
+    `main_lines` sentences, rows on the same baselines."""
+    side_x, main_x = (40, 200) if side == "left" else (430, 40)
+    ops = []
+    for i in range(main_lines):
+        ops.append(
+            _text(main_x, 740 - i * leading, f"Main column sentence {i} keeps going a while")
+        )
+    for i in range(side_lines):
+        ops.append(_text(side_x, 740 - i * leading, f"Sidebar item {i}"))
+    return ops
+
+
+@unittest.skipUnless(HAS_PDFMINER, "pdfminer.six not installed")
+class ReadingOrder(unittest.TestCase):
+    """Same-row merging joins titles with floated dates and labels with
+    values, but never fuses independent bands (finding A)."""
+
+    def _assert_bands(self, texts, side_lines, main_lines=45):
+        side = [t for t in texts if t.startswith("Sidebar")]
+        main = [t for t in texts if t.startswith("Main")]
+        self.assertEqual(len(side) + len(main), len(texts), "fused lines")
+        self.assertEqual(side, [f"Sidebar item {i}" for i in range(side_lines)])
+        self.assertEqual(
+            main,
+            [f"Main column sentence {i} keeps going a while" for i in range(main_lines)],
+        )
+        # One band entirely, then the other — never interleaved.
+        bands = [t[:4] for t in texts]
+        self.assertLessEqual(
+            sum(1 for a, b in pairwise(bands) if a != b), 1, texts
+        )
+
+    def test_short_sidebars_never_fuse_with_main(self):
+        # 12/15/16 lines beside 45 slipped under column_gutter's 25% rule
+        # and fused row by row; 20 was detected even before.
+        for side in ("left", "right"):
+            for n in (3, 12, 15, 16, 20, 30):
+                with self.subTest(side=side, lines=n):
+                    texts = _texts(_sidebar_ops(n, side=side))
+                    self._assert_bands(texts, n)
+
+    def test_misaligned_sidebar_rows_stay_separate(self):
+        ops = [
+            _text(200, 740 - i * 14, f"Main column sentence {i} keeps going a while")
+            for i in range(30)
+        ] + [_text(40, 735 - i * 11, f"Sidebar item {i}", size=9) for i in range(14)]
+        self._assert_bands(_texts(ops), 14, 30)
+
+    def test_floated_dates_merge_beside_a_sidebar(self):
+        ops = _sidebar_ops(10, main_lines=0)
+        ops += [
+            _text(200, 740, "Engineer - Acme", font="F2"),
+            _text(480, 740, "2020 - 2024"),
+            _text(200, 726, "Built the thing nobody else would touch"),
+            _text(200, 712, "Analyst - Globex", font="F2"),
+            _text(480, 712, "2016 - 2020"),
+        ]
+        texts = _texts(ops)
+        self.assertIn("Engineer - Acme    2020 - 2024", texts)
+        self.assertIn("Analyst - Globex    2016 - 2020", texts)
+        self.assertFalse(any("Sidebar" in t and "-" in t for t in texts), texts)
+
+    def test_skills_grid_then_entry(self):
+        """A two-band skills grid reads as separate cells in row order (no
+        page columns), and the entry right below still joins its date."""
+        ops = [_text(72, 740, "Summary line that runs across the whole page width ok")]
+        ops.append(_text(72, 720, "SKILLS", font="F2"))
+        grid = [("Python", "Docker"), ("Rust", "Terraform"), ("SQL", "Kafka")]
+        for i, (a, b) in enumerate(grid):
+            ops.append(_text(72, 704 - i * 14, a))
+            ops.append(_text(320, 704 - i * 14, b))
+        ops.append(_text(72, 650, "EXPERIENCE", font="F2"))
+        ops.append(_text(72, 634, "Engineer - Acme", font="F2"))
+        ops.append(_text(470, 634, "Jan 2020 - Present"))
+        ops.append(_text(72, 620, "Built the thing nobody else would touch, end to end"))
+        doc = pdfdoc.parse_pdf(_pdf_bytes(ops))
+        texts = [l.text for l in doc.lines]
+        self.assertEqual(
+            texts[1:9],
+            ["SKILLS", "Python", "Docker", "Rust", "Terraform", "SQL", "Kafka", "EXPERIENCE"],
+        )
+        self.assertIn("Engineer - Acme    Jan 2020 - Present", texts)
+        self.assertEqual(pdfdoc.column_counts(doc), [1])
+
+    def test_label_column_merges_with_values(self):
+        ops = [_text(72, 740, "JANE DOE", font="F2", size=18)]
+        for i, (label, value) in enumerate(
+            [("Address:", "Denver, CO"), ("Phone:", "555-1234"), ("Email:", "jane@x.com")]
+        ):
+            ops.append(_text(72, 716 - i * 14, label, font="F2"))
+            ops.append(_text(140, 716 - i * 14, value))
+        ops.append(_text(72, 650, "A full width summary sentence that crosses everything"))
+        texts = _texts(ops)
+        self.assertEqual(
+            texts[1:4],
+            ["Address:    Denver, CO", "Phone:    555-1234", "Email:    jane@x.com"],
+        )
+
+    def test_name_beside_stacked_contact(self):
+        """A big name with a contact stack to its right: separate lines,
+        name first, contacts in order."""
+        ops = [_text(54, 712, "Jane Doe", font="F2", size=24)]
+        for i, value in enumerate(["jane@x.com", "555-123-4567", "Denver, CO"]):
+            ops.append(_text(400, 724 - i * 13, value))
+        ops.append(_text(54, 660, "A full width summary sentence that crosses everything"))
+        texts = _texts(ops)
+        self.assertEqual(
+            texts[:4], ["Jane Doe", "jane@x.com", "555-123-4567", "Denver, CO"]
+        )
+
+    def test_marker_column_drawn_apart_from_items(self):
+        """List markers drawn as separate text objects, a gap away from
+        their item text, still lead their line."""
+        ops = []
+        for i in range(3):
+            ops.append(_text(74, 700 - i * 14, "-"))
+            ops.append(_text(90, 700 - i * 14, f"Item number {i} in the list"))
+        self.assertEqual(
+            _texts(ops), [f"- Item number {i} in the list" for i in range(3)]
+        )
+
+    def test_two_line_entry_header(self):
+        """Title + dates over company + location, both right-aligned."""
+        ops = [
+            _text(72, 700, "Software Engineer", font="F2"),
+            _text(540 - 92.4, 700, "Jan 2020 - Present"),
+            _text(72, 686, "Acme Corp", font="F3"),
+            _text(540 - 56.3, 686, "Denver, CO"),
+            _text(80, 672, "Built the thing nobody else would touch, end to end"),
+        ]
+        texts = _texts(ops)
+        self.assertEqual(texts[0], "Software Engineer    Jan 2020 - Present")
+        self.assertEqual(texts[1], "Acme Corp    Denver, CO")
 
 
 class _StubFrag:
