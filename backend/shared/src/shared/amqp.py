@@ -28,6 +28,11 @@ TAILOR_QUEUE_NAME = "tailor-queue"
 TAILOR_DLQ_NAME = "tailor-dlq"
 TAILOR_DLX_NAME = "tailor-dlx"
 
+SYSTEM_DESIGN_EXCHANGE_NAME = "system-design-exchange"
+SYSTEM_DESIGN_QUEUE_NAME = "system-design-queue"
+SYSTEM_DESIGN_DLQ_NAME = "system-design-dlq"
+SYSTEM_DESIGN_DLX_NAME = "system-design-dlx"
+
 # Every (exchange, queue) pair is declared and bound with "#" (topic).
 _TOPOLOGY_PAIRS = (
     (RESUME_DLX_NAME, RESUME_DLQ_NAME),
@@ -36,12 +41,15 @@ _TOPOLOGY_PAIRS = (
     (BULLET_SUGG_DLX_NAME, BULLET_SUGG_DLQ_NAME),
     (TAILOR_DLX_NAME, TAILOR_DLQ_NAME),
     (TAILOR_EXCHANGE_NAME, TAILOR_QUEUE_NAME),
+    (SYSTEM_DESIGN_DLX_NAME, SYSTEM_DESIGN_DLQ_NAME),
+    (SYSTEM_DESIGN_EXCHANGE_NAME, SYSTEM_DESIGN_QUEUE_NAME),
 )
 
 _WORK_QUEUE_DLX = {
     RESUME_QUEUE_NAME: RESUME_DLX_NAME,
     BULLET_SUGG_QUEUE_NAME: BULLET_SUGG_DLX_NAME,
     TAILOR_QUEUE_NAME: TAILOR_DLX_NAME,
+    SYSTEM_DESIGN_QUEUE_NAME: SYSTEM_DESIGN_DLX_NAME,
 }
 
 
@@ -88,6 +96,21 @@ class AmqpTailorJob(BaseAmqpJob):
     answer: str | None = None
     turn_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     job_type: str = "tailor"
+
+
+# A system design interview is multi-turn like a tailor run. The candidate's
+# notes and diagram are saved on the session row before publishing — only the
+# action and chat text travel on the wire.
+SYSTEM_DESIGN_ACTIONS = ("start", "message", "advance", "finish", "retry")
+
+
+@dataclass
+class AmqpSystemDesignJob(BaseAmqpJob):
+    session_id: str
+    action: str = "start"
+    text: str | None = None
+    turn_id: str = field(default_factory=lambda: uuid.uuid4().hex)
+    job_type: str = "system_design"
 
 
 class AmqpClientException(Exception):

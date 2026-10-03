@@ -9,11 +9,12 @@
     "start": "next start",
     "lint": "eslint",
     "contract:emit": "prisma contract emit",
-    "test": "node --test lib/auth0.test.js lib/skills.test.js lib/dashboard-menu.test.js lib/live-demo.test.js"
+    "test": "node --test lib/auth0.test.js lib/skills.test.js lib/dashboard-menu.test.js lib/system-design.test.js lib/live-demo.test.js"
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "~4.29.0",
     "@base-ui/react": "^1.8.0",
+    "@excalidraw/excalidraw": "0.18.1",
     "@prisma/orm-postgres": "8.0.0-rc.9",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",

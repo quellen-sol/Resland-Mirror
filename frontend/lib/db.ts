@@ -87,4 +87,12 @@ export async function getUserTailoredResume(userId: string, id: string) {
         .first();
 }
 
-
+/** Finished system design interviews, newest first — the practice history. */
+export async function getUserSystemDesignHistory(userId: string) {
+    return db.orm.public.UserSystemDesignSession.where((s) =>
+        s.user_id.eq(userId),
+    )
+        .where((s) => s.status.eq("COMPLETED"))
+        .orderBy((s) => s.completed_at.desc())
+        .all();
+}

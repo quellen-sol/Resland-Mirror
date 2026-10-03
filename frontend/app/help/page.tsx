@@ -66,6 +66,27 @@ const SECTIONS: {
     ],
   },
   {
+    title: "System Design Practice",
+    faqs: [
+      [
+        "What is the System Design Mock?",
+        "A practice system design interview with an AI interviewer. Pick a problem from the practice bank, or one written from a job you tailored your resume for. You clarify requirements, estimate the scale, draw your design, then answer deep-dive questions about it.",
+      ],
+      [
+        "How do I draw my design?",
+        "Add components from the palette above the whiteboard and connect them with the arrow tool. Drag each end of an arrow onto a box until it snaps — the interviewer reads which boxes your arrows connect, so loose arrows and plain lines don't count. Submitting your design points out anything that isn't connected.",
+      ],
+      [
+        "How am I graded?",
+        "You're scored from 1 to 5 against the level you chose on requirements, estimation, high-level design, the deep dive, communication, and time management. The weighted score becomes a letter grade and a hire signal, and the report shows a reference design to compare against.",
+      ],
+      [
+        "What does an interview cost?",
+        "Each interviewer reply and the final grading draw from your balance, like tailoring does. Starting a practice-bank problem is free; a problem written from a job posting costs one AI call to prepare.",
+      ],
+    ],
+  },
+  {
     title: "Billing & Credits",
     faqs: [
       [

@@ -10,6 +10,7 @@ import {
   Briefcase,
   Download,
   Loader2,
+  Network,
   PenLine,
   Trash2,
 } from "lucide-react";
@@ -202,7 +203,7 @@ export default function TailoredBoard({
                   {sortHeader("Company", "company")}
                   {sortHeader("Saved", "saved")}
                   {sortHeader("Exported", "exported")}
-                  <th className={cn(th, "w-28 text-right")}>Actions</th>
+                  <th className={cn(th, "w-36 text-right")}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -232,6 +233,18 @@ export default function TailoredBoard({
                           className="text-zinc-500 hover:text-zinc-100"
                         >
                           <PenLine />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Practice system design for this job"
+                          title="Practice system design for this job"
+                          onClick={() =>
+                            router.push(`/system-design?tailored=${item.id}`)
+                          }
+                          className="text-zinc-500 hover:text-zinc-100"
+                        >
+                          <Network />
                         </Button>
                         <Button
                           variant="ghost"

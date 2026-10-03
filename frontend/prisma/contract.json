@@ -16,6 +16,10 @@
       "model": "SiteSettings",
       "namespace": "public"
     },
+    "system_design_message": {
+      "model": "SystemDesignMessage",
+      "namespace": "public"
+    },
     "token_usage": {
       "model": "TokenUsage",
       "namespace": "public"
@@ -58,6 +62,10 @@
     },
     "user_suggestion": {
       "model": "UserSuggestion",
+      "namespace": "public"
+    },
+    "user_system_design_session": {
+      "model": "UserSystemDesignSession",
       "namespace": "public"
     },
     "user_tailor_run": {
@@ -157,6 +165,95 @@
               }
             ]
           },
+          "SystemDesignLevel": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "MID",
+                "value": "MID"
+              },
+              {
+                "name": "SENIOR",
+                "value": "SENIOR"
+              },
+              {
+                "name": "STAFF",
+                "value": "STAFF"
+              }
+            ]
+          },
+          "SystemDesignPhase": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "REQUIREMENTS",
+                "value": "REQUIREMENTS"
+              },
+              {
+                "name": "ESTIMATION",
+                "value": "ESTIMATION"
+              },
+              {
+                "name": "HIGH_LEVEL_DESIGN",
+                "value": "HIGH_LEVEL_DESIGN"
+              },
+              {
+                "name": "DEEP_DIVE",
+                "value": "DEEP_DIVE"
+              },
+              {
+                "name": "FEEDBACK",
+                "value": "FEEDBACK"
+              }
+            ]
+          },
+          "SystemDesignRole": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "INTERVIEWER",
+                "value": "INTERVIEWER"
+              },
+              {
+                "name": "CANDIDATE",
+                "value": "CANDIDATE"
+              }
+            ]
+          },
+          "SystemDesignSource": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "BANK",
+                "value": "BANK"
+              },
+              {
+                "name": "JOB",
+                "value": "JOB"
+              }
+            ]
+          },
+          "SystemDesignStatus": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "PROCESSING",
+                "value": "PROCESSING"
+              },
+              {
+                "name": "WAITING_FOR_INPUT",
+                "value": "WAITING_FOR_INPUT"
+              },
+              {
+                "name": "COMPLETED",
+                "value": "COMPLETED"
+              },
+              {
+                "name": "FAILED",
+                "value": "FAILED"
+              }
+            ]
+          },
           "TailorStatus": {
             "codecId": "pg/text@1",
             "members": [
@@ -188,6 +285,10 @@
               {
                 "name": "TAILOR",
                 "value": "TAILOR"
+              },
+              {
+                "name": "SYSTEM_DESIGN",
+                "value": "SYSTEM_DESIGN"
               }
             ]
           }
@@ -436,6 +537,105 @@
               },
               "namespaceId": "public",
               "table": "site_settings"
+            }
+          },
+          "SystemDesignMessage": {
+            "fields": {
+              "content": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "created_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "phase": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "SystemDesignPhase",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "role": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "SystemDesignRole",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "session_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "session": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "session_id"
+                  ],
+                  "targetFields": [
+                    "id"
+                  ]
+                },
+                "to": {
+                  "model": "UserSystemDesignSession",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "content": {
+                  "column": "content"
+                },
+                "created_at": {
+                  "column": "created_at"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "phase": {
+                  "column": "phase"
+                },
+                "role": {
+                  "column": "role"
+                },
+                "session_id": {
+                  "column": "session_id"
+                }
+              },
+              "namespaceId": "public",
+              "table": "system_design_message"
             }
           },
           "TokenUsage": {
@@ -1538,6 +1738,337 @@
               "table": "user_suggestion"
             }
           },
+          "UserSystemDesignSession": {
+            "fields": {
+              "agent_context": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "brief": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "company_name": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "completed_at": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "created_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "diagram": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "estimates": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "hire_signal": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "job_description": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "last_turn_id": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "letter_grade": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "level": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "SystemDesignLevel",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "model": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "notice": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "phase": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "SystemDesignPhase",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "phase_durations": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "phase_started_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "problem_id": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "prompt": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "requirements": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "result": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "role": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "source": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "SystemDesignSource",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "status": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "SystemDesignStatus",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "tailored_resume_id": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "title": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "user_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "user_id"
+                  ],
+                  "targetFields": [
+                    "auth0_id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "agent_context": {
+                  "column": "agent_context"
+                },
+                "brief": {
+                  "column": "brief"
+                },
+                "company_name": {
+                  "column": "company_name"
+                },
+                "completed_at": {
+                  "column": "completed_at"
+                },
+                "created_at": {
+                  "column": "created_at"
+                },
+                "diagram": {
+                  "column": "diagram"
+                },
+                "estimates": {
+                  "column": "estimates"
+                },
+                "hire_signal": {
+                  "column": "hire_signal"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "job_description": {
+                  "column": "job_description"
+                },
+                "last_turn_id": {
+                  "column": "last_turn_id"
+                },
+                "letter_grade": {
+                  "column": "letter_grade"
+                },
+                "level": {
+                  "column": "level"
+                },
+                "model": {
+                  "column": "model"
+                },
+                "notice": {
+                  "column": "notice"
+                },
+                "phase": {
+                  "column": "phase"
+                },
+                "phase_durations": {
+                  "column": "phase_durations"
+                },
+                "phase_started_at": {
+                  "column": "phase_started_at"
+                },
+                "problem_id": {
+                  "column": "problem_id"
+                },
+                "prompt": {
+                  "column": "prompt"
+                },
+                "requirements": {
+                  "column": "requirements"
+                },
+                "result": {
+                  "column": "result"
+                },
+                "role": {
+                  "column": "role"
+                },
+                "source": {
+                  "column": "source"
+                },
+                "status": {
+                  "column": "status"
+                },
+                "tailored_resume_id": {
+                  "column": "tailored_resume_id"
+                },
+                "title": {
+                  "column": "title"
+                },
+                "user_id": {
+                  "column": "user_id"
+                }
+              },
+              "namespaceId": "public",
+              "table": "user_system_design_session"
+            }
+          },
           "UserTailorRun": {
             "fields": {
               "company_name": {
@@ -2116,11 +2647,111 @@
               },
               "uniques": []
             },
+            "system_design_message": {
+              "checks": [
+                {
+                  "expression": "\"phase\" IN ('REQUIREMENTS', 'ESTIMATION', 'HIGH_LEVEL_DESIGN', 'DEEP_DIVE', 'FEEDBACK')",
+                  "name": "system_design_message_phase_check_affcc3a8",
+                  "prefix": "system_design_message_phase_check"
+                },
+                {
+                  "expression": "\"role\" IN ('INTERVIEWER', 'CANDIDATE')",
+                  "name": "system_design_message_role_check_c450733a",
+                  "prefix": "system_design_message_role_check"
+                }
+              ],
+              "columns": {
+                "content": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "created_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "expression": "autoincrement()",
+                    "kind": "function"
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "phase": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "SystemDesignPhase",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "role": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "SystemDesignRole",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "session_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "session_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "system_design_message"
+                  },
+                  "target": {
+                    "columns": [
+                      "id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_system_design_session"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "session_id"
+                  ],
+                  "name": "system_design_message_session_id_idx_00ba47bf",
+                  "prefix": "system_design_message_session_id_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "token_usage": {
               "checks": [
                 {
-                  "expression": "\"job_kind\" IN ('SUGGESTION', 'TAILOR')",
-                  "name": "token_usage_job_kind_check_74df029d",
+                  "expression": "\"job_kind\" IN ('SUGGESTION', 'TAILOR', 'SYSTEM_DESIGN')",
+                  "name": "token_usage_job_kind_check_2fbdeefd",
                   "prefix": "token_usage_job_kind_check"
                 },
                 {
@@ -3130,6 +3761,266 @@
                 }
               ]
             },
+            "user_system_design_session": {
+              "checks": [
+                {
+                  "expression": "\"level\" IN ('MID', 'SENIOR', 'STAFF')",
+                  "name": "user_system_design_session_level_check_a955ca61",
+                  "prefix": "user_system_design_session_level_check"
+                },
+                {
+                  "expression": "\"phase\" IN ('REQUIREMENTS', 'ESTIMATION', 'HIGH_LEVEL_DESIGN', 'DEEP_DIVE', 'FEEDBACK')",
+                  "name": "user_system_design_session_phase_check_affcc3a8",
+                  "prefix": "user_system_design_session_phase_check"
+                },
+                {
+                  "expression": "\"source\" IN ('BANK', 'JOB')",
+                  "name": "user_system_design_session_source_check_e9786979",
+                  "prefix": "user_system_design_session_source_check"
+                },
+                {
+                  "expression": "\"status\" IN ('PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED', 'FAILED')",
+                  "name": "user_system_design_session_status_check_fa868dec",
+                  "prefix": "user_system_design_session_status_check"
+                }
+              ],
+              "columns": {
+                "agent_context": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "brief": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "company_name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "completed_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "nativeType": "timestamptz",
+                  "nullable": true
+                },
+                "created_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "diagram": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "[]"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "estimates": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": ""
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "hire_signal": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "job_description": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "last_turn_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "letter_grade": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "level": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "SENIOR"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "SystemDesignLevel",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "model": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "notice": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "phase": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "REQUIREMENTS"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "SystemDesignPhase",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "phase_durations": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "{}"
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "phase_started_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "problem_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "prompt": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "requirements": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": ""
+                  },
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "result": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "role": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "source": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "SystemDesignSource",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "status": {
+                  "codecId": "pg/text@1",
+                  "default": {
+                    "kind": "literal",
+                    "value": "PROCESSING"
+                  },
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "SystemDesignStatus",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "tailored_resume_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "title": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "user_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "user_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_system_design_session"
+                  },
+                  "target": {
+                    "columns": [
+                      "auth0_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "user_id"
+                  ],
+                  "name": "user_system_design_session_user_id_idx_6c952402",
+                  "prefix": "user_system_design_session_user_id_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "user_tailor_run": {
               "checks": [
                 {
@@ -3473,6 +4364,47 @@
                 "FAILED"
               ]
             },
+            "SystemDesignLevel": {
+              "kind": "valueSet",
+              "values": [
+                "MID",
+                "SENIOR",
+                "STAFF"
+              ]
+            },
+            "SystemDesignPhase": {
+              "kind": "valueSet",
+              "values": [
+                "REQUIREMENTS",
+                "ESTIMATION",
+                "HIGH_LEVEL_DESIGN",
+                "DEEP_DIVE",
+                "FEEDBACK"
+              ]
+            },
+            "SystemDesignRole": {
+              "kind": "valueSet",
+              "values": [
+                "INTERVIEWER",
+                "CANDIDATE"
+              ]
+            },
+            "SystemDesignSource": {
+              "kind": "valueSet",
+              "values": [
+                "BANK",
+                "JOB"
+              ]
+            },
+            "SystemDesignStatus": {
+              "kind": "valueSet",
+              "values": [
+                "PROCESSING",
+                "WAITING_FOR_INPUT",
+                "COMPLETED",
+                "FAILED"
+              ]
+            },
             "TailorStatus": {
               "kind": "valueSet",
               "values": [
@@ -3486,7 +4418,8 @@
               "kind": "valueSet",
               "values": [
                 "SUGGESTION",
-                "TAILOR"
+                "TAILOR",
+                "SYSTEM_DESIGN"
               ]
             }
           }
@@ -3495,7 +4428,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "bc3ed381debcbee76352fb5ba436fd0db987dc694f94fc7a46913c0dc559498e"
+    "storageHash": "4dbd015ad3e021f63ef04bfa31778f34a218409bd517c766541be7427453a580"
   },
   "capabilities": {
     "postgres": {

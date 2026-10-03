@@ -90,7 +90,7 @@ export async function apiFetch(
 }
 
 export interface ModelActionCost {
-  job_kind: "SUGGESTION" | "TAILOR";
+  job_kind: "SUGGESTION" | "TAILOR" | "SYSTEM_DESIGN";
   avg_cents: number;
 }
 

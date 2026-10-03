@@ -1,0 +1,3377 @@
+{
+  "problems": [
+    {
+      "id": "url-shortener",
+      "title": "URL Shortener",
+      "difficulty": "EASY",
+      "tags": [
+        "hashing",
+        "caching",
+        "read-heavy",
+        "key-value"
+      ],
+      "summary": "Turn long links into short ones and redirect billions of clicks.",
+      "brief": {
+        "prompt": "Design a service like bit.ly that turns a long URL into a short link. Anyone who opens the short link is redirected to the original URL. Users can optionally choose a custom alias and see how many times their links were clicked.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "About 100M new short links per month and about 10B redirects per month. Assume peak traffic is ~10x the average, and a single link can go viral."
+          },
+          {
+            "topic": "Read/write ratio",
+            "answer": "Roughly 100:1 redirects to link creations. Redirect traffic is very skewed: a small fraction of links gets most of the clicks."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Redirects should add under 50 ms p99 server-side. Link creation can take up to ~500 ms."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "A new link must work immediately for its creator. Click counts can lag by a few minutes and may be approximate."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Links never expire by default; users can set an optional expiry. Plan storage for 10 years."
+          },
+          {
+            "topic": "Custom aliases",
+            "answer": "Yes, optional, 4-16 characters from [A-Za-z0-9_-], first come first served. They share one namespace with generated codes."
+          },
+          {
+            "topic": "Analytics",
+            "answer": "Only a total click count per link, visible to the link owner. No geo, referrer, or per-user breakdowns."
+          },
+          {
+            "topic": "Code format",
+            "answer": "Keep codes short; 7 characters is fine. Codes should not be trivially enumerable, but this is not a security boundary."
+          }
+        ],
+        "functional_requirements": [
+          "Create a short link for a long URL, with optional custom alias and optional expiry; return the short URL.",
+          "Redirect GET /{code} to the original URL (302 so clicks are counted; 301 only if analytics are not needed).",
+          "Return 404 for unknown, expired, or deleted codes.",
+          "Show the link owner an approximate total click count.",
+          "Owners can delete their links."
+        ],
+        "non_functional_requirements": [
+          "Redirect p99 < 50 ms server-side; creation p99 < 500 ms.",
+          "Redirect availability 99.99%; creation may be 99.9%.",
+          "A code never maps to two different URLs (global uniqueness).",
+          "Created links are durable: no loss on a single node or zone failure.",
+          "Absorb ~10x spikes and single viral links without slowing other redirects."
+        ],
+        "estimation_notes": [
+          "Writes: 100M / month / ~2.6M s = ~40/s avg, ~400/s at 10x peak.",
+          "Redirects: 100:1 -> 10B / month = ~3.9K/s avg, ~40K/s peak.",
+          "Storage: ~500 B per link x 100M/month x 120 months = 12B links = ~6 TB over 10 years.",
+          "Code space: 62^7 = ~3.5 trillion codes, far above the 12B needed in 10 years.",
+          "Cache: ~20% of links get ~80% of clicks; the hot 20M links x 500 B = ~10 GB fits in a small Redis cluster.",
+          "Bandwidth: redirect responses are ~500 B -> 40K/s x 500 B = ~20 MB/s at peak; not a bottleneck."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Client",
+            "purpose": "Browser or app that creates links and follows short URLs."
+          },
+          {
+            "id": "lb",
+            "kind": "load_balancer",
+            "label": "Load Balancer",
+            "purpose": "Terminates TLS and spreads traffic across stateless app servers."
+          },
+          {
+            "id": "app",
+            "kind": "service",
+            "label": "Shortener Service",
+            "purpose": "Creates links, resolves codes, and returns redirects."
+          },
+          {
+            "id": "id-alloc",
+            "kind": "service",
+            "label": "ID Range Allocator",
+            "purpose": "Leases blocks of unique counter values to app servers, which shuffle and base62-encode them into codes."
+          },
+          {
+            "id": "cache",
+            "kind": "cache",
+            "label": "Redis Cache",
+            "purpose": "Caches code -> URL for hot links so most redirects skip the database."
+          },
+          {
+            "id": "db",
+            "kind": "database",
+            "label": "URL Store (DynamoDB/Cassandra)",
+            "purpose": "Durable key-value table keyed by short code: URL, owner, expiry, click count."
+          },
+          {
+            "id": "clicks",
+            "kind": "queue",
+            "label": "Click Event Stream (Kafka)",
+            "purpose": "Buffers click events off the redirect path."
+          },
+          {
+            "id": "click-agg",
+            "kind": "worker",
+            "label": "Click Aggregator",
+            "purpose": "Consumes click events and applies batched count increments."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "lb",
+            "label": "HTTPS POST /links, GET /{code}"
+          },
+          {
+            "source": "lb",
+            "target": "app",
+            "label": "HTTP"
+          },
+          {
+            "source": "app",
+            "target": "id-alloc",
+            "label": "Lease ID block (e.g. 10K IDs)"
+          },
+          {
+            "source": "app",
+            "target": "cache",
+            "label": "Lookup code (cache-aside)"
+          },
+          {
+            "source": "app",
+            "target": "db",
+            "label": "Conditional insert / read on miss"
+          },
+          {
+            "source": "app",
+            "target": "clicks",
+            "label": "Click event (async)"
+          },
+          {
+            "source": "clicks",
+            "target": "click-agg",
+            "label": "Click events"
+          },
+          {
+            "source": "click-agg",
+            "target": "db",
+            "label": "Batched count increments"
+          }
+        ],
+        "deep_dive_topics": [
+          "Short code generation: hash-and-truncate vs counter with range leasing vs random codes with conditional insert; collision handling and enumerability.",
+          "Custom aliases: sharing one namespace with generated codes, uniqueness via conditional write, reserved words.",
+          "301 vs 302 redirects: browser caching vs accurate click counts, and what each does to server load.",
+          "Hot links: cache-aside with TTLs, request coalescing on a miss, behavior when a cache node fails.",
+          "Storage choice and partitioning: key-value by code, why no joins are needed, enforcing expiry (TTL vs lazy check on read).",
+          "Counting clicks without slowing redirects: async events, batching, at-least-once delivery and approximate counts."
+        ],
+        "pitfalls": [
+          "Truncating an MD5/SHA of the URL to 7 characters with no collision check.",
+          "A single auto-increment DB counter on the write path (bottleneck and single point of failure), or sequential guessable codes without acknowledging it.",
+          "Updating a click counter row synchronously on every redirect, creating hot-row contention on viral links.",
+          "Using 301 redirects while still claiming accurate click counts.",
+          "Over-engineering ~40 writes/s: sharded SQL with cross-shard transactions or multi-region active-active writes."
+        ]
+      }
+    },
+    {
+      "id": "pastebin",
+      "title": "Pastebin",
+      "difficulty": "EASY",
+      "tags": [
+        "blob-storage",
+        "cdn",
+        "read-heavy",
+        "expiration"
+      ],
+      "summary": "Let people paste text, share it by link, and have it expire on schedule.",
+      "brief": {
+        "prompt": "Design a service like Pastebin where users paste a block of text and get back a unique URL they can share. Anyone with the URL can view the paste. Pastes can be public or unlisted, and the creator can choose when a paste expires.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "About 1M new pastes per day and about 10M paste views per day. Peak traffic is ~5x the daily average."
+          },
+          {
+            "topic": "Paste size",
+            "answer": "Text only. Average ~10 KB, hard limit 1 MB. No images or binary uploads."
+          },
+          {
+            "topic": "Read/write ratio",
+            "answer": "About 10:1 reads to writes. Most views happen in the first day after creation; occasionally a paste goes viral."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Viewing a paste should take under 200 ms p99 for most users worldwide. Creating a paste can take up to 1 s."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "The creator must be able to view the paste right after creating it. Pastes are immutable, so there are no update conflicts."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Expiry options: 10 minutes, 1 day, 1 month, or never; about half never expire. Expired pastes must stop being served within a minute; physical deletion can lag. Plan for 5 years."
+          },
+          {
+            "topic": "Accounts",
+            "answer": "Anonymous pastes are allowed. Logged-in users can list and delete their own pastes. Syntax highlighting happens client-side."
+          },
+          {
+            "topic": "Editing",
+            "answer": "No editing after creation. Owners can delete."
+          }
+        ],
+        "functional_requirements": [
+          "Create a paste (text up to 1 MB) with optional title, expiry, and visibility (public or unlisted); return a unique URL.",
+          "View a paste by URL, plus a raw-text endpoint; return 404 once expired or deleted.",
+          "Logged-in users can list and delete their own pastes.",
+          "Pastes are immutable after creation."
+        ],
+        "non_functional_requirements": [
+          "View p99 < 200 ms for cached pastes; create p99 < 1 s.",
+          "99.9% availability for views; writes may degrade first.",
+          "Non-expired pastes are never lost (object storage durability).",
+          "Unlisted URLs are unguessable: at least 8 random base62 characters (~48 bits).",
+          "Expired content stops being served within ~1 minute of expiry, including from caches."
+        ],
+        "estimation_notes": [
+          "Writes: 1M / day / 86,400 s = ~12/s avg, ~60/s peak.",
+          "Reads: 10M / day = ~120/s avg, ~600/s peak; easily absorbed by CDN plus cache.",
+          "Content: 1M x 10 KB = 10 GB/day = ~3.6 TB/year, at most ~18 TB over 5 years before expiry reclaims space.",
+          "Metadata: ~300 B x 1M/day = 300 MB/day = ~110 GB/year; fits on one Postgres primary with read replicas.",
+          "Egress: 10M x 10 KB = 100 GB/day = ~1.2 MB/s avg; small, and mostly served from the CDN."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Client",
+            "purpose": "Browser or CLI that creates and views pastes."
+          },
+          {
+            "id": "cdn",
+            "kind": "cdn",
+            "label": "CDN",
+            "purpose": "Caches paste views at the edge with a TTL capped by the paste's expiry."
+          },
+          {
+            "id": "lb",
+            "kind": "load_balancer",
+            "label": "Load Balancer",
+            "purpose": "Spreads traffic across stateless app servers."
+          },
+          {
+            "id": "app",
+            "kind": "service",
+            "label": "Paste Service",
+            "purpose": "Validates input, generates random keys, writes metadata and content, serves views."
+          },
+          {
+            "id": "cache",
+            "kind": "cache",
+            "label": "Redis Cache",
+            "purpose": "Caches metadata and small hot paste bodies."
+          },
+          {
+            "id": "db",
+            "kind": "database",
+            "label": "Metadata DB (Postgres)",
+            "purpose": "Paste key, owner, visibility, expires_at, content pointer."
+          },
+          {
+            "id": "blob",
+            "kind": "blob_store",
+            "label": "Object Store (S3)",
+            "purpose": "Stores paste bodies durably and cheaply."
+          },
+          {
+            "id": "cleaner",
+            "kind": "worker",
+            "label": "Expiry Cleaner",
+            "purpose": "Periodically deletes expired metadata and objects."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "cdn",
+            "label": "HTTPS GET /{key}"
+          },
+          {
+            "source": "cdn",
+            "target": "lb",
+            "label": "Cache miss"
+          },
+          {
+            "source": "client",
+            "target": "lb",
+            "label": "HTTPS POST /pastes, DELETE"
+          },
+          {
+            "source": "lb",
+            "target": "app",
+            "label": "HTTP"
+          },
+          {
+            "source": "app",
+            "target": "cache",
+            "label": "Lookup by key"
+          },
+          {
+            "source": "app",
+            "target": "db",
+            "label": "Insert-if-absent / read metadata"
+          },
+          {
+            "source": "app",
+            "target": "blob",
+            "label": "PUT / GET paste body"
+          },
+          {
+            "source": "app",
+            "target": "cdn",
+            "label": "Purge on delete"
+          },
+          {
+            "source": "cleaner",
+            "target": "db",
+            "label": "Find and delete expired rows"
+          },
+          {
+            "source": "cleaner",
+            "target": "blob",
+            "label": "Delete expired objects"
+          }
+        ],
+        "deep_dive_topics": [
+          "Key generation: random base62 vs counter-based; length needed so unlisted pastes are unguessable; collision handling with insert-if-absent.",
+          "Content placement: inline in the DB vs object store vs a size-based split; row size, backup size, and cost trade-offs.",
+          "Expiry: lazy check on read vs background sweep vs object store lifecycle rules; keeping CDN TTL below the remaining lifetime.",
+          "Caching: what goes in the CDN vs Redis, cache-control headers for public vs unlisted pastes, purge on delete.",
+          "Abuse: rate limiting anonymous writes, scanning for leaked secrets or malware, takedown handling."
+        ],
+        "pitfalls": [
+          "Storing up to 1 MB bodies directly in the relational DB without discussing row size, backups, and cost.",
+          "Sequential or short IDs that let anyone enumerate unlisted pastes.",
+          "CDN or cache TTLs longer than a paste's remaining lifetime, so expired pastes keep being served.",
+          "Over-building for ~12 writes/s: sharding, Kafka, or a fleet of microservices with no justification."
+        ]
+      }
+    },
+    {
+      "id": "leaderboard",
+      "title": "Game Leaderboard",
+      "difficulty": "EASY",
+      "tags": [
+        "sorted-sets",
+        "redis",
+        "real-time",
+        "gaming"
+      ],
+      "summary": "Rank millions of players by score and show live standings.",
+      "brief": {
+        "prompt": "Design a leaderboard for an online mobile game. Each finished match adds to a player's season score, and players can see the global top 100, their own rank, and the players just above and below them. Boards reset each season.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "50M players in total, 5M daily active. Each active player finishes about 10 matches a day, so about 50M score updates per day. Evening peak is ~5x average."
+          },
+          {
+            "topic": "Read/write ratio",
+            "answer": "Each active player opens the leaderboard about 20 times a day, ~100M reads/day, so roughly 2:1 reads to writes. The top 100 is the same for everyone."
+          },
+          {
+            "topic": "Score semantics",
+            "answer": "Score is cumulative points for the season; each match adds points. Ties are broken by who reached the score first."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Top 100, own rank, and neighbors should return in under 100 ms p99. A finished match should show up within ~2 seconds."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "The board may lag by a couple of seconds, but a match must never be counted twice or lost, and a player's score never goes down."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Seasons last 30 days. Keep each player's final score and rank, and the final top 1,000, forever. The live board resets each season."
+          },
+          {
+            "topic": "Friends leaderboard",
+            "answer": "The global board is required. A friends board is a stretch goal; players have fewer than 200 friends."
+          },
+          {
+            "topic": "Cheating",
+            "answer": "Scores come from authoritative game servers, not clients, so treat them as trusted. Anti-cheat is out of scope."
+          }
+        ],
+        "functional_requirements": [
+          "Apply a match result to the player's season score.",
+          "Return the global top 100 with scores.",
+          "Return a player's rank and score, plus ~5 players above and below.",
+          "Reset the board each season and keep final standings."
+        ],
+        "non_functional_requirements": [
+          "Reads p99 < 100 ms; updates visible within ~2 s.",
+          "Exactly-once effect per match (idempotent updates).",
+          "99.9% availability; the live board can be rebuilt from durable data after a cache loss.",
+          "Handle ~3K updates/s and ~6K reads/s at peak."
+        ],
+        "estimation_notes": [
+          "Updates: 5M DAU x 10 matches = 50M/day = ~580/s avg, ~3K/s peak.",
+          "Reads: 100M/day = ~1.2K/s avg, ~6K/s peak; the top 100 can be cached for ~1 s.",
+          "Sorted set memory: 50M members x ~100 B (id, score, skiplist + hash overhead) = ~5 GB; fits on one Redis node plus a replica.",
+          "Rank queries: ZADD and ZREVRANK are O(log N); log2(50M) = ~26, so well under 1 ms per op.",
+          "Durable store: 50M season totals x ~50 B = ~2.5 GB, plus a match ledger of 50M rows/day; easy for Postgres."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Game Client",
+            "purpose": "Plays matches and displays leaderboards."
+          },
+          {
+            "id": "game-server",
+            "kind": "service",
+            "label": "Game Server",
+            "purpose": "Authoritative match host; reports final results."
+          },
+          {
+            "id": "gateway",
+            "kind": "api_gateway",
+            "label": "API Gateway",
+            "purpose": "Auth and routing for leaderboard reads."
+          },
+          {
+            "id": "lb-svc",
+            "kind": "service",
+            "label": "Leaderboard Service",
+            "purpose": "Applies score updates idempotently and serves top N, rank, and neighbors."
+          },
+          {
+            "id": "redis",
+            "kind": "cache",
+            "label": "Redis Sorted Set",
+            "purpose": "Live ranking per season (ZADD, ZREVRANK, ZREVRANGE)."
+          },
+          {
+            "id": "db",
+            "kind": "database",
+            "label": "Score DB (Postgres)",
+            "purpose": "Match ledger and season totals; source of truth for rebuilding Redis."
+          },
+          {
+            "id": "snapshot",
+            "kind": "worker",
+            "label": "Season Snapshot Job",
+            "purpose": "At season end, writes final standings and switches to a new season key."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "game-server",
+            "label": "Match traffic"
+          },
+          {
+            "source": "game-server",
+            "target": "lb-svc",
+            "label": "Match result (match_id, player_id, points)"
+          },
+          {
+            "source": "client",
+            "target": "gateway",
+            "label": "HTTPS GET top / rank / neighbors"
+          },
+          {
+            "source": "gateway",
+            "target": "lb-svc",
+            "label": "HTTP"
+          },
+          {
+            "source": "lb-svc",
+            "target": "db",
+            "label": "Insert match_id (unique) + update total, one transaction"
+          },
+          {
+            "source": "lb-svc",
+            "target": "redis",
+            "label": "ZADD new total; ZREVRANK / ZREVRANGE"
+          },
+          {
+            "source": "snapshot",
+            "target": "redis",
+            "label": "Read final standings"
+          },
+          {
+            "source": "snapshot",
+            "target": "db",
+            "label": "Write season results"
+          }
+        ],
+        "deep_dive_topics": [
+          "Data structure: Redis sorted set (skiplist) vs SQL with an index on score; why COUNT(*) WHERE score > x over 50M rows per request is too slow.",
+          "Tie-breaking: packing score and an inverted timestamp into one sortable value within the 53-bit integer precision of Redis double scores.",
+          "Idempotency and recovery: match ledger as source of truth, writing absolute totals with ZADD instead of ZINCRBY, rebuilding Redis after a failure.",
+          "Growing past one node: why sharding by player_id breaks global rank, and options like score-range sharding or approximate rank from histograms.",
+          "Season handling: one key per season, snapshotting final standings, expiring old keys.",
+          "Friends board: fetch friend IDs and ZMSCORE against the global set vs maintaining per-user sets."
+        ],
+        "pitfalls": [
+          "Computing rank by sorting or scanning all players on each request.",
+          "Sharding the sorted set by player_id, so top N and global rank need scatter-gather across every shard.",
+          "Treating Redis as the only copy of scores, with no durable source or rebuild plan.",
+          "Using ZINCRBY with retries and no match_id dedup, double-counting matches.",
+          "Over-engineering a ~5 GB, ~10K ops/s problem with Kafka, stream processors, and many shards."
+        ]
+      }
+    },
+    {
+      "id": "rate-limiter",
+      "title": "Distributed Rate Limiter",
+      "difficulty": "MEDIUM",
+      "tags": [
+        "distributed-systems",
+        "redis",
+        "api-gateway",
+        "algorithms"
+      ],
+      "summary": "Throttle API clients fairly across a fleet of servers without adding noticeable latency.",
+      "brief": {
+        "prompt": "Design a rate limiter for a public API platform. Each API key may make a configurable number of requests per time window, and requests over the limit are rejected with a clear error. It must work across a large fleet of API servers.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "About 10M API keys, ~1M active in any hour. Peak ~1M requests/s globally across 3 regions (~350K/s per region), served by ~200 gateway nodes per region."
+          },
+          {
+            "topic": "Limit rules",
+            "answer": "Per API key per endpoint group. Default 1,000 requests/min, enterprise plans up to 100K/min, plus optional per-second burst limits. Rules change a few times a day."
+          },
+          {
+            "topic": "Latency",
+            "answer": "The limiter may add at most 2 ms p99 to a request."
+          },
+          {
+            "topic": "Accuracy",
+            "answer": "Approximate is fine: up to ~5-10% over the limit briefly is acceptable. A key must not get N times its limit by spreading requests over N servers."
+          },
+          {
+            "topic": "Multi-region",
+            "answer": "Most keys hit a single region. Enforcing limits independently per region is acceptable for v1; a globally shared limit is a stretch goal."
+          },
+          {
+            "topic": "Failure behavior",
+            "answer": "If the limiter's store is down, fail open (allow traffic) and alert. API availability matters more than strict enforcement."
+          },
+          {
+            "topic": "Client response",
+            "answer": "HTTP 429 with Retry-After, plus X-RateLimit-Limit, X-RateLimit-Remaining, and X-RateLimit-Reset headers on every response."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Counters are ephemeral (seconds to minutes). Keep per-key per-minute throttle metrics for 30 days for customer dashboards."
+          }
+        ],
+        "functional_requirements": [
+          "Enforce per-key, per-endpoint-group limits over configurable windows (e.g. 1,000 req/min) with an optional burst allowance.",
+          "Reject over-limit requests with 429, Retry-After, and quota headers.",
+          "Operators change limits per plan or per key without redeploying; changes apply within ~1 minute.",
+          "Expose per-key throttling metrics to customers and operators."
+        ],
+        "non_functional_requirements": [
+          "Added latency < 2 ms p99.",
+          "~1M limit checks/s globally at peak.",
+          "Overshoot bounded to ~5-10% of the limit; never N x limit across N gateways.",
+          "Limiter failure must not take down the API (fail open with alerting).",
+          "Rule changes propagate within ~60 s."
+        ],
+        "estimation_notes": [
+          "Checks: ~350K/s per region, one atomic counter operation per request.",
+          "Redis throughput: a shard sustains roughly 50-100K Lua-script ops/s -> ~4-8 primary shards per region, plus replicas.",
+          "Counter memory: 1M active keys x ~3 endpoint groups x ~100 B (sliding window counter: two buckets + TTL) = ~300 MB per region.",
+          "Sliding window log is costly for big limits: a 100K/min key stores up to 100K timestamps, several MB for that one key.",
+          "Rules: plan rules are tiny; the key -> plan mapping for ~1M active keys x ~100 B = ~100 MB, cached in each gateway with a TTL."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "API Client",
+            "purpose": "Customer software calling the public API with an API key."
+          },
+          {
+            "id": "lb",
+            "kind": "load_balancer",
+            "label": "Load Balancer",
+            "purpose": "Distributes requests across gateway nodes."
+          },
+          {
+            "id": "gateway",
+            "kind": "api_gateway",
+            "label": "API Gateway + Limiter Middleware",
+            "purpose": "Identifies the key, checks limits, forwards or returns 429."
+          },
+          {
+            "id": "redis",
+            "kind": "cache",
+            "label": "Redis Cluster (counters)",
+            "purpose": "Sharded by API key; an atomic Lua script implements sliding-window counter or token bucket."
+          },
+          {
+            "id": "backend",
+            "kind": "service",
+            "label": "Backend Services",
+            "purpose": "The actual API handlers."
+          },
+          {
+            "id": "rules-svc",
+            "kind": "service",
+            "label": "Rules Service",
+            "purpose": "Admin API for limits; gateways poll or subscribe for changes."
+          },
+          {
+            "id": "rules-db",
+            "kind": "database",
+            "label": "Rules DB",
+            "purpose": "Source of truth for plans and per-key overrides."
+          },
+          {
+            "id": "metrics",
+            "kind": "queue",
+            "label": "Metrics Stream (Kafka)",
+            "purpose": "Batched allow/throttle counts from gateways."
+          },
+          {
+            "id": "metrics-agg",
+            "kind": "worker",
+            "label": "Metrics Aggregator",
+            "purpose": "Rolls up per-key per-minute usage and throttles."
+          },
+          {
+            "id": "metrics-db",
+            "kind": "database",
+            "label": "Time-series Metrics Store",
+            "purpose": "30 days of per-key usage for dashboards."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "lb",
+            "label": "HTTPS API request"
+          },
+          {
+            "source": "lb",
+            "target": "gateway",
+            "label": "HTTP"
+          },
+          {
+            "source": "gateway",
+            "target": "redis",
+            "label": "EVALSHA check-and-increment"
+          },
+          {
+            "source": "gateway",
+            "target": "backend",
+            "label": "Allowed requests"
+          },
+          {
+            "source": "gateway",
+            "target": "rules-svc",
+            "label": "Fetch rules (cached locally, refreshed ~30 s)"
+          },
+          {
+            "source": "rules-svc",
+            "target": "rules-db",
+            "label": "Read/write limit configs"
+          },
+          {
+            "source": "gateway",
+            "target": "metrics",
+            "label": "Batched allow/429 counts"
+          },
+          {
+            "source": "metrics",
+            "target": "metrics-agg",
+            "label": "Events"
+          },
+          {
+            "source": "metrics-agg",
+            "target": "metrics-db",
+            "label": "Per-minute rollups"
+          }
+        ],
+        "deep_dive_topics": [
+          "Algorithm choice: fixed window vs sliding window log vs sliding window counter vs token bucket; burst behavior, memory per key, accuracy at window edges.",
+          "Atomicity across the fleet: Lua scripts or INCR with EXPIRE vs read-modify-write races; why per-node in-memory counters fail with N gateways.",
+          "Staying within 2 ms: one Redis round trip, pipelining and connection pooling, local pre-aggregation or token leasing for very hot keys.",
+          "Failure modes: Redis shard loss, fail-open vs fail-closed per endpoint, local fallback limits, client timeouts tighter than the latency budget.",
+          "Hot keys: one enterprise key at 100K/min landing on a single shard; splitting the key or batching locally.",
+          "Global limits across regions: per-region split of the quota vs async counter sync, and the overshoot each allows."
+        ],
+        "pitfalls": [
+          "Only per-server in-memory counters, giving a client N times its limit across N gateways.",
+          "Non-atomic GET then SET on counters, so concurrent requests race past the limit.",
+          "Sliding window log for every key without noticing the memory cost for high-limit keys.",
+          "A separate synchronous limiter service that writes to a durable DB on every request, blowing the 2 ms budget.",
+          "No plan for limiter-store outages, implicitly failing closed and taking down the API."
+        ]
+      }
+    },
+    {
+      "id": "news-feed",
+      "title": "Social News Feed",
+      "difficulty": "MEDIUM",
+      "tags": [
+        "fan-out",
+        "caching",
+        "timeline",
+        "social"
+      ],
+      "summary": "Build a home timeline of recent posts from the accounts each user follows.",
+      "brief": {
+        "prompt": "Design the home feed for a social network like Twitter or Instagram. Users create posts and follow other users; the feed shows recent posts from the accounts they follow, newest first, and loads older posts as they scroll.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "500M monthly users, 200M daily active. Users create ~100M posts per day. The average user follows ~200 accounts."
+          },
+          {
+            "topic": "Read/write ratio",
+            "answer": "Each daily user opens the feed ~10 times a day: ~2B feed loads vs ~100M posts per day, about 20:1. Peak is ~4x average."
+          },
+          {
+            "topic": "Follower skew",
+            "answer": "Most accounts have under 1,000 followers, but ~10K accounts have over 1M followers and the largest has ~100M."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Feed load p99 < 300 ms. New posts should reach followers' feeds within ~5 s typically; up to a minute is fine for accounts with millions of followers."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "Eventual consistency is fine for feeds, but authors must see their own new post immediately."
+          },
+          {
+            "topic": "Ranking",
+            "answer": "Reverse chronological only. Ranking and ads are out of scope."
+          },
+          {
+            "topic": "Media",
+            "answer": "Posts are up to 280 characters plus optional media. Media upload and storage is a separate service that returns URLs."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Posts are kept forever. Fast feed reads only need the most recent ~800 entries per user; older pages can be slower."
+          }
+        ],
+        "functional_requirements": [
+          "Create a post (text plus optional media URLs).",
+          "Follow and unfollow accounts.",
+          "Load the home feed: posts from followed accounts, newest first, with cursor-based pagination.",
+          "Authors see their own posts immediately.",
+          "Deleted posts and unfollowed accounts disappear from feeds."
+        ],
+        "non_functional_requirements": [
+          "Feed load p99 < 300 ms.",
+          "Post visible to followers within ~5 s p95 (up to ~60 s for very large accounts).",
+          "99.95% availability for feed reads; a slightly stale feed beats an error.",
+          "Eventual consistency for feeds; read-your-writes for authors.",
+          "Acknowledged posts are durable."
+        ],
+        "estimation_notes": [
+          "Posts: 100M/day = ~1.2K/s avg, ~5K/s peak.",
+          "Feed loads: 200M x 10 = 2B/day = ~23K/s avg, ~100K/s peak.",
+          "Naive fan-out on write: 100M posts x ~200 followers = 20B timeline inserts/day = ~230K/s; celebrity posts dominate this, so pull them at read time instead.",
+          "Timeline cache: 200M users x 800 entries x ~16 B (post_id + author_id) = ~2.5 TB raw; shard across many Redis nodes and evict inactive users.",
+          "Post storage: 100M x ~1 KB = ~100 GB/day = ~36 TB/year, excluding media."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Mobile/Web Client",
+            "purpose": "Creates posts and scrolls the feed."
+          },
+          {
+            "id": "lb",
+            "kind": "load_balancer",
+            "label": "Load Balancer",
+            "purpose": "Routes requests to the post and feed services."
+          },
+          {
+            "id": "post-svc",
+            "kind": "service",
+            "label": "Post Service",
+            "purpose": "Writes posts with time-sortable IDs and emits PostCreated events."
+          },
+          {
+            "id": "post-db",
+            "kind": "database",
+            "label": "Post Store (Cassandra)",
+            "purpose": "Posts by post_id and by author_id for author timelines."
+          },
+          {
+            "id": "graph-db",
+            "kind": "database",
+            "label": "Follow Graph Store",
+            "purpose": "Follower and followee lists, with a celebrity flag per account."
+          },
+          {
+            "id": "events",
+            "kind": "queue",
+            "label": "Kafka (post events)",
+            "purpose": "Decouples posting from fan-out."
+          },
+          {
+            "id": "fanout",
+            "kind": "worker",
+            "label": "Fan-out Workers",
+            "purpose": "Push new post IDs into followers' timelines; skip celebrity authors."
+          },
+          {
+            "id": "timeline-cache",
+            "kind": "cache",
+            "label": "Timeline Cache (Redis)",
+            "purpose": "Per-user list of the ~800 most recent post IDs."
+          },
+          {
+            "id": "feed-svc",
+            "kind": "service",
+            "label": "Feed Service",
+            "purpose": "Reads the timeline, merges in celebrity posts, hydrates, and paginates."
+          },
+          {
+            "id": "post-cache",
+            "kind": "cache",
+            "label": "Post Cache (Memcached)",
+            "purpose": "Hydrates post IDs into post objects in bulk."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "lb",
+            "label": "HTTPS POST /posts, GET /feed"
+          },
+          {
+            "source": "lb",
+            "target": "post-svc",
+            "label": "Create post"
+          },
+          {
+            "source": "lb",
+            "target": "feed-svc",
+            "label": "Get feed page (cursor)"
+          },
+          {
+            "source": "post-svc",
+            "target": "post-db",
+            "label": "Insert post"
+          },
+          {
+            "source": "post-svc",
+            "target": "events",
+            "label": "PostCreated"
+          },
+          {
+            "source": "events",
+            "target": "fanout",
+            "label": "Consume events"
+          },
+          {
+            "source": "fanout",
+            "target": "graph-db",
+            "label": "Page through followers"
+          },
+          {
+            "source": "fanout",
+            "target": "timeline-cache",
+            "label": "LPUSH + LTRIM per follower"
+          },
+          {
+            "source": "feed-svc",
+            "target": "timeline-cache",
+            "label": "Read post IDs"
+          },
+          {
+            "source": "feed-svc",
+            "target": "graph-db",
+            "label": "Followed celebrity accounts"
+          },
+          {
+            "source": "feed-svc",
+            "target": "post-cache",
+            "label": "Multi-get posts"
+          },
+          {
+            "source": "feed-svc",
+            "target": "post-db",
+            "label": "Celebrity recent posts, misses, timeline rebuild"
+          }
+        ],
+        "deep_dive_topics": [
+          "Fan-out on write vs fan-out on read vs hybrid; the follower threshold for celebrity accounts and how their posts are merged at read time.",
+          "Timeline cache design: list of post IDs per user, trimming to ~800, evicting inactive users, rebuilding a timeline on a cache miss.",
+          "Pagination: cursors over time-sortable (Snowflake-style) post IDs instead of offsets, so pages stay stable while new posts arrive.",
+          "Hydration cost: batched multi-get of posts and author profiles, cache hit rates, avoiding N+1 calls.",
+          "Deletes, unfollows, and privacy changes: filtering at read time vs eagerly removing entries from timelines.",
+          "Fan-out backpressure: Kafka partitioning, retries, and keeping lag under the 5 s target during spikes."
+        ],
+        "pitfalls": [
+          "Pure fan-out on write including celebrities, implying ~100M cache writes for a single post.",
+          "Pure fan-out on read for everyone: querying ~200 followees and merging on every request at ~100K feed loads/s.",
+          "Offset-based pagination that duplicates or skips items as new posts arrive.",
+          "Copying full post bodies into every follower's timeline instead of IDs.",
+          "Precomputing feeds for all 500M accounts, including users who have not opened the app in months."
+        ]
+      }
+    },
+    {
+      "id": "chat-messaging",
+      "title": "Chat Messaging",
+      "difficulty": "MEDIUM",
+      "tags": [
+        "websockets",
+        "real-time",
+        "messaging",
+        "presence"
+      ],
+      "summary": "Deliver one-on-one and group messages in real time, with offline delivery and receipts.",
+      "brief": {
+        "prompt": "Design a chat app like WhatsApp. Users send one-on-one and group messages that arrive instantly when the recipient is online and are delivered when they reconnect. Users see sent, delivered, and read status, and which contacts are online.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "1B registered users, 500M daily active. Each daily user sends ~40 messages a day, ~20B messages per day. Peak is ~4x average."
+          },
+          {
+            "topic": "Groups",
+            "answer": "Groups have up to 256 members; an average group message reaches ~20 members. About 70% of messages are one-on-one."
+          },
+          {
+            "topic": "Connections",
+            "answer": "Up to ~200M devices connected at once at peak. Assume one device per user for v1; multi-device is a stretch goal."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Online-to-online delivery p99 < 500 ms within a region, < 1 s across regions."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "All participants must see a conversation's messages in the same order. Once the server acknowledges a send, the message must never be lost, and it must never appear twice."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Text messages are stored server-side for 1 year so users can restore history on a new phone. Media goes to a blob service; messages carry a URL."
+          },
+          {
+            "topic": "Encryption",
+            "answer": "End-to-end encryption is out of scope for this round; assume TLS in transit and encryption at rest."
+          },
+          {
+            "topic": "Presence",
+            "answer": "Show online / last seen for contacts. Up to ~30 s staleness is fine."
+          }
+        ],
+        "functional_requirements": [
+          "Send and receive one-on-one and group messages (up to 256 members) in real time.",
+          "Queue messages for offline users and deliver them in order on reconnect, with a push notification.",
+          "Sent, delivered, and read receipts.",
+          "Online / last-seen presence for contacts.",
+          "Restore up to 1 year of history on a new device."
+        ],
+        "non_functional_requirements": [
+          "Online delivery p99 < 500 ms in-region.",
+          "No loss after server ack; no duplicates shown to users.",
+          "Per-conversation ordering identical for all participants.",
+          "99.99% availability for sending and receiving.",
+          "Presence may be up to ~30 s stale."
+        ],
+        "estimation_notes": [
+          "Messages: 20B/day / 86,400 = ~230K/s avg, ~1M/s peak.",
+          "Deliveries: (0.7 x 1 + 0.3 x 20 recipients) x 230K = ~1.5M deliveries/s avg.",
+          "Connections: 200M concurrent at ~200K WebSockets per tuned host -> ~1,000 gateway hosts plus headroom.",
+          "Storage: 20B x ~200 B (body + metadata) = ~4 TB/day = ~1.5 PB/year before replication.",
+          "Session registry: 200M x ~100 B (user -> gateway host, last seen) = ~20 GB in Redis."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Mobile Client",
+            "purpose": "Keeps a WebSocket open, stores local history, retries unacked sends."
+          },
+          {
+            "id": "lb",
+            "kind": "load_balancer",
+            "label": "L4 Load Balancer",
+            "purpose": "Spreads long-lived connections across gateways."
+          },
+          {
+            "id": "gateway",
+            "kind": "service",
+            "label": "Connection Gateway",
+            "purpose": "Holds WebSockets, authenticates, heartbeats, and pushes messages to devices."
+          },
+          {
+            "id": "chat-svc",
+            "kind": "service",
+            "label": "Chat Service",
+            "purpose": "Assigns per-conversation sequence numbers, persists, routes to recipients."
+          },
+          {
+            "id": "sessions",
+            "kind": "cache",
+            "label": "Session/Presence Registry (Redis)",
+            "purpose": "user_id -> gateway host and presence, with a TTL refreshed by heartbeats."
+          },
+          {
+            "id": "msg-db",
+            "kind": "database",
+            "label": "Message Store (Cassandra)",
+            "purpose": "Messages partitioned by conversation_id, clustered by sequence number."
+          },
+          {
+            "id": "conv-db",
+            "kind": "database",
+            "label": "Conversation DB",
+            "purpose": "Group membership and per-user delivered/read cursors."
+          },
+          {
+            "id": "push-queue",
+            "kind": "queue",
+            "label": "Push Queue (Kafka)",
+            "purpose": "Notification jobs for offline recipients."
+          },
+          {
+            "id": "push-worker",
+            "kind": "worker",
+            "label": "Push Worker",
+            "purpose": "Sends notifications via APNs/FCM with retries."
+          },
+          {
+            "id": "push-provider",
+            "kind": "other",
+            "label": "APNs / FCM",
+            "purpose": "Platform push services that wake offline devices."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "lb",
+            "label": "WebSocket over TLS"
+          },
+          {
+            "source": "lb",
+            "target": "gateway",
+            "label": "Persistent connection"
+          },
+          {
+            "source": "gateway",
+            "target": "sessions",
+            "label": "Register connection, heartbeat"
+          },
+          {
+            "source": "gateway",
+            "target": "chat-svc",
+            "label": "Send (client msg ID), acks, sync requests"
+          },
+          {
+            "source": "chat-svc",
+            "target": "conv-db",
+            "label": "Members, cursors"
+          },
+          {
+            "source": "chat-svc",
+            "target": "msg-db",
+            "label": "Persist with sequence number"
+          },
+          {
+            "source": "chat-svc",
+            "target": "sessions",
+            "label": "Look up recipient gateway"
+          },
+          {
+            "source": "chat-svc",
+            "target": "gateway",
+            "label": "Deliver to recipient's gateway"
+          },
+          {
+            "source": "chat-svc",
+            "target": "push-queue",
+            "label": "Offline recipient"
+          },
+          {
+            "source": "push-queue",
+            "target": "push-worker",
+            "label": "Push jobs"
+          },
+          {
+            "source": "push-worker",
+            "target": "push-provider",
+            "label": "Push request"
+          },
+          {
+            "source": "push-provider",
+            "target": "client",
+            "label": "Notification"
+          }
+        ],
+        "deep_dive_topics": [
+          "Delivery guarantees: client-generated message IDs for idempotent retries, server ack vs delivered ack vs read receipt, at-least-once plus dedup.",
+          "Ordering: per-conversation sequence numbers assigned at a single owner vs client timestamps; concurrent sends in a group.",
+          "Connection management: WebSocket gateways, heartbeats, and reconnect storms after a gateway deploy or crash.",
+          "Offline sync: per-conversation last-acked sequence, fetching gaps on reconnect, push notifications to wake the app.",
+          "Group fan-out: store once per conversation and fan out on delivery vs per-recipient inbox copies; trade-offs at 256 members.",
+          "Presence: heartbeat TTLs, publishing changes only to interested contacts, throttling updates for users with many contacts."
+        ],
+        "pitfalls": [
+          "HTTP polling for real-time delivery at this scale, without discussing cost and latency.",
+          "Ordering messages by client clock timestamps.",
+          "No idempotency key, so a retry after a lost ack creates a duplicate message.",
+          "A single relational messages table with no partitioning plan for ~4 TB/day.",
+          "Broadcasting every presence change to all users or all gateways."
+        ]
+      }
+    },
+    {
+      "id": "notification-service",
+      "title": "Notification Service",
+      "difficulty": "MEDIUM",
+      "tags": [
+        "queues",
+        "fan-out",
+        "push",
+        "reliability"
+      ],
+      "summary": "Send push, email, and SMS notifications reliably on behalf of many internal teams.",
+      "brief": {
+        "prompt": "Design a notification platform that other teams call to notify users by mobile push, email, and SMS. A caller names a user and a template; the platform applies user preferences, delivers via third-party providers, and tracks each send.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "200M users. About 1B notifications per day: ~70% push, ~25% email, ~5% SMS. Daily peak is ~2x average."
+          },
+          {
+            "topic": "Traffic shape",
+            "answer": "Mostly transactional single-user requests, plus marketing campaigns that target up to 50M users and may be spread over an hour."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Transactional notifications (OTP codes, security alerts) must reach the provider within 5 s p99. Marketing can be delayed by minutes or hours."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "At-least-once handoff to providers with dedup, so users effectively never get the same notification twice. Never send to a user who opted out."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Keep per-notification status for 90 days for support and debugging; aggregated metrics for 2 years."
+          },
+          {
+            "topic": "Preferences",
+            "answer": "Users opt out per channel and per category (e.g. marketing vs security). Non-urgent categories respect quiet hours in the user's time zone."
+          },
+          {
+            "topic": "Providers",
+            "answer": "APNs/FCM for push, an email provider like SES, an SMS provider like Twilio. Our SMS account is capped at 1K messages/s, and providers have occasional outages."
+          },
+          {
+            "topic": "Templates",
+            "answer": "Calling teams manage templates in a template service; we render them with per-user variables and locale."
+          }
+        ],
+        "functional_requirements": [
+          "Accept send requests (user, template, category, variables, idempotency key) from internal services.",
+          "Deliver via push, email, and SMS, choosing channels from the template and user preferences.",
+          "Respect per-channel and per-category opt-outs and quiet hours.",
+          "Send campaigns to a user segment, spread over a time window.",
+          "Track per-notification status and expose it to callers."
+        ],
+        "non_functional_requirements": [
+          "Transactional: provider handoff within 5 s p99; marketing: within the campaign window.",
+          "No lost notifications once accepted (durably queued before acking the caller).",
+          "Effectively-once delivery: dedup keeps duplicates rare.",
+          "99.95% availability of the ingest API.",
+          "Isolation: campaigns never degrade transactional latency."
+        ],
+        "estimation_notes": [
+          "Total: 1B/day = ~11.6K/s avg; ~23K/s at daily peak, ~40K/s with a large campaign on top.",
+          "Per channel at average: push ~8K/s, email ~2.9K/s, SMS ~580/s; SMS at 2x peak exceeds the 1K/s account cap, so it needs throttling and priority.",
+          "Status: 1B/day x ~300 B = 300 GB/day; x 90 days = ~27 TB, partitioned by day for cheap expiry.",
+          "Preference reads: one per notification (~12K-40K/s); cache prefs in Redis: 200M x ~200 B = ~40 GB.",
+          "Device tokens: 200M users x ~2 devices x ~200 B = ~80 GB."
+        ],
+        "reference_components": [
+          {
+            "id": "caller",
+            "kind": "client",
+            "label": "Internal Services",
+            "purpose": "Teams that trigger notifications and campaigns."
+          },
+          {
+            "id": "api",
+            "kind": "service",
+            "label": "Notification API",
+            "purpose": "Validates, dedups by idempotency key, enqueues by channel and priority; receives provider webhooks."
+          },
+          {
+            "id": "redis",
+            "kind": "cache",
+            "label": "Redis (dedup keys, prefs cache)",
+            "purpose": "Idempotency keys with TTL and cached preferences and device tokens."
+          },
+          {
+            "id": "prefs-db",
+            "kind": "database",
+            "label": "Preferences & Devices DB",
+            "purpose": "Opt-outs, quiet hours, time zone, device tokens, emails, phone numbers."
+          },
+          {
+            "id": "queue",
+            "kind": "queue",
+            "label": "Kafka (topic per channel x priority)",
+            "purpose": "Durable buffer that isolates transactional from bulk traffic."
+          },
+          {
+            "id": "campaign",
+            "kind": "worker",
+            "label": "Campaign Expander",
+            "purpose": "Expands a segment into per-user jobs at a controlled rate."
+          },
+          {
+            "id": "workers",
+            "kind": "worker",
+            "label": "Channel Workers",
+            "purpose": "Check prefs, render, call providers under per-provider rate limits, retry with backoff."
+          },
+          {
+            "id": "templates",
+            "kind": "service",
+            "label": "Template Service",
+            "purpose": "Versioned templates per locale."
+          },
+          {
+            "id": "providers",
+            "kind": "other",
+            "label": "APNs/FCM, SES, Twilio",
+            "purpose": "Third-party delivery providers."
+          },
+          {
+            "id": "status-db",
+            "kind": "database",
+            "label": "Status Store (Cassandra, 90-day TTL)",
+            "purpose": "Per-notification state history."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "caller",
+            "target": "api",
+            "label": "POST /notifications, POST /campaigns"
+          },
+          {
+            "source": "api",
+            "target": "redis",
+            "label": "SETNX idempotency key"
+          },
+          {
+            "source": "api",
+            "target": "queue",
+            "label": "Enqueue by channel + priority"
+          },
+          {
+            "source": "queue",
+            "target": "campaign",
+            "label": "Campaign jobs"
+          },
+          {
+            "source": "campaign",
+            "target": "prefs-db",
+            "label": "Page through segment users"
+          },
+          {
+            "source": "campaign",
+            "target": "queue",
+            "label": "Per-user jobs (bulk topic, rate-spread)"
+          },
+          {
+            "source": "queue",
+            "target": "workers",
+            "label": "Consume per channel/priority"
+          },
+          {
+            "source": "workers",
+            "target": "redis",
+            "label": "Prefs and tokens (cache-aside)"
+          },
+          {
+            "source": "workers",
+            "target": "prefs-db",
+            "label": "Cache misses; drop invalid tokens"
+          },
+          {
+            "source": "workers",
+            "target": "templates",
+            "label": "Fetch template"
+          },
+          {
+            "source": "workers",
+            "target": "providers",
+            "label": "Send"
+          },
+          {
+            "source": "workers",
+            "target": "status-db",
+            "label": "queued / sent / failed"
+          },
+          {
+            "source": "providers",
+            "target": "api",
+            "label": "Delivery and bounce webhooks"
+          },
+          {
+            "source": "api",
+            "target": "status-db",
+            "label": "Record delivered/bounced; status queries"
+          }
+        ],
+        "deep_dive_topics": [
+          "Priority isolation: separate topics and worker pools per channel and priority so a 50M-user campaign cannot delay OTP codes.",
+          "Provider reliability: retries with exponential backoff and jitter, dead-letter queues, circuit breakers, failover to a secondary provider.",
+          "Dedup and idempotency: caller idempotency keys, at-least-once consumers, a dedup check right before calling the provider.",
+          "Provider rate limits: shared token buckets per provider across workers, smoothing campaign sends under the SMS cap.",
+          "Preferences and compliance: checking opt-outs at send time, quiet hours by time zone, unsubscribe links, invalid-token cleanup.",
+          "Status tracking: state machine (accepted, queued, sent, delivered, failed), provider webhooks, partitioned storage with a 90-day TTL."
+        ],
+        "pitfalls": [
+          "One shared FIFO queue for all channels and priorities, so campaigns starve transactional messages.",
+          "Calling providers synchronously inside the API request.",
+          "Retrying without backoff or dedup, causing duplicate SMS (real money) and provider throttling.",
+          "Checking preferences only at enqueue time, so users who just opted out still get queued campaign messages.",
+          "Ignoring provider rate limits and outages."
+        ]
+      }
+    },
+    {
+      "id": "web-crawler",
+      "title": "Web Crawler",
+      "difficulty": "MEDIUM",
+      "tags": [
+        "distributed-systems",
+        "queues",
+        "deduplication",
+        "politeness"
+      ],
+      "summary": "Crawl billions of web pages politely and keep the stored copies fresh.",
+      "brief": {
+        "prompt": "Design a web crawler that collects HTML pages from the public web for a search engine's indexer. It starts from seed URLs, follows the links it discovers, and re-crawls pages over time so stored copies stay reasonably fresh.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "Fetch about 1B pages per month to start; the design should reach 10x by adding machines. About 10B URLs are known to the system."
+          },
+          {
+            "topic": "Content",
+            "answer": "HTML only; skip images, video, and PDFs. Average page ~100 KB uncompressed (~20 KB compressed). Cap downloads at 2 MB."
+          },
+          {
+            "topic": "Politeness",
+            "answer": "Obey robots.txt and send at most ~1 request per second to any host by default, or less if Crawl-delay says so."
+          },
+          {
+            "topic": "Freshness",
+            "answer": "Re-crawl fast-changing pages (news, home pages) daily and most pages roughly monthly, adapting to how often each page actually changes."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Keep only the latest copy of each page plus fetch metadata. The indexer reads from that store."
+          },
+          {
+            "topic": "Duplicates",
+            "answer": "Do not re-fetch a URL already crawled in the current cycle, and flag duplicate or near-duplicate content so the indexer can skip it."
+          },
+          {
+            "topic": "Crawler traps",
+            "answer": "Expect traps: infinite calendars, session IDs in URLs, auto-generated pages. The crawler must not get stuck."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Throughput matters, not latency. The indexer just needs new pages within a few hours of fetch."
+          }
+        ],
+        "functional_requirements": [
+          "Start from seed URLs, fetch HTML, extract and follow links.",
+          "Obey robots.txt and per-host rate limits.",
+          "Store the latest copy of each page and hand new or changed pages to the indexer.",
+          "Skip already-seen URLs and flag duplicate content.",
+          "Re-crawl pages on a schedule driven by priority and observed change rate."
+        ],
+        "non_functional_requirements": [
+          "~400 pages/s sustained, scaling to 10x by adding fetchers.",
+          "Politeness: at most ~1 request/s per host by default; honor Crawl-delay.",
+          "Fault tolerance: a fetcher crash loses only in-flight URLs, which are retried.",
+          "Freshness: important pages within a day, the median page within ~30 days.",
+          "Robustness: fetch timeouts of ~10-30 s, 2 MB size cap, tolerance of malformed HTML."
+        ],
+        "estimation_notes": [
+          "Fetch rate: 1B pages / month / ~2.6M s = ~400 pages/s avg; provision ~1K/s for retries and growth.",
+          "Bandwidth: 400/s x 100 KB = ~40 MB/s = ~320 Mbps inbound.",
+          "Page store: 1B x ~20 KB compressed = ~20 TB per full snapshot (latest version only).",
+          "Frontier and URL metadata: 10B URLs x ~100 B = ~1 TB; must be disk-backed, not in memory.",
+          "Seen set: exact 8 B hashes for 10B URLs = ~80 GB; a Bloom filter at ~1% false positives needs ~10 bits/URL = ~12 GB.",
+          "Politeness: at 1 req/s per host, 400 pages/s needs 400+ hosts in flight at once; in practice crawl tens of thousands of hosts concurrently."
+        ],
+        "reference_components": [
+          {
+            "id": "scheduler",
+            "kind": "service",
+            "label": "Re-crawl Scheduler",
+            "purpose": "Decides when each URL is due from priority and change rate; injects seeds."
+          },
+          {
+            "id": "frontier",
+            "kind": "queue",
+            "label": "URL Frontier",
+            "purpose": "Priority front queues plus per-host back queues with next-allowed fetch times, persisted to disk."
+          },
+          {
+            "id": "fetchers",
+            "kind": "worker",
+            "label": "Fetcher Workers",
+            "purpose": "Async HTTP fetch of URLs from hosts they own, respecting politeness."
+          },
+          {
+            "id": "dns",
+            "kind": "cache",
+            "label": "DNS Cache",
+            "purpose": "Local caching resolver so DNS is not a bottleneck."
+          },
+          {
+            "id": "robots",
+            "kind": "cache",
+            "label": "robots.txt Cache",
+            "purpose": "Per-host rules, refreshed about daily."
+          },
+          {
+            "id": "web",
+            "kind": "other",
+            "label": "Public Web Servers",
+            "purpose": "The sites being crawled."
+          },
+          {
+            "id": "pages",
+            "kind": "blob_store",
+            "label": "Page Store (S3)",
+            "purpose": "Compressed HTML, latest version per URL."
+          },
+          {
+            "id": "fetched",
+            "kind": "queue",
+            "label": "Fetched Pages Stream (Kafka)",
+            "purpose": "Fetch results (URL, status, blob key) for parsing."
+          },
+          {
+            "id": "parser",
+            "kind": "worker",
+            "label": "Parser / Link Extractor",
+            "purpose": "Extracts and normalizes links, computes content fingerprints (SimHash)."
+          },
+          {
+            "id": "dedup",
+            "kind": "cache",
+            "label": "Seen-URL Bloom Filter + Fingerprint Index",
+            "purpose": "Fast membership checks for URLs and near-duplicate content."
+          },
+          {
+            "id": "url-db",
+            "kind": "database",
+            "label": "URL Metadata DB",
+            "purpose": "Known URLs, last fetch time, content hash, change rate, priority."
+          },
+          {
+            "id": "indexer",
+            "kind": "other",
+            "label": "Indexing Pipeline",
+            "purpose": "Downstream consumer of new or changed pages."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "scheduler",
+            "target": "url-db",
+            "label": "Query URLs due for crawl"
+          },
+          {
+            "source": "scheduler",
+            "target": "frontier",
+            "label": "Enqueue due URLs with priority"
+          },
+          {
+            "source": "frontier",
+            "target": "fetchers",
+            "label": "URLs from hosts past next-allowed time"
+          },
+          {
+            "source": "fetchers",
+            "target": "dns",
+            "label": "Resolve host"
+          },
+          {
+            "source": "fetchers",
+            "target": "robots",
+            "label": "Check rules"
+          },
+          {
+            "source": "fetchers",
+            "target": "web",
+            "label": "HTTP GET (If-Modified-Since / ETag)"
+          },
+          {
+            "source": "fetchers",
+            "target": "pages",
+            "label": "Write compressed HTML"
+          },
+          {
+            "source": "fetchers",
+            "target": "fetched",
+            "label": "Fetch result event"
+          },
+          {
+            "source": "fetched",
+            "target": "parser",
+            "label": "Consume"
+          },
+          {
+            "source": "parser",
+            "target": "pages",
+            "label": "Read HTML"
+          },
+          {
+            "source": "parser",
+            "target": "dedup",
+            "label": "Seen URL? Duplicate content?"
+          },
+          {
+            "source": "parser",
+            "target": "url-db",
+            "label": "Upsert URLs, content hash, change rate"
+          },
+          {
+            "source": "parser",
+            "target": "frontier",
+            "label": "Enqueue newly discovered URLs"
+          },
+          {
+            "source": "parser",
+            "target": "indexer",
+            "label": "New or changed, non-duplicate pages"
+          }
+        ],
+        "deep_dive_topics": [
+          "Frontier design: priority (front queues) vs politeness (per-host back queues), assigning hosts to fetchers, persistence and recovery.",
+          "Politeness and robots.txt: per-host rate limits, Crawl-delay, caching robots.txt, backing off on 429/5xx responses.",
+          "Deduplication: URL normalization, Bloom filter vs exact set for seen URLs, SimHash or MinHash for near-duplicate content.",
+          "Freshness: scheduling re-crawls from observed change rate, conditional GETs, prioritizing important pages.",
+          "Robustness: trap defenses (URL depth/length limits, per-host page budgets), timeouts, size caps, malformed HTML.",
+          "Scaling fetchers: partitioning by host hash, async I/O, DNS caching, recovering after a crash without re-crawling everything."
+        ],
+        "pitfalls": [
+          "One global FIFO queue with no per-host politeness, effectively DoSing popular sites.",
+          "Holding the frontier or seen set fully in memory without sizing it for 10B URLs.",
+          "No URL normalization, so the same page is fetched many times via tracking params and fragments.",
+          "Ignoring crawler traps and robots.txt.",
+          "A one-pass BFS crawl with no re-crawl or freshness strategy."
+        ]
+      }
+    },
+    {
+      "id": "typeahead-autocomplete",
+      "title": "Typeahead Autocomplete",
+      "difficulty": "MEDIUM",
+      "tags": [
+        "trie",
+        "caching",
+        "search",
+        "low-latency"
+      ],
+      "summary": "Suggest popular search queries as users type, in milliseconds.",
+      "brief": {
+        "prompt": "Design search-box autocomplete for a large search engine. As the user types, show the 10 most popular queries that start with the text typed so far. Suggestions should pick up newly trending searches within a reasonable time.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "100M daily users making ~10 searches each per day (1B searches/day). With client debouncing, each search sends ~10 autocomplete requests. Peak is ~2.5x average."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Suggestions must render within ~100 ms of the user pausing; server-side p99 < 20 ms."
+          },
+          {
+            "topic": "Freshness",
+            "answer": "Base popularity can be rebuilt daily. Breaking-news style trending queries should appear within ~30 minutes."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "Different users seeing slightly different suggestions for a few minutes is fine."
+          },
+          {
+            "topic": "Scope",
+            "answer": "Prefix match on whole query strings, English only, top 10 results. No spell correction or personalization in v1."
+          },
+          {
+            "topic": "Query distribution",
+            "answer": "Billions of distinct queries appear over 30 days, but only the top ~100M by frequency are worth suggesting. Queries average ~30 characters."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Raw search logs are kept 30 days; aggregated counts can be kept longer."
+          },
+          {
+            "topic": "Filtering",
+            "answer": "Offensive or legally blocked queries must never be suggested, and a newly blocked term must disappear within ~5 minutes."
+          }
+        ],
+        "functional_requirements": [
+          "Return up to 10 query suggestions starting with the typed prefix, ranked by popularity.",
+          "Update rankings from search logs: daily base rebuild plus near-real-time trending.",
+          "Filter blocked or offensive terms, with fast takedown.",
+          "Work for prefixes as short as one character."
+        ],
+        "non_functional_requirements": [
+          "Server p99 < 20 ms; keystroke-to-render < ~100 ms.",
+          "~300K requests/s at peak.",
+          "99.99% availability; fall back to stale suggestions rather than errors.",
+          "Eventual consistency; trending terms within ~30 minutes, blocklist within ~5 minutes."
+        ],
+        "estimation_notes": [
+          "Requests: 1B searches/day x ~10 calls = 10B/day = ~116K/s avg, ~300K/s peak.",
+          "Corpus: top ~100M queries x ~30 B = ~3 GB of strings.",
+          "Prefix index: ~100M queries sharing prefixes -> on the order of 1B trie nodes; top-10 query IDs per node (10 x 4 B) = ~40 GB plus node overhead, so shard by prefix or cap indexed prefix length.",
+          "Logs: 1B searches/day x ~100 B = ~100 GB/day into the aggregation pipeline.",
+          "Caching: 1-3 character prefixes are a tiny key space but a large share of requests; CDN and browser caching with a TTL of minutes absorbs them."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Browser / App",
+            "purpose": "Debounces keystrokes, caches recent prefixes, cancels stale requests."
+          },
+          {
+            "id": "cdn",
+            "kind": "cdn",
+            "label": "CDN / Edge Cache",
+            "purpose": "Caches responses for popular prefixes with a short TTL."
+          },
+          {
+            "id": "lb",
+            "kind": "load_balancer",
+            "label": "Load Balancer",
+            "purpose": "Routes suggest requests to the right prefix shard and searches to search."
+          },
+          {
+            "id": "suggest",
+            "kind": "service",
+            "label": "Suggestion Service",
+            "purpose": "In-memory trie with precomputed top-10 per node, sharded by prefix and replicated."
+          },
+          {
+            "id": "trending",
+            "kind": "cache",
+            "label": "Trending Overlay (Redis)",
+            "purpose": "Short-window top terms per prefix, merged into results at query time."
+          },
+          {
+            "id": "search",
+            "kind": "service",
+            "label": "Search Service",
+            "purpose": "Runs the actual search and emits query logs."
+          },
+          {
+            "id": "logs",
+            "kind": "queue",
+            "label": "Search Log Stream (Kafka)",
+            "purpose": "Carries query events to streaming and batch aggregation."
+          },
+          {
+            "id": "stream-agg",
+            "kind": "worker",
+            "label": "Streaming Trend Aggregator",
+            "purpose": "Windowed counts that detect spikes and update the trending overlay."
+          },
+          {
+            "id": "batch",
+            "kind": "worker",
+            "label": "Daily Index Builder (Spark)",
+            "purpose": "Aggregates 30 days of logs with time decay, applies the blocklist, builds trie snapshots."
+          },
+          {
+            "id": "blob",
+            "kind": "blob_store",
+            "label": "Object Store (logs + snapshots)",
+            "purpose": "Archived logs and immutable trie snapshots."
+          },
+          {
+            "id": "blocklist",
+            "kind": "database",
+            "label": "Blocklist DB",
+            "purpose": "Blocked terms and patterns, editable by trust and safety."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "cdn",
+            "label": "GET /suggest?q={prefix}"
+          },
+          {
+            "source": "cdn",
+            "target": "lb",
+            "label": "Cache miss"
+          },
+          {
+            "source": "client",
+            "target": "lb",
+            "label": "Submit search"
+          },
+          {
+            "source": "lb",
+            "target": "suggest",
+            "label": "Route by prefix shard"
+          },
+          {
+            "source": "lb",
+            "target": "search",
+            "label": "Search request"
+          },
+          {
+            "source": "suggest",
+            "target": "trending",
+            "label": "Trending terms for prefix"
+          },
+          {
+            "source": "suggest",
+            "target": "blocklist",
+            "label": "Refresh serve-time filter"
+          },
+          {
+            "source": "suggest",
+            "target": "blob",
+            "label": "Load new snapshot (daily swap)"
+          },
+          {
+            "source": "search",
+            "target": "logs",
+            "label": "Query event"
+          },
+          {
+            "source": "logs",
+            "target": "stream-agg",
+            "label": "Consume"
+          },
+          {
+            "source": "stream-agg",
+            "target": "blocklist",
+            "label": "Filter blocked terms"
+          },
+          {
+            "source": "stream-agg",
+            "target": "trending",
+            "label": "Update windowed top-K"
+          },
+          {
+            "source": "logs",
+            "target": "blob",
+            "label": "Hourly log sink"
+          },
+          {
+            "source": "batch",
+            "target": "blob",
+            "label": "Read logs, write trie snapshot"
+          },
+          {
+            "source": "batch",
+            "target": "blocklist",
+            "label": "Exclude blocked terms"
+          }
+        ],
+        "deep_dive_topics": [
+          "Data structure: trie with precomputed top-K per node vs prefix hash map vs search-engine prefix queries; memory vs latency trade-offs.",
+          "Index build and deploy: offline batch with time-decayed counts, immutable snapshots, blue/green swap on serving nodes.",
+          "Sharding: by prefix range vs hash of the first characters; skew (far more queries start with 's' than 'x'), replicas for read throughput.",
+          "Freshness: streaming aggregation of recent queries merged with the daily snapshot at query time.",
+          "Client and edge optimizations: debouncing, caching short prefixes at CDN and browser, cancelling stale requests.",
+          "Filtering: enforcing the blocklist at build time and at serve time for fast takedowns."
+        ],
+        "pitfalls": [
+          "Running LIKE 'prefix%' queries against the main database on every keystroke.",
+          "Updating trie counts synchronously on every search at 100K+/s.",
+          "Not precomputing top-K, so each request walks an entire subtree.",
+          "Ignoring that 1-2 character prefixes are both the hottest and the most cacheable requests.",
+          "No way to remove an offensive suggestion quickly."
+        ]
+      }
+    },
+    {
+      "id": "ticket-booking",
+      "title": "Ticket Booking",
+      "difficulty": "MEDIUM",
+      "tags": [
+        "consistency",
+        "concurrency",
+        "inventory",
+        "transactions"
+      ],
+      "summary": "Sell reserved seats for popular events without ever double-booking a seat.",
+      "brief": {
+        "prompt": "Design a ticketing platform like Ticketmaster. Users browse events, pick specific seats on a venue map, and pay to book them; selected seats are held only briefly while they pay. Popular concerts can sell out within minutes.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "10M daily active users browsing ~100K listed events, averaging ~5K seats each. About 1M tickets are sold on a normal day."
+          },
+          {
+            "topic": "Hot on-sales",
+            "answer": "A top concert has ~50K seats, and ~5M users try to buy in the first 10 minutes of the on-sale."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Seat map loads < 500 ms. A seat hold confirms in < 1 s for users admitted to purchase. Payment can take a few seconds."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "A seat must never be sold twice. Seat availability shown while browsing may be a few seconds stale."
+          },
+          {
+            "topic": "Holds and limits",
+            "answer": "Selected seats are held for 10 minutes. Max 8 tickets per user per event."
+          },
+          {
+            "topic": "Payment",
+            "answer": "An external payment processor charges cards. Calls can fail, time out, or be confirmed late by webhook."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Orders and payments are kept 7 years for accounting; holds are ephemeral."
+          },
+          {
+            "topic": "Fairness",
+            "answer": "High-demand events need a fair virtual waiting room, and bots should not get most of the seats."
+          }
+        ],
+        "functional_requirements": [
+          "Browse and search events; view a venue seat map with availability.",
+          "Select up to 8 seats and hold them for 10 minutes.",
+          "Pay to confirm the booking and issue tickets.",
+          "Release held seats on timeout, cancellation, or payment failure.",
+          "Waiting room for high-demand on-sales."
+        ],
+        "non_functional_requirements": [
+          "Zero double-booked seats (strongly consistent inventory writes).",
+          "Seat hold p99 < 1 s for admitted users, even during on-sales.",
+          "Browsing is eventually consistent (seconds).",
+          "A 5M-user on-sale for one event must not degrade other events.",
+          "Orders and payment state are durable and reconcile with the processor."
+        ],
+        "estimation_notes": [
+          "Normal bookings: 1M tickets/day = ~12/s avg; booking writes are tiny outside on-sales.",
+          "Hot on-sale arrivals: 5M users / 600 s = ~8K/s; seat-map reads could exceed 50K/s if not gated.",
+          "Orders: 50K seats / ~4 tickets per order = ~12.5K orders; admitting ~2K users/min sells out in ~6-10 minutes with bounded contention.",
+          "Hold writes: ~12.5K orders x ~2 attempts = ~25K conditional updates in ~10 minutes, bursting to a few hundred/s on one event's partition; one Postgres shard handles it.",
+          "Inventory: 100K events x ~5K seats = 500M seat rows x ~50 B = ~25 GB; shard by event_id."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Web / App Client",
+            "purpose": "Browses events, picks seats, pays."
+          },
+          {
+            "id": "cdn",
+            "kind": "cdn",
+            "label": "CDN",
+            "purpose": "Static assets, event pages, venue map images."
+          },
+          {
+            "id": "gateway",
+            "kind": "api_gateway",
+            "label": "API Gateway",
+            "purpose": "Auth, bot detection, rate limiting, admission-token checks."
+          },
+          {
+            "id": "waiting-room",
+            "kind": "service",
+            "label": "Virtual Waiting Room",
+            "purpose": "Queues users for hot events and issues signed admission tokens at a controlled rate."
+          },
+          {
+            "id": "redis",
+            "kind": "cache",
+            "label": "Redis",
+            "purpose": "Waiting-room positions and cached seat availability (a few seconds stale)."
+          },
+          {
+            "id": "event-svc",
+            "kind": "service",
+            "label": "Event Service",
+            "purpose": "Event, venue, and seat map reads."
+          },
+          {
+            "id": "booking-svc",
+            "kind": "service",
+            "label": "Booking Service",
+            "purpose": "Places holds with conditional updates, creates orders, drives checkout."
+          },
+          {
+            "id": "db",
+            "kind": "database",
+            "label": "Inventory & Orders DB (Postgres)",
+            "purpose": "Seats with status, hold expiry and version; orders. Sharded by event_id."
+          },
+          {
+            "id": "payments",
+            "kind": "other",
+            "label": "Payment Processor",
+            "purpose": "Charges cards; sends async confirmation webhooks."
+          },
+          {
+            "id": "expiry",
+            "kind": "worker",
+            "label": "Hold Expiry Worker",
+            "purpose": "Releases holds past expires_at that were not paid."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "cdn",
+            "label": "Static assets, event pages"
+          },
+          {
+            "source": "client",
+            "target": "gateway",
+            "label": "HTTPS API calls"
+          },
+          {
+            "source": "gateway",
+            "target": "waiting-room",
+            "label": "Join queue / poll position"
+          },
+          {
+            "source": "waiting-room",
+            "target": "redis",
+            "label": "Queue positions, admission rate"
+          },
+          {
+            "source": "gateway",
+            "target": "event-svc",
+            "label": "Seat map (admission token for hot events)"
+          },
+          {
+            "source": "event-svc",
+            "target": "redis",
+            "label": "Cached availability"
+          },
+          {
+            "source": "event-svc",
+            "target": "db",
+            "label": "Event data; availability on miss"
+          },
+          {
+            "source": "gateway",
+            "target": "booking-svc",
+            "label": "Hold seats, checkout"
+          },
+          {
+            "source": "booking-svc",
+            "target": "db",
+            "label": "UPDATE seats SET held WHERE status = available"
+          },
+          {
+            "source": "booking-svc",
+            "target": "payments",
+            "label": "Charge (idempotency key = order_id)"
+          },
+          {
+            "source": "payments",
+            "target": "booking-svc",
+            "label": "Payment webhook"
+          },
+          {
+            "source": "expiry",
+            "target": "db",
+            "label": "Release expired holds"
+          }
+        ],
+        "deep_dive_topics": [
+          "Preventing double booking: conditional UPDATE or optimistic version checks vs SELECT FOR UPDATE vs distributed locks; why the DB stays the source of truth.",
+          "Seat holds: hold rows with expires_at, release by sweeper or lazy check, Redis TTL as a fast path but never the authority.",
+          "On-sale traffic: virtual waiting room, admission tokens, admission rate vs seats remaining, bot mitigation.",
+          "Payment edge cases: idempotency keys, payment succeeding after the hold expired, webhooks vs polling, compensating refunds.",
+          "Partitioning: sharding by event_id, a single hot partition during an on-sale, and why that is acceptable at this write volume.",
+          "Seat map reads: caching availability for seconds and handling the resulting hold conflicts gracefully in the UI."
+        ],
+        "pitfalls": [
+          "Check-then-book without an atomic conditional write or lock, allowing double booking under concurrency.",
+          "Keeping seat state only in Redis or behind a cache-based lock.",
+          "No hold timeout, or no handling for a payment that succeeds after the hold expired.",
+          "Letting millions of users hit the seat map and booking path directly during an on-sale with no admission control.",
+          "Making everything strongly consistent, including browsing, instead of only seat inventory."
+        ]
+      }
+    },
+    {
+      "id": "distributed-job-scheduler",
+      "title": "Distributed Job Scheduler",
+      "difficulty": "MEDIUM",
+      "tags": [
+        "scheduling",
+        "queues",
+        "fault-tolerance",
+        "distributed-systems"
+      ],
+      "summary": "Run one-off and recurring jobs on time across a fleet of workers.",
+      "brief": {
+        "prompt": "Design a distributed job scheduler for internal teams. A team registers a job (a container or HTTP callback) with a one-off time or cron schedule; the system runs it on a worker pool, retries failures, and keeps a history of every run.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "About 10M registered jobs, mostly recurring, producing ~100M executions per day."
+          },
+          {
+            "topic": "Traffic shape",
+            "answer": "Executions cluster at the top of each minute and hour. At midnight UTC about 50K runs are due in the same second."
+          },
+          {
+            "topic": "Job duration",
+            "answer": "Most runs take seconds to a few minutes (average ~60 s); a few run for hours. Timeout is configurable, default 1 hour."
+          },
+          {
+            "topic": "Latency",
+            "answer": "A run should start within 2 s of its scheduled time p99 normally, within ~10 s during the midnight spike."
+          },
+          {
+            "topic": "Delivery semantics",
+            "answer": "At-least-once execution; job code should be idempotent. But never run two copies of the same scheduled run at the same time."
+          },
+          {
+            "topic": "Retries",
+            "answer": "Configurable, default 3 attempts with exponential backoff. Exhausted runs are marked failed and alert the owning team."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Run history (status, timestamps, exit code, log pointer) and logs are kept 30 days."
+          },
+          {
+            "topic": "Scope",
+            "answer": "Cron schedules with time zones (DST-correct) and per-team concurrency quotas are in scope. Job dependencies (DAGs) are out of scope."
+          }
+        ],
+        "functional_requirements": [
+          "Register jobs with a one-off time or cron schedule (with time zone), payload, timeout, and retry policy.",
+          "Execute runs on a worker pool at the scheduled time.",
+          "Retry failed runs with backoff; mark exhausted runs failed and alert.",
+          "Show run history, status, and logs.",
+          "Pause, resume, delete, and manually trigger jobs; enforce per-team concurrency quotas."
+        ],
+        "non_functional_requirements": [
+          "Start within 2 s of schedule p99 (10 s during peak spikes).",
+          "No missed runs: every scheduled run executes at least once, even if a scheduler node fails.",
+          "No concurrent duplicate execution of the same scheduled run.",
+          "Workers scale horizontally; scheduling recovers from a node failure within ~10 s.",
+          "Run history retained 30 days."
+        ],
+        "estimation_notes": [
+          "Executions: 100M/day = ~1.2K/s avg, with ~50K starts in one second at midnight.",
+          "Concurrency: ~1.2K starts/s x ~60 s average runtime = ~70K runs in flight at average load.",
+          "Job definitions: 10M x ~1 KB = ~10 GB; fits in a replicated SQL cluster, sharded by job_id if needed.",
+          "Run history: 100M/day x ~300 B = ~30 GB/day; x 30 days = ~900 GB, partitioned by day and dropped by partition.",
+          "Due-job lookup: index on next_run_at; each scheduler shard claims due jobs in batches every ~1 s, and pre-loads the next minute's jobs to absorb the top-of-hour spike."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Team Services / CLI",
+            "purpose": "Register jobs, trigger runs, view history."
+          },
+          {
+            "id": "api",
+            "kind": "service",
+            "label": "Job API",
+            "purpose": "CRUD for job definitions, manual triggers, history queries."
+          },
+          {
+            "id": "jobs-db",
+            "kind": "database",
+            "label": "Job Store (Postgres)",
+            "purpose": "Definitions with next_run_at, run records with status and lease expiry."
+          },
+          {
+            "id": "coord",
+            "kind": "other",
+            "label": "Coordinator (etcd/ZooKeeper)",
+            "purpose": "Assigns job partitions to scheduler instances with leases and fencing tokens."
+          },
+          {
+            "id": "scheduler",
+            "kind": "service",
+            "label": "Scheduler Instances",
+            "purpose": "Each owns a set of partitions; claims due jobs, creates run records, enqueues them."
+          },
+          {
+            "id": "queue",
+            "kind": "queue",
+            "label": "Execution Queue (Kafka/SQS)",
+            "purpose": "Buffers runs for workers, partitioned by priority and team."
+          },
+          {
+            "id": "workers",
+            "kind": "worker",
+            "label": "Worker Pool",
+            "purpose": "Runs containers or HTTP callbacks, heartbeats, reports results."
+          },
+          {
+            "id": "logs",
+            "kind": "blob_store",
+            "label": "Log Store (S3)",
+            "purpose": "Run logs with a 30-day lifecycle rule."
+          },
+          {
+            "id": "monitor",
+            "kind": "worker",
+            "label": "Lease Monitor",
+            "purpose": "Finds runs with expired heartbeats and schedules retries or marks them failed."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "api",
+            "label": "Create/update jobs, query runs"
+          },
+          {
+            "source": "api",
+            "target": "jobs-db",
+            "label": "Definitions, history"
+          },
+          {
+            "source": "scheduler",
+            "target": "coord",
+            "label": "Acquire partition leases"
+          },
+          {
+            "source": "scheduler",
+            "target": "jobs-db",
+            "label": "Claim due jobs, insert run (job_id, scheduled_at unique), advance next_run_at"
+          },
+          {
+            "source": "scheduler",
+            "target": "queue",
+            "label": "Enqueue run_id"
+          },
+          {
+            "source": "queue",
+            "target": "workers",
+            "label": "Deliver run"
+          },
+          {
+            "source": "workers",
+            "target": "jobs-db",
+            "label": "Heartbeat lease, final status"
+          },
+          {
+            "source": "workers",
+            "target": "logs",
+            "label": "Upload logs"
+          },
+          {
+            "source": "monitor",
+            "target": "jobs-db",
+            "label": "Expired leases -> retry with backoff or fail"
+          }
+        ],
+        "deep_dive_topics": [
+          "Finding due jobs: next_run_at index with SELECT ... FOR UPDATE SKIP LOCKED vs timing wheels or delay queues vs time-bucketed partitions.",
+          "Avoiding duplicate runs: partition leases with fencing tokens, a unique (job_id, scheduled_at) run record, idempotent workers.",
+          "Worker failures: heartbeats, visibility timeouts, lease expiry, retries with backoff and jitter, dead-letter state.",
+          "Top-of-hour thundering herd: pre-loading upcoming runs, optional jitter, per-team quotas and fair scheduling.",
+          "Cron semantics: time zones and DST, missed runs after an outage (catch up vs skip), overlapping runs of long jobs.",
+          "Scaling the scheduler: partitioning jobs across instances and rebalancing when an instance dies."
+        ],
+        "pitfalls": [
+          "A single scheduler process with no failover, or several active schedulers with no coordination, causing double execution.",
+          "Scanning the whole jobs table every second without an index or partitioning on next_run_at.",
+          "Claiming exactly-once execution without fencing or idempotency.",
+          "No heartbeat or lease, so a crashed worker leaves runs stuck in RUNNING forever.",
+          "Ignoring the midnight and top-of-hour spike."
+        ]
+      }
+    },
+    {
+      "id": "video-streaming",
+      "title": "Video Streaming Platform",
+      "difficulty": "HARD",
+      "tags": [
+        "cdn",
+        "transcoding",
+        "blob-storage",
+        "adaptive-bitrate"
+      ],
+      "summary": "Upload, transcode, and stream video to a global audience on any network.",
+      "brief": {
+        "prompt": "Design a video platform like YouTube. Creators upload videos, and viewers worldwide watch them on phones, laptops, and TVs with fast startup and quality that adapts to their network. Viewers also see each video's details and view count.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "2B monthly users, 500M daily active, ~2.5B video views per day. Creators upload ~500 hours of video per minute."
+          },
+          {
+            "topic": "Traffic shape",
+            "answer": "Extremely read-heavy. The average view is ~5 minutes at ~3 Mbps. Popularity is long-tailed: a small fraction of videos gets most views."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Time to first frame < 2 s p95, rebuffering < 1% of watch time. A typical 10-minute upload should be playable within ~5 minutes; 4K may take longer."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "View counts can lag by minutes and be approximate. Metadata edits should be visible within ~1 minute."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Videos are stored until the creator deletes them. Originals must never be lost."
+          },
+          {
+            "topic": "Formats",
+            "answer": "Renditions from 240p to 4K, delivered with adaptive bitrate (HLS/DASH) to phones, browsers, and TVs."
+          },
+          {
+            "topic": "Uploads",
+            "answer": "Files up to 256 GB or 12 hours. Uploads must resume after network drops."
+          },
+          {
+            "topic": "Scope",
+            "answer": "Search, recommendations, comments, live streaming, and monetization are out of scope."
+          }
+        ],
+        "functional_requirements": [
+          "Creators upload videos (resumable) with title and description; videos become playable after processing.",
+          "Viewers stream with adaptive bitrate on any device.",
+          "Show video metadata and approximate view counts.",
+          "Creators can edit metadata and delete videos."
+        ],
+        "non_functional_requirements": [
+          "Time to first frame < 2 s p95; rebuffer ratio < 1%.",
+          "Playback availability 99.99%; uploads 99.9%.",
+          "Originals are never lost (object storage durability, cross-region copy).",
+          "A 10-minute upload is playable within ~5 minutes.",
+          "Most bytes served from edge caches close to viewers."
+        ],
+        "estimation_notes": [
+          "Uploads: 500 h/min x 1,440 = 720K hours/day; at ~2 GB per source hour = ~1.4 PB/day of originals (~17 GB/s ingest).",
+          "Renditions: a 240p-1080p ladder totals ~5 Mbps = ~2.25 GB per hour -> ~1.6 PB/day more; ~1 EB/year total, so tier storage by popularity.",
+          "Egress: 2.5B views x 300 s x 3 Mbps = ~280 PB/day = ~26 Tbps avg; only a CDN with ISP-embedded caches can serve this, and origin should see < 5% of bytes.",
+          "Transcoding: 720K h/day x ~6 renditions at ~1 core-hour per rendition-hour = ~4.3M core-hours/day = ~180K cores busy around the clock.",
+          "Metadata and view events: 2.5B views/day = ~29K/s avg, ~100K/s peak; cache metadata, aggregate views in a stream."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Viewer / Creator Apps",
+            "purpose": "Upload videos; play with an ABR player."
+          },
+          {
+            "id": "cdn",
+            "kind": "cdn",
+            "label": "CDN (multi-tier, ISP edge caches)",
+            "purpose": "Serves manifests and video segments close to viewers."
+          },
+          {
+            "id": "gateway",
+            "kind": "api_gateway",
+            "label": "API Gateway",
+            "purpose": "Auth and routing for metadata, upload, and playback APIs."
+          },
+          {
+            "id": "upload-svc",
+            "kind": "service",
+            "label": "Upload Service",
+            "purpose": "Creates upload sessions and pre-signed multipart URLs; kicks off processing."
+          },
+          {
+            "id": "blob",
+            "kind": "blob_store",
+            "label": "Video Object Store",
+            "purpose": "Originals (cold tier) and packaged segments (CDN origin)."
+          },
+          {
+            "id": "transcode-queue",
+            "kind": "queue",
+            "label": "Transcode Job Queue",
+            "purpose": "Chunk-level encode tasks for each upload."
+          },
+          {
+            "id": "transcoders",
+            "kind": "worker",
+            "label": "Transcoding Workers",
+            "purpose": "Encode GOP-aligned chunks in parallel per rendition, package HLS/DASH."
+          },
+          {
+            "id": "metadata-svc",
+            "kind": "service",
+            "label": "Video Metadata Service",
+            "purpose": "Titles, status, rendition manifests, view counts."
+          },
+          {
+            "id": "cache",
+            "kind": "cache",
+            "label": "Metadata Cache (Redis)",
+            "purpose": "Hot video metadata."
+          },
+          {
+            "id": "metadata-db",
+            "kind": "database",
+            "label": "Metadata DB (sharded MySQL/Vitess)",
+            "purpose": "Video records keyed by video_id."
+          },
+          {
+            "id": "view-stream",
+            "kind": "queue",
+            "label": "View Event Stream (Kafka)",
+            "purpose": "Playback and view events."
+          },
+          {
+            "id": "view-agg",
+            "kind": "worker",
+            "label": "View Count Aggregator",
+            "purpose": "Filters bots, aggregates views per window, writes batched counts."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "gateway",
+            "label": "HTTPS: upload init, metadata, playback info, view events"
+          },
+          {
+            "source": "gateway",
+            "target": "upload-svc",
+            "label": "Create upload session"
+          },
+          {
+            "source": "client",
+            "target": "blob",
+            "label": "Resumable multipart upload (pre-signed URLs)"
+          },
+          {
+            "source": "upload-svc",
+            "target": "metadata-svc",
+            "label": "Create video (status = processing)"
+          },
+          {
+            "source": "upload-svc",
+            "target": "transcode-queue",
+            "label": "Upload complete -> encode tasks"
+          },
+          {
+            "source": "transcode-queue",
+            "target": "transcoders",
+            "label": "Chunk tasks"
+          },
+          {
+            "source": "transcoders",
+            "target": "blob",
+            "label": "Read original, write segments + manifests"
+          },
+          {
+            "source": "transcoders",
+            "target": "metadata-svc",
+            "label": "Mark renditions ready"
+          },
+          {
+            "source": "gateway",
+            "target": "metadata-svc",
+            "label": "Video info, manifest URL"
+          },
+          {
+            "source": "metadata-svc",
+            "target": "cache",
+            "label": "Cache-aside reads"
+          },
+          {
+            "source": "metadata-svc",
+            "target": "metadata-db",
+            "label": "Read/write metadata"
+          },
+          {
+            "source": "client",
+            "target": "cdn",
+            "label": "GET manifest + segments (ABR)"
+          },
+          {
+            "source": "cdn",
+            "target": "blob",
+            "label": "Origin fetch on miss"
+          },
+          {
+            "source": "gateway",
+            "target": "view-stream",
+            "label": "View events"
+          },
+          {
+            "source": "view-stream",
+            "target": "view-agg",
+            "label": "Consume"
+          },
+          {
+            "source": "view-agg",
+            "target": "metadata-db",
+            "label": "Batched view counts"
+          }
+        ],
+        "deep_dive_topics": [
+          "Transcoding pipeline: splitting the source into GOP-aligned chunks for parallel encoding, ladder choice, per-title encoding, retries and progress tracking.",
+          "Adaptive bitrate: HLS/DASH manifests, 2-6 s segments, client ABR logic, and the trade-off between segment length, startup time, and CDN efficiency.",
+          "CDN strategy: multi-tier caching, pre-positioning popular videos, serving the long tail from regional origin, hit ratio targets and cost.",
+          "Storage cost: hot vs cold tiers by view count, skipping or lazily producing rare renditions (e.g. 4K for low-view videos), erasure coding.",
+          "Resumable uploads: multipart with pre-signed URLs, chunk checksums, upload session state, dedup by content hash.",
+          "View counting: stream aggregation, approximate counts, bot filtering, eventual consistency."
+        ],
+        "pitfalls": [
+          "Streaming video bytes through application servers instead of CDN and object storage.",
+          "Transcoding a long video serially on one machine, or synchronously inside the upload request.",
+          "Serving a single fixed-bitrate file with no adaptive bitrate.",
+          "Incrementing a DB row per view at ~30K/s, creating hot rows on viral videos.",
+          "Skipping the bandwidth math, which at ~26 Tbps of egress drives the whole design."
+        ]
+      }
+    },
+    {
+      "id": "ride-sharing",
+      "title": "Ride Sharing",
+      "difficulty": "HARD",
+      "tags": [
+        "geospatial",
+        "real-time",
+        "matching",
+        "consistency"
+      ],
+      "summary": "Match riders with nearby drivers and track every trip live.",
+      "brief": {
+        "prompt": "Design a ride-hailing service like Uber. A rider requests a ride from their location, the system assigns a nearby available driver, and both see each other's live location until the trip ends. Riders see a fare estimate before confirming.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "100M monthly riders, 5M drivers, ~20M trips per day across ~500 cities. Up to 1M drivers online at once at peak; busy hours run ~5x the average trip rate."
+          },
+          {
+            "topic": "Location updates",
+            "answer": "Online drivers send GPS every 4 s. During pickup and the trip, the rider sees the driver's position update every few seconds."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Assign a driver within ~10 s p95 of the request, including the driver accepting. Live locations reach the other party within ~2 s."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "A driver must never be assigned two trips at once, and a trip never gets two drivers. Location data can be slightly stale."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Trip records are kept 7 years for financial and regulatory reasons. Raw GPS traces are kept 30 days hot, then archived."
+          },
+          {
+            "topic": "Scope",
+            "answer": "One rider party per car; pooling is out of scope. Payment is handled by a separate payment service at trip end."
+          },
+          {
+            "topic": "Pricing",
+            "answer": "Show an upfront fare from the route ETA, with surge pricing based on supply and demand per area. The quote is honored for a few minutes."
+          },
+          {
+            "topic": "Geography",
+            "answer": "A request is always matched with drivers in the same city. Cities operate independently."
+          }
+        ],
+        "functional_requirements": [
+          "Riders get a fare estimate and ETA, then request a ride from pickup to destination.",
+          "Match the request to a nearby available driver who can accept or decline.",
+          "Riders and drivers see each other's live location during pickup and trip.",
+          "Trip lifecycle: requested, assigned, arriving, in progress, completed, cancelled.",
+          "Drivers go online/offline and stream location while online.",
+          "Finalize the trip record and fare at completion for payment."
+        ],
+        "non_functional_requirements": [
+          "Match within ~10 s p95.",
+          "Location visible to the other party within ~2 s.",
+          "No double assignment; trip state transitions are strongly consistent.",
+          "99.99% availability for request and match; a failure in one region does not affect others.",
+          "Sustain ~250K location updates/s at peak."
+        ],
+        "estimation_notes": [
+          "Location writes: 1M online drivers / 4 s = ~250K updates/s at peak.",
+          "Trips: 20M/day = ~230 requests/s avg, ~1.2K/s in busy hours.",
+          "Geo index memory: 1M drivers x ~100 B (id, lat/lng, status, cell) = ~100 MB; easily in memory, partitioned by city.",
+          "Location ingest: 250K/s x ~200 B = ~50 MB/s.",
+          "GPS traces: 250K/s x ~50 B x 86,400 = ~1 TB/day at peak rates; 30 days hot = ~30 TB upper bound.",
+          "Matching: a k-ring search over ~1-3 km of H3/geohash cells returns tens of candidates; cheap. The slow step is the driver accepting."
+        ],
+        "reference_components": [
+          {
+            "id": "rider",
+            "kind": "client",
+            "label": "Rider App",
+            "purpose": "Gets quotes, requests rides, shows the driver's live location."
+          },
+          {
+            "id": "driver",
+            "kind": "client",
+            "label": "Driver App",
+            "purpose": "Streams GPS, receives and accepts trip offers."
+          },
+          {
+            "id": "edge",
+            "kind": "api_gateway",
+            "label": "Edge Gateway (HTTPS + WebSocket)",
+            "purpose": "Auth, routing by city, persistent connections for live updates and offers."
+          },
+          {
+            "id": "location-svc",
+            "kind": "service",
+            "label": "Location Service",
+            "purpose": "Ingests driver GPS, updates the geo index, relays positions on active trips."
+          },
+          {
+            "id": "geo-index",
+            "kind": "cache",
+            "label": "Geo Index (Redis, per city)",
+            "purpose": "Available drivers by geo cell with TTL so stale drivers drop out."
+          },
+          {
+            "id": "pricing",
+            "kind": "service",
+            "label": "Pricing Service",
+            "purpose": "Route ETA, fare quote, and surge multiplier per cell."
+          },
+          {
+            "id": "trip-svc",
+            "kind": "service",
+            "label": "Trip Service",
+            "purpose": "Trip state machine; atomic driver assignment."
+          },
+          {
+            "id": "trip-db",
+            "kind": "database",
+            "label": "Trip DB (sharded by city)",
+            "purpose": "Trips and driver assignment state with version checks."
+          },
+          {
+            "id": "matching",
+            "kind": "service",
+            "label": "Matching / Dispatch",
+            "purpose": "Ranks nearby drivers by ETA, offers the trip, handles decline and timeout."
+          },
+          {
+            "id": "events",
+            "kind": "queue",
+            "label": "Kafka (location + trip events)",
+            "purpose": "Feeds trace storage, billing, and analytics off the hot path."
+          },
+          {
+            "id": "trace-writer",
+            "kind": "worker",
+            "label": "Trace Writer",
+            "purpose": "Batches GPS points into the history store."
+          },
+          {
+            "id": "history-db",
+            "kind": "database",
+            "label": "Location History (Cassandra, 30-day TTL)",
+            "purpose": "GPS traces by driver and trip."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "driver",
+            "target": "edge",
+            "label": "WebSocket: GPS every 4 s, accept/decline"
+          },
+          {
+            "source": "rider",
+            "target": "edge",
+            "label": "HTTPS + WebSocket: quote, request, live updates"
+          },
+          {
+            "source": "edge",
+            "target": "location-svc",
+            "label": "Driver locations"
+          },
+          {
+            "source": "location-svc",
+            "target": "geo-index",
+            "label": "Update driver cell + status"
+          },
+          {
+            "source": "location-svc",
+            "target": "events",
+            "label": "Location events"
+          },
+          {
+            "source": "location-svc",
+            "target": "edge",
+            "label": "Driver position to rider on active trip"
+          },
+          {
+            "source": "edge",
+            "target": "pricing",
+            "label": "Fare quote"
+          },
+          {
+            "source": "pricing",
+            "target": "geo-index",
+            "label": "Supply per cell (surge)"
+          },
+          {
+            "source": "edge",
+            "target": "trip-svc",
+            "label": "Request, accept, cancel, status changes"
+          },
+          {
+            "source": "trip-svc",
+            "target": "trip-db",
+            "label": "Conditional state transitions"
+          },
+          {
+            "source": "trip-svc",
+            "target": "matching",
+            "label": "Dispatch trip"
+          },
+          {
+            "source": "matching",
+            "target": "geo-index",
+            "label": "Nearby available drivers"
+          },
+          {
+            "source": "matching",
+            "target": "edge",
+            "label": "Offer to one driver"
+          },
+          {
+            "source": "trip-svc",
+            "target": "events",
+            "label": "Trip events (billing, analytics)"
+          },
+          {
+            "source": "events",
+            "target": "trace-writer",
+            "label": "Consume locations"
+          },
+          {
+            "source": "trace-writer",
+            "target": "history-db",
+            "label": "Batched GPS traces"
+          }
+        ],
+        "deep_dive_topics": [
+          "Geospatial indexing: geohash vs H3 vs quadtree; querying neighbor cells, cell boundaries, and update cost at 250K writes/s.",
+          "Matching: ranking candidates by road ETA rather than straight-line distance, offering to one driver vs batching, accept timeouts.",
+          "No double assignment: compare-and-set on driver and trip state (or a per-driver lock with TTL), idempotent accept, trip state machine.",
+          "Partitioning by city: keeping matching local, hot cities, rebuilding a city's in-memory index after a failure (drivers re-report in ~4 s).",
+          "Real-time channel: WebSockets vs push notifications, relaying driver position to the rider, mobile disconnects and stale locations.",
+          "Surge pricing: supply and demand per cell over short windows, smoothing, locking a quoted price for a few minutes."
+        ],
+        "pitfalls": [
+          "Writing every location to a relational DB and running radius queries on it at 250K updates/s.",
+          "Matching on straight-line distance only, ignoring ETA.",
+          "Non-atomic assignment, so two riders can be matched to the same driver.",
+          "Synchronously persisting every GPS ping on the hot path instead of streaming it.",
+          "One global matching cluster instead of partitioning by geography."
+        ]
+      }
+    },
+    {
+      "id": "distributed-key-value-store",
+      "title": "Distributed Key-Value Store",
+      "difficulty": "HARD",
+      "tags": [
+        "replication",
+        "partitioning",
+        "consistency",
+        "storage-engines"
+      ],
+      "summary": "Build a horizontally scalable, highly available key-value store in the style of Dynamo.",
+      "brief": {
+        "prompt": "Design a distributed key-value store that other services use to get, put, and delete values by key. It must keep working when machines fail and scale by adding machines, and callers can trade read freshness for speed per request.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "100 TB of data today, growing to 1 PB. Peak ~1M operations/s (about 70% reads, 30% writes) from thousands of client services."
+          },
+          {
+            "topic": "Keys and values",
+            "answer": "Keys up to 256 B, values up to 1 MB, typically ~1 KB. Point get/put/delete only; no range scans."
+          },
+          {
+            "topic": "Latency",
+            "answer": "p99 < 10 ms for reads and writes within a datacenter."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "Tunable per request. The default is eventual consistency; callers can ask for quorum reads and writes. No multi-key transactions."
+          },
+          {
+            "topic": "Availability",
+            "answer": "Writes must be accepted during node failures and partial network partitions (always writable, like a shopping cart). Target 99.99%."
+          },
+          {
+            "topic": "Durability and retention",
+            "answer": "Data persists until deleted, with optional per-key TTL. An acknowledged write must survive losing any one node, and ideally a whole availability zone."
+          },
+          {
+            "topic": "Deployment",
+            "answer": "One region with 3 availability zones. Cross-region replication is out of scope."
+          },
+          {
+            "topic": "Conflicts",
+            "answer": "Last-writer-wins is acceptable for most callers. Vector clocks with sibling values are a stretch goal."
+          }
+        ],
+        "functional_requirements": [
+          "put(key, value, ttl?), get(key), delete(key) with keys up to 256 B and values up to 1 MB.",
+          "Per-request consistency level (ONE, QUORUM, ALL).",
+          "Add or remove nodes online with automatic rebalancing.",
+          "Automatic replication and recovery from node failure.",
+          "Optional per-key TTL."
+        ],
+        "non_functional_requirements": [
+          "p99 < 10 ms in-datacenter at ~1M ops/s.",
+          "99.99% availability; writable through single-node and single-AZ failures.",
+          "Acknowledged durable writes survive one node loss (W >= 2) and an AZ loss (replicas in 3 AZs).",
+          "Near-linear horizontal scaling to 1 PB.",
+          "Replicas converge after failures (read repair and anti-entropy)."
+        ],
+        "estimation_notes": [
+          "Capacity: 100 TB x 3 replicas = 300 TB; at ~4 TB usable per node (headroom for compaction) -> ~75-100 nodes, ~750+ at 1 PB.",
+          "Throughput: 1M ops/s over ~100 nodes = ~10K client ops/s per node; 300K writes/s x 3 replicas = ~900K replica writes/s cluster-wide.",
+          "Bandwidth: 1M ops x ~1 KB = ~1 GB/s client traffic; replication adds ~600 MB/s (2 extra copies of 300 MB/s of writes).",
+          "Keys: 100 TB / 1 KB = ~100B keys, ~3B replicas per node; an in-memory index is impossible, so use an LSM engine with ~10-bit/key Bloom filters (~4 GB per node).",
+          "Virtual nodes: ~256 tokens per physical node keeps load even and spreads rebalancing over many peers."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Client Library",
+            "purpose": "Token-aware: hashes the key, picks a coordinator, sets the consistency level."
+          },
+          {
+            "id": "metadata",
+            "kind": "database",
+            "label": "Cluster Metadata (etcd)",
+            "purpose": "Token ring ownership and config; small, strongly consistent, off the data path."
+          },
+          {
+            "id": "coordinator",
+            "kind": "service",
+            "label": "Coordinator (any node)",
+            "purpose": "Finds the N replicas for a key, fans out, waits for R or W acks, does read repair."
+          },
+          {
+            "id": "replica-a",
+            "kind": "database",
+            "label": "Replica Node A (LSM)",
+            "purpose": "Commit log, memtable, SSTables with Bloom filters; owns token ranges in AZ 1."
+          },
+          {
+            "id": "replica-b",
+            "kind": "database",
+            "label": "Replica Node B (LSM)",
+            "purpose": "Second replica of the range, in AZ 2."
+          },
+          {
+            "id": "replica-c",
+            "kind": "database",
+            "label": "Replica Node C (LSM)",
+            "purpose": "Third replica of the range, in AZ 3."
+          },
+          {
+            "id": "hints",
+            "kind": "other",
+            "label": "Hinted Handoff Log",
+            "purpose": "Durably holds writes for an unreachable replica and replays them when it returns."
+          },
+          {
+            "id": "gossip",
+            "kind": "other",
+            "label": "Gossip / Failure Detector",
+            "purpose": "Spreads node liveness (phi-accrual) and ring changes to all nodes."
+          },
+          {
+            "id": "repair",
+            "kind": "worker",
+            "label": "Anti-entropy Repair",
+            "purpose": "Compares Merkle trees between replicas and streams differences."
+          },
+          {
+            "id": "rebalancer",
+            "kind": "worker",
+            "label": "Rebalancer",
+            "purpose": "Moves token ranges when nodes join or leave."
+          },
+          {
+            "id": "backup",
+            "kind": "blob_store",
+            "label": "Snapshot Backups (S3)",
+            "purpose": "Periodic SSTable snapshots for disaster recovery."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "metadata",
+            "label": "Fetch token map (cached)"
+          },
+          {
+            "source": "client",
+            "target": "coordinator",
+            "label": "GET/PUT/DELETE + consistency level"
+          },
+          {
+            "source": "coordinator",
+            "target": "replica-a",
+            "label": "Read/write"
+          },
+          {
+            "source": "coordinator",
+            "target": "replica-b",
+            "label": "Read/write"
+          },
+          {
+            "source": "coordinator",
+            "target": "replica-c",
+            "label": "Read/write"
+          },
+          {
+            "source": "coordinator",
+            "target": "hints",
+            "label": "Store hint if a replica is down"
+          },
+          {
+            "source": "hints",
+            "target": "replica-c",
+            "label": "Replay on recovery"
+          },
+          {
+            "source": "gossip",
+            "target": "coordinator",
+            "label": "Liveness, ring changes"
+          },
+          {
+            "source": "repair",
+            "target": "replica-a",
+            "label": "Merkle tree compare"
+          },
+          {
+            "source": "repair",
+            "target": "replica-b",
+            "label": "Stream differing ranges"
+          },
+          {
+            "source": "rebalancer",
+            "target": "metadata",
+            "label": "Update token ownership"
+          },
+          {
+            "source": "rebalancer",
+            "target": "replica-b",
+            "label": "Stream token ranges to new owner"
+          },
+          {
+            "source": "replica-a",
+            "target": "backup",
+            "label": "SSTable snapshots"
+          }
+        ],
+        "deep_dive_topics": [
+          "Partitioning: consistent hashing with virtual nodes vs fixed range partitions; how much data moves when nodes join or leave.",
+          "Replication and quorums: N/R/W choices (e.g. N=3, R=W=2), what R+W>N does and does not guarantee, sloppy quorum and hinted handoff.",
+          "Conflict resolution: last-writer-wins and clock skew vs vector clocks with siblings; read repair.",
+          "Failure handling: gossip membership, phi-accrual detection, temporary vs permanent failure, Merkle-tree anti-entropy.",
+          "Storage engine: LSM (commit log, memtable, SSTables, compaction, Bloom filters) vs B-tree; write amplification, tombstones and deletes.",
+          "Replica placement across AZs and behavior during a partition (CAP/PACELC): which requests succeed and what they may return."
+        ],
+        "pitfalls": [
+          "hash(key) mod N partitioning, which reshuffles almost every key when N changes.",
+          "Claiming strong consistency and always-writable availability during partitions at the same time.",
+          "A single leader for the whole cluster, or a central metadata service on every request's data path.",
+          "Treating W=1 as durable, or dropping tombstones too early so deleted data resurrects after repair.",
+          "Placing all replicas of a key in one availability zone."
+        ]
+      }
+    },
+    {
+      "id": "payment-system",
+      "title": "Payment System",
+      "difficulty": "HARD",
+      "tags": [
+        "consistency",
+        "idempotency",
+        "ledger",
+        "reliability"
+      ],
+      "summary": "Charge buyers and pay out sellers without ever losing or double-counting money.",
+      "brief": {
+        "prompt": "Design the payment backend for an e-commerce marketplace. At checkout it charges the buyer's card via external processors and records every money movement; later it pays out sellers, handles refunds, and reconciles with processor reports.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "10M orders per day, peaking around 2K payments/s during sales events. 1M sellers."
+          },
+          {
+            "topic": "Read/write ratio",
+            "answer": "Status reads (order pages, support, seller dashboards) are ~5x payment writes. Finance reporting runs off replicas or a warehouse."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Checkout payment p99 < 2 s, mostly processor time (~300-800 ms per call). Seller payouts run as a daily batch."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "Strong. Never double-charge, never lose a recorded payment, and the ledger must always balance (debits equal credits)."
+          },
+          {
+            "topic": "Processors",
+            "answer": "Two external card processors (e.g. Stripe and Adyen). Cards are tokenized by the processor's hosted fields, so we never see raw card numbers. Processors send async webhooks."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Payment and ledger records are immutable and kept 7 years for audit."
+          },
+          {
+            "topic": "Currencies",
+            "answer": "Multiple currencies but no FX: each payment and payout is in a single currency."
+          },
+          {
+            "topic": "Refunds and payouts",
+            "answer": "Full and partial refunds. Sellers are paid daily, net of a 10% marketplace fee."
+          }
+        ],
+        "functional_requirements": [
+          "Charge buyers at checkout via external processors (authorize and capture).",
+          "Record every money movement in a double-entry ledger.",
+          "Full and partial refunds.",
+          "Daily seller payouts net of marketplace fees.",
+          "Daily reconciliation against processor settlement reports.",
+          "Expose payment status to orders and support tools."
+        ],
+        "non_functional_requirements": [
+          "No double charges and no lost payments (exactly-once effect through idempotency).",
+          "Strongly consistent payment state and ledger; the ledger always balances.",
+          "Checkout payment p99 < 2 s, dominated by processor latency.",
+          "99.99% checkout availability; queue captures for retry rather than fail orders when a processor is slow.",
+          "Immutable, auditable records kept 7 years; PCI scope minimized via tokenization."
+        ],
+        "estimation_notes": [
+          "Payments: 10M/day = ~116/s avg, ~2K/s peak.",
+          "Ledger: ~4 entries per payment (buyer charge, seller payable, marketplace fee, processor fee) -> ~40M rows/day = ~460/s avg, ~8K/s peak.",
+          "Storage: 40M x ~200 B = ~8 GB/day of ledger + ~5 GB/day of payments and events = ~5 TB/year, ~35 TB over 7 years.",
+          "Payouts: 1M sellers, but only ~200K have a non-zero balance on a given day; processed in a few hours.",
+          "Reconciliation: ~10M settlement lines/day from processor files, matched in a daily batch."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Checkout Client",
+            "purpose": "Buyer's browser or app; card entry via processor-hosted fields."
+          },
+          {
+            "id": "checkout",
+            "kind": "service",
+            "label": "Order / Checkout Service",
+            "purpose": "Creates orders and requests payment."
+          },
+          {
+            "id": "payment-svc",
+            "kind": "service",
+            "label": "Payment Service",
+            "purpose": "Payment state machine, idempotency, processor routing, webhook handling."
+          },
+          {
+            "id": "payment-db",
+            "kind": "database",
+            "label": "Payment DB (Postgres)",
+            "purpose": "Payment intents, attempts, idempotency keys, outbox table."
+          },
+          {
+            "id": "processors",
+            "kind": "other",
+            "label": "Card Processors / Payout Rails",
+            "purpose": "External processors for charges, refunds, and seller payouts."
+          },
+          {
+            "id": "events",
+            "kind": "queue",
+            "label": "Kafka (payment events)",
+            "purpose": "Payment events published from the outbox."
+          },
+          {
+            "id": "ledger-svc",
+            "kind": "service",
+            "label": "Ledger Service",
+            "purpose": "Writes balanced, append-only double-entry journal entries."
+          },
+          {
+            "id": "ledger-db",
+            "kind": "database",
+            "label": "Ledger DB (Postgres)",
+            "purpose": "Immutable journal; balances derived from entries."
+          },
+          {
+            "id": "payout",
+            "kind": "worker",
+            "label": "Payout Job",
+            "purpose": "Daily: computes seller payables and initiates idempotent payouts."
+          },
+          {
+            "id": "recon",
+            "kind": "worker",
+            "label": "Reconciliation Job",
+            "purpose": "Matches processor settlement reports to internal records and flags breaks."
+          },
+          {
+            "id": "settlements",
+            "kind": "blob_store",
+            "label": "Settlement Reports (S3)",
+            "purpose": "Raw daily processor reports."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "checkout",
+            "label": "HTTPS place order (payment token)"
+          },
+          {
+            "source": "checkout",
+            "target": "payment-svc",
+            "label": "Create payment (idempotency key = order_id)"
+          },
+          {
+            "source": "payment-svc",
+            "target": "payment-db",
+            "label": "Payment + attempt + outbox row, one transaction"
+          },
+          {
+            "source": "payment-svc",
+            "target": "processors",
+            "label": "Authorize / capture / refund (processor idempotency key)"
+          },
+          {
+            "source": "processors",
+            "target": "payment-svc",
+            "label": "Webhooks: captured, failed, refunded, disputed"
+          },
+          {
+            "source": "payment-svc",
+            "target": "events",
+            "label": "Outbox relay"
+          },
+          {
+            "source": "events",
+            "target": "checkout",
+            "label": "Payment status updates"
+          },
+          {
+            "source": "events",
+            "target": "ledger-svc",
+            "label": "Payment events"
+          },
+          {
+            "source": "ledger-svc",
+            "target": "ledger-db",
+            "label": "Append balanced entries (unique event_id)"
+          },
+          {
+            "source": "payout",
+            "target": "ledger-db",
+            "label": "Seller payable balances"
+          },
+          {
+            "source": "payout",
+            "target": "processors",
+            "label": "Payout instructions (idempotent payout_id)"
+          },
+          {
+            "source": "payout",
+            "target": "ledger-svc",
+            "label": "Record payout entries"
+          },
+          {
+            "source": "processors",
+            "target": "settlements",
+            "label": "Daily settlement reports"
+          },
+          {
+            "source": "recon",
+            "target": "settlements",
+            "label": "Read reports"
+          },
+          {
+            "source": "recon",
+            "target": "ledger-db",
+            "label": "Match entries, flag breaks"
+          }
+        ],
+        "deep_dive_topics": [
+          "Idempotency end to end: order-level keys, unique constraints, processor idempotency keys, retrying safely after a timeout with an unknown outcome.",
+          "Payment state machine: created, authorized, captured, failed, refunded; timeouts, out-of-order webhooks, polling the processor for unknown states.",
+          "Double-entry ledger: append-only entries, balances derived from entries, corrections as reversing entries, integer minor units for money.",
+          "Keeping payment DB, ledger, and events consistent: transactional outbox vs dual writes; exactly-once effect through consumer dedup.",
+          "Reconciliation: matching settlement files to internal records, fees, chargebacks, and the workflow for breaks.",
+          "Processor failover: routing across two processors, and only retrying on the second after a definitive failure on the first."
+        ],
+        "pitfalls": [
+          "Retrying a timed-out charge without an idempotency key, risking a double charge.",
+          "Writing the DB and publishing to Kafka as two separate steps with no outbox (dual-write inconsistency).",
+          "Mutable balance counters with no journal, making audits and corrections impossible.",
+          "Storing raw card numbers and pulling the whole system into PCI scope.",
+          "Floating-point money, or an eventually consistent ledger."
+        ]
+      }
+    },
+    {
+      "id": "collaborative-document-editor",
+      "title": "Collaborative Document Editor",
+      "difficulty": "HARD",
+      "tags": [
+        "real-time",
+        "crdt",
+        "websockets",
+        "consistency"
+      ],
+      "summary": "Let many people edit the same document at once and see each other's changes live.",
+      "brief": {
+        "prompt": "Design a collaborative document editor like Google Docs. Several people can edit the same document at once and see each other's edits and cursors in real time. Documents save automatically, and users can browse and restore past versions.",
+        "clarifications": [
+          {
+            "topic": "Scale",
+            "answer": "100M documents, 10M daily active users who each spend ~20 minutes a day typing. At peak ~1M documents are open with ~2M connected clients."
+          },
+          {
+            "topic": "Concurrency per document",
+            "answer": "Most documents have 1-3 simultaneous editors. A document can have up to 100 editors and 1,000 viewers at once."
+          },
+          {
+            "topic": "Latency",
+            "answer": "Local typing must feel instant. Remote edits should appear for others within ~200 ms p95 in the same region."
+          },
+          {
+            "topic": "Consistency",
+            "answer": "Everyone converges to the same document, acknowledged edits are never lost, and concurrent edits must not garble each other (no interleaved characters)."
+          },
+          {
+            "topic": "Offline",
+            "answer": "Short disconnects (minutes) must be seamless. Long offline editing is a stretch goal."
+          },
+          {
+            "topic": "Data retention",
+            "answer": "Fine-grained history for 30 days; named versions and daily snapshots are kept forever."
+          },
+          {
+            "topic": "Scope",
+            "answer": "Rich text (headings, lists, bold), images by reference, live cursors, and view/edit permissions. Comments, spreadsheets, and slides are out of scope."
+          },
+          {
+            "topic": "Document size",
+            "answer": "Typical document ~50 KB of text; max ~10 MB."
+          }
+        ],
+        "functional_requirements": [
+          "Create, open, and edit rich-text documents with multiple concurrent editors.",
+          "Propagate edits and remote cursors/presence in real time.",
+          "Save automatically; no save button.",
+          "Browse and restore earlier versions; name versions.",
+          "Check view/edit permissions on open and on every incoming op.",
+          "Recover seamlessly from short disconnects."
+        ],
+        "non_functional_requirements": [
+          "Remote edits visible within ~200 ms p95 in-region; local edits applied instantly.",
+          "Convergence: all clients reach the same state; acknowledged ops are never lost.",
+          "99.95% availability; a session server failure recovers in seconds without losing acknowledged ops.",
+          "~2M concurrent connections; up to 100 editors per document.",
+          "Fine-grained history for 30 days, snapshots forever."
+        ],
+        "estimation_notes": [
+          "Active typing: 10M DAU x ~20 min/day = ~200M typing-minutes/day -> ~140K concurrent typists avg, ~300K at peak.",
+          "Ops: batching keystrokes into ~1 op/s per typist -> ~140K ops/s avg, ~300K ops/s peak; ~150 B each = ~45 MB/s at peak.",
+          "Op log: 140K/s x 150 B x 86,400 = ~1.8 TB/day; 30 days of fine-grained history = ~55 TB, so periodic snapshots and compaction are required.",
+          "Connections: ~2M clients at ~50K WebSockets per gateway host -> ~40 hosts plus headroom.",
+          "Hot document: 100 editors x 1 op/s = 100 ops/s in, x ~1,100 recipients = ~110K messages/s out of one session; needs batching and a viewer fan-out tier.",
+          "Snapshots: 100M docs x ~50 KB = ~5 TB of current state in object storage."
+        ],
+        "reference_components": [
+          {
+            "id": "client",
+            "kind": "client",
+            "label": "Editor Client",
+            "purpose": "Applies local ops immediately, tracks pending ops, syncs over WebSocket."
+          },
+          {
+            "id": "lb",
+            "kind": "load_balancer",
+            "label": "Load Balancer",
+            "purpose": "Routes HTTPS and WebSocket traffic."
+          },
+          {
+            "id": "doc-api",
+            "kind": "service",
+            "label": "Document API",
+            "purpose": "Create/list/open documents, permissions, version history (HTTPS)."
+          },
+          {
+            "id": "gateway",
+            "kind": "api_gateway",
+            "label": "WebSocket Gateway",
+            "purpose": "Holds connections, authenticates, routes ops to the document's session server."
+          },
+          {
+            "id": "registry",
+            "kind": "cache",
+            "label": "Session Registry (Redis/etcd)",
+            "purpose": "doc_id -> owning session server, held by a lease."
+          },
+          {
+            "id": "session",
+            "kind": "service",
+            "label": "Doc Session Server",
+            "purpose": "Single owner per open doc: orders ops (OT transform or CRDT merge), assigns revisions, broadcasts."
+          },
+          {
+            "id": "op-log",
+            "kind": "database",
+            "label": "Op Log DB (sharded by doc_id)",
+            "purpose": "Durable append of ops keyed by (doc_id, revision)."
+          },
+          {
+            "id": "snapshots",
+            "kind": "blob_store",
+            "label": "Snapshot Store (S3)",
+            "purpose": "Periodic document snapshots and version checkpoints."
+          },
+          {
+            "id": "meta-db",
+            "kind": "database",
+            "label": "Metadata DB",
+            "purpose": "Document metadata, ACLs, named versions."
+          },
+          {
+            "id": "compactor",
+            "kind": "worker",
+            "label": "Snapshot / Compaction Worker",
+            "purpose": "Folds ops into snapshots and prunes fine-grained history after 30 days."
+          }
+        ],
+        "reference_connections": [
+          {
+            "source": "client",
+            "target": "lb",
+            "label": "HTTPS + WebSocket"
+          },
+          {
+            "source": "lb",
+            "target": "doc-api",
+            "label": "Open, list, history"
+          },
+          {
+            "source": "lb",
+            "target": "gateway",
+            "label": "WebSocket upgrade"
+          },
+          {
+            "source": "doc-api",
+            "target": "meta-db",
+            "label": "Metadata, ACLs, named versions"
+          },
+          {
+            "source": "doc-api",
+            "target": "snapshots",
+            "label": "Load version for history view"
+          },
+          {
+            "source": "doc-api",
+            "target": "op-log",
+            "label": "Replay ops for fine-grained history"
+          },
+          {
+            "source": "gateway",
+            "target": "registry",
+            "label": "Find session owner for doc_id"
+          },
+          {
+            "source": "gateway",
+            "target": "session",
+            "label": "Forward ops (client op ID, base revision)"
+          },
+          {
+            "source": "session",
+            "target": "registry",
+            "label": "Hold ownership lease"
+          },
+          {
+            "source": "session",
+            "target": "snapshots",
+            "label": "Load latest snapshot on session start"
+          },
+          {
+            "source": "session",
+            "target": "op-log",
+            "label": "Append ops before ack"
+          },
+          {
+            "source": "session",
+            "target": "gateway",
+            "label": "Broadcast ops + cursors"
+          },
+          {
+            "source": "compactor",
+            "target": "op-log",
+            "label": "Read ops since last snapshot"
+          },
+          {
+            "source": "compactor",
+            "target": "snapshots",
+            "label": "Write new snapshot"
+          }
+        ],
+        "deep_dive_topics": [
+          "OT vs CRDT: central-server transformation (Google Docs style) vs CRDTs (RGA, Yjs); metadata overhead, tombstones, offline support, server role.",
+          "Single owner per document: routing by doc_id, lease-based ownership with fencing, failover by replaying the op log from the last snapshot.",
+          "Acks and durability: ack only after durable append; client pending/sent buffers; idempotent resend after reconnect using client op IDs and revisions.",
+          "Hot documents: batching broadcasts, separating viewers from editors, throttling cursor and presence updates.",
+          "History and storage: op log plus periodic snapshots, compaction, reconstructing the document at time T, retention after 30 days.",
+          "Reconnect and offline: rebasing unacknowledged local ops onto newer server revisions."
+        ],
+        "pitfalls": [
+          "Last-writer-wins on the whole document or per paragraph, silently dropping concurrent edits.",
+          "Locking the document or paragraphs for one editor instead of merging concurrent edits.",
+          "Sending the full document on every keystroke instead of ops.",
+          "With OT, letting several servers accept ops for the same document with no single ordering point.",
+          "Persisting every keystroke as its own row with no batching or snapshots."
+        ]
+      }
+    }
+  ]
+}
