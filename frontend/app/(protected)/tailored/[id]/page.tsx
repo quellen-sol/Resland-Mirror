@@ -1,11 +1,11 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getAccessTokenOrLogin } from "@/lib/auth";
-import { getUser, getUserTailoredResume } from "@/lib/db";
+import { getUserTailoredResume, requireOnboardedUser } from "@/lib/db";
 import { parseTailoredContent } from "@/lib/tailored";
 import TailoredEditor from "./tailored-editor";
 
-export const metadata: Metadata = { title: "Tailored resume" };
+export const metadata: Metadata = { title: "Tailored Resume" };
 
 export default async function TailoredDetailPage({
   params,
@@ -13,8 +13,7 @@ export default async function TailoredDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await getUser();
-  if (!user) redirect("/auth/login");
+  const user = await requireOnboardedUser();
   const accessToken = await getAccessTokenOrLogin(`/tailored/${id}`);
 
   const row = await getUserTailoredResume(user.auth0_id, id);

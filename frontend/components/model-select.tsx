@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, type PricedModel } from "@/lib/api";
+import { apiFetch, fmtCents, type PricedModel } from "@/lib/api";
 import { cn } from "cn";
+
+function fmtAvg(cents: number) {
+  // Sub-cent averages render in cents — "$0.00" would read as free.
+  return cents < 1 ? `${Number(cents.toFixed(3))}¢` : fmtCents(cents);
+}
 
 export default function ModelSelect({
   accessToken,
@@ -10,6 +15,7 @@ export default function ModelSelect({
   onChange,
   disabled,
   className,
+  jobKind,
 }: {
   accessToken: string;
   /** Selected model id, or "" for the system default. */
@@ -17,9 +23,16 @@ export default function ModelSelect({
   onChange: (modelId: string) => void;
   disabled?: boolean;
   className?: string;
+  /** When set, shows what that action has recently averaged in cost per
+   *  model (in the options and under the picker). */
+  jobKind?: "SUGGESTION" | "TAILOR";
 }) {
   const [models, setModels] = useState<PricedModel[]>([]);
   const defaultModel = models.find((m) => m.is_default);
+  const effective = models.find((m) => m.id === value) ?? defaultModel;
+  const estimateFor = (m: PricedModel | undefined) =>
+    jobKind ? m?.action_costs.find((c) => c.job_kind === jobKind) : undefined;
+  const estimate = estimateFor(effective);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,24 +49,38 @@ export default function ModelSelect({
   }, [accessToken]);
 
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      className={cn(
-        "rounded-md border border-zinc-700 bg-zinc-950/50 px-2 py-1.5 text-xs text-zinc-300 focus:border-purple-500 focus:outline-none disabled:opacity-50",
-        className,
-      )}
-    >
-      <option value="">
-        Default{defaultModel ? ` (${defaultModel.display_name})` : ""}
-      </option>
-      {models.map((m) => (
-        <option key={m.id} value={m.id}>
-          {m.display_name} — {m.cents_per_1k_input}/{m.cents_per_1k_output}¢
-          per 1K tok
+    <span className="inline-flex flex-col gap-0.5">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className={cn(
+          "rounded-md border border-zinc-700 bg-zinc-950/50 px-2 py-1.5 text-xs text-zinc-300 focus:border-purple-500 focus:outline-none disabled:opacity-50",
+          className,
+        )}
+      >
+        <option value="">
+          Default{defaultModel ? ` (${defaultModel.display_name})` : ""}
         </option>
-      ))}
-    </select>
+        {models.map((m) => {
+          // What users actually pay per use beats a raw token rate; the rate
+          // card only shows for models with no recent history.
+          const avg = estimateFor(m);
+          return (
+            <option key={m.id} value={m.id}>
+              {m.display_name} —{" "}
+              {avg
+                ? `~${fmtAvg(avg.avg_cents)} on average`
+                : `${m.cents_per_1k_input}¢ in / ${m.cents_per_1k_output}¢ out per 1K tokens`}
+            </option>
+          );
+        })}
+      </select>
+      {estimate && (
+        <span className="px-0.5 text-[10px] text-zinc-500">
+          ~{fmtAvg(estimate.avg_cents)} on average with this model
+        </span>
+      )}
+    </span>
   );
 }

@@ -1,7 +1,6 @@
-import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getAccessTokenOrLogin } from "@/lib/auth";
-import { getUser } from "@/lib/db";
+import { requireOnboardedUser } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";
 import BillingClient from "./billing-client";
 
@@ -12,8 +11,7 @@ export default async function BillingPage({
 }: {
   searchParams: Promise<{ checkout?: string }>;
 }) {
-  const user = await getUser();
-  if (!user) redirect("/auth/login");
+  await requireOnboardedUser();
   const accessToken = await getAccessTokenOrLogin("/billing");
   const [{ checkout }, settings] = await Promise.all([
     searchParams,

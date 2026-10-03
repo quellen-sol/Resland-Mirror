@@ -49,13 +49,13 @@ export default function ExportResumeButton({
         onClick={() => setOpen(true)}
         className="border-zinc-700 bg-transparent text-zinc-200 hover:bg-zinc-800/60 hover:text-zinc-100"
       >
-        <Download /> Export resume
+        <Download /> Export Resume
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
           <DialogHeader>
             <DialogTitle className="text-zinc-100">
-              Export your resume
+              Export Your Resume
             </DialogTitle>
             <DialogDescription className="text-zinc-400">
               We do our best to match your original formatting, but the

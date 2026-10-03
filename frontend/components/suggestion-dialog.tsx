@@ -86,7 +86,7 @@ export default function SuggestionDialog({
       toast.error("Insufficient balance", {
         description: "Top up to keep going.",
         action: {
-          label: "Top up",
+          label: "Top Up",
           onClick: () => router.push("/billing"),
         },
       });
@@ -317,8 +317,8 @@ export default function SuggestionDialog({
     >
       {variant === "icon" ? (
         <DialogTrigger
-          title="Suggest improvement"
-          className="ml-1 inline-flex shrink-0 align-middle text-zinc-500 hover:text-purple-300"
+          title="Suggest Improvement"
+          className="inline-flex shrink-0 align-middle text-zinc-500 hover:text-purple-300"
         >
           <Sparkles className="size-3.5" />
         </DialogTrigger>
@@ -328,7 +328,7 @@ export default function SuggestionDialog({
             "inline-flex items-center gap-1.5 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800",
           )}
         >
-          <Sparkles className="size-3.5 text-purple-400" /> Suggest improvements
+          <Sparkles className="size-3.5 text-purple-400" /> Suggest Improvements
         </DialogTrigger>
       )}
 
@@ -336,11 +336,11 @@ export default function SuggestionDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-zinc-100">
             <Sparkles className="size-4 text-purple-400" />
-            {bulletId ? "Improve this bullet" : "Improve this experience"}
+            {bulletId ? "Improve This Bullet" : "Improve This Experience"}
           </DialogTitle>
           <DialogDescription className="text-zinc-400">
             {contextLabel ? `${contextLabel} — ` : ""}
-            The agent may ask a question or two before suggesting a rewrite.
+            The AI may ask you a question or two before suggesting a rewrite.
           </DialogDescription>
         </DialogHeader>
 
@@ -352,6 +352,7 @@ export default function SuggestionDialog({
                 value={model}
                 onChange={setModel}
                 disabled={busy}
+                jobKind="SUGGESTION"
               />
               <Button
                 onClick={start}
@@ -366,7 +367,7 @@ export default function SuggestionDialog({
           {targetText && (
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
               <p className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
-                {bulletId ? "Your bullet point" : "Your current bullets"}
+                {bulletId ? "Your Bullet Point" : "Your Current Bullets"}
               </p>
               <p className="mt-1 text-sm whitespace-pre-wrap text-zinc-300">
                 {targetText}
@@ -434,7 +435,7 @@ export default function SuggestionDialog({
                         void submitOwnPrompt();
                       }
                     }}
-                    placeholder="Tell the agent what to change…"
+                    placeholder="Tell the AI what to change…"
                     className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
                   />
                   <Button
@@ -461,7 +462,7 @@ export default function SuggestionDialog({
                   disabled={busy}
                   className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                 >
-                  Enter own prompt
+                  Enter Own Prompt
                 </Button>
                 <Button
                   onClick={accept}
@@ -484,7 +485,7 @@ export default function SuggestionDialog({
                 onClick={reset}
                 className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start over
+                Start Over
               </Button>
             </div>
           )}
@@ -507,7 +508,7 @@ export default function SuggestionDialog({
                   disabled={busy}
                   className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                 >
-                  Start over
+                  Start Over
                 </Button>
               </div>
             </div>
@@ -522,7 +523,7 @@ export default function SuggestionDialog({
                 onClick={reset}
                 className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start over
+                Start Over
               </Button>
             </div>
           )}

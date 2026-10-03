@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth0 } from "./auth0";
 import { db } from "../prisma/db";
 
@@ -26,6 +27,14 @@ export async function getUser() {
 
 export async function upsertUser() {
     await getUser();
+}
+
+/** User row or a redirect — sends brand-new accounts to onboarding. */
+export async function requireOnboardedUser() {
+    const user = await getUser();
+    if (!user) redirect("/auth/login");
+    if (!user.has_onboarded) redirect("/onboarding");
+    return user;
 }
 
 export async function getUserProfileData(userId: string) {

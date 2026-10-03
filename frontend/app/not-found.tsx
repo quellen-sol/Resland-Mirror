@@ -5,7 +5,7 @@ export default function NotFound() {
     <main className="flex min-h-full flex-1 items-center justify-center bg-zinc-950 px-6 py-24 text-center">
       <div className="flex max-w-md flex-col items-center gap-5">
         <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-          Page not found
+          Page Not Found
         </h1>
         <p className="text-zinc-400">That Resland page doesn&apos;t exist.</p>
         <div className="flex gap-3">
@@ -13,7 +13,7 @@ export default function NotFound() {
             href="/"
             className="inline-flex h-8 items-center rounded-lg bg-purple-600 px-2.5 text-sm font-medium text-white hover:bg-purple-500"
           >
-            Back home
+            Back Home
           </Link>
           <Link
             href="/dashboard"

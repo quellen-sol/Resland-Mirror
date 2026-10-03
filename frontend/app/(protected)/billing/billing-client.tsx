@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { apiFetch, describeApiError, fmtCents } from "@/lib/api";
 import ApiUnavailable from "@/components/api-unavailable";
+import HelpTip from "@/components/help-tip";
 
 interface TokenPack {
   id: string;
@@ -31,6 +32,21 @@ function fmtMoney(cents: number, currency: string) {
     style: "currency",
     currency: currency.toUpperCase(),
   });
+}
+
+// balance_purchase.status values — show words, not raw enum names.
+const PURCHASE_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pending",
+  COMPLETED: "Completed",
+  EXPIRED: "Expired",
+  REFUNDED: "Refunded",
+};
+
+function fmtStatus(status: string) {
+  return (
+    PURCHASE_STATUS_LABELS[status] ??
+    status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
+  );
 }
 
 function fmtDate(iso: string) {
@@ -147,9 +163,34 @@ export default function BillingClient({
     <div className="flex flex-col gap-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-            Billing
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+              Billing
+            </h1>
+            <HelpTip title="How Billing Works">
+              <p>
+                Resland is pay-as-you-go — no subscription. Buy a pack below to
+                add to your balance, and AI features like suggestions and
+                tailoring draw from it.
+              </p>
+              <p>
+                Each request is charged for what it actually uses: the AI
+                provider&apos;s cost for that work, plus a service fee. More
+                capable models cost more, and any prices shown next to a model
+                are estimates.
+              </p>
+              <p>
+                Bigger packs include bonus balance. Anything that&apos;s already
+                started is never cut off partway through — the charge just
+                can&apos;t take your balance below zero. You need a balance
+                above zero to start something new.
+              </p>
+              <p>
+                Checkout is handled securely by Stripe, and every purchase
+                shows up in your history below.
+              </p>
+            </HelpTip>
+          </div>
           <p className="mt-1 text-sm text-zinc-400">
             Balance powers suggestions and tailoring — top up when you run low.
           </p>
@@ -172,14 +213,18 @@ export default function BillingClient({
       )}
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
-        <CardContent className="flex items-center gap-3 pt-6">
-          <Zap className="size-5 text-purple-400" />
-          <div>
-            <p className="text-2xl font-semibold">
-              {balance === null ? "—" : fmtCents(balance)}
-            </p>
-            <p className="text-xs text-zinc-500">balance</p>
-          </div>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Zap className="size-4 text-purple-400" /> Balance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-2xl font-semibold">
+            {balance === null ? "—" : fmtCents(balance)}
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Available for AI features — suggestions and tailoring
+          </p>
         </CardContent>
       </Card>
 
@@ -226,7 +271,7 @@ export default function BillingClient({
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
         <CardHeader>
-          <CardTitle className="text-lg">Purchase history</CardTitle>
+          <CardTitle className="text-lg">Purchase History</CardTitle>
         </CardHeader>
         <CardContent>
           {purchases.length === 0 ? (
@@ -253,7 +298,7 @@ export default function BillingClient({
                     <td className="py-2 text-zinc-300">
                       {fmtMoney(p.amount_cents, p.currency)}
                     </td>
-                    <td className="py-2 text-zinc-400">{p.status}</td>
+                    <td className="py-2 text-zinc-400">{fmtStatus(p.status)}</td>
                   </tr>
                 ))}
               </tbody>

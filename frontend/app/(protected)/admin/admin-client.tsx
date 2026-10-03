@@ -412,7 +412,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                   )
                 : "—"}
             </p>
-            <p className="text-xs text-zinc-500">balance consumed</p>
+            <p className="text-xs text-zinc-500">Balance Consumed</p>
           </CardContent>
         </Card>
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
@@ -420,26 +420,26 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
             <p className="text-2xl font-semibold">
               {loaded ? fmtMoney(revenueCents, "usd") : "—"}
             </p>
-            <p className="text-xs text-zinc-500">revenue</p>
+            <p className="text-xs text-zinc-500">Revenue</p>
           </CardContent>
         </Card>
       </div>
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
         <CardHeader>
-          <CardTitle className="text-lg">Site settings</CardTitle>
+          <CardTitle className="text-lg">Site Settings</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {(
             [
               {
                 key: "maintenance_mode",
-                label: "Maintenance mode",
+                label: "Maintenance Mode",
                 desc: "Serve the 503 maintenance page to everyone but site admins. API requests get a 503; docs and the Stripe webhook stay up.",
               },
               {
                 key: "payments_paused",
-                label: "Pause payments",
+                label: "Pause Payments",
                 desc: "Block new checkouts. Balances, history, and Stripe webhooks are unaffected, so in-flight purchases still settle.",
               },
             ] as const
@@ -475,7 +475,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
         <CardHeader className="flex-row items-center justify-between gap-2">
-          <CardTitle className="text-lg">Per-user usage</CardTitle>
+          <CardTitle className="text-lg">Per-User Usage</CardTitle>
           <SearchBox
             value={usersQ}
             onChange={setUsersQ}
@@ -489,7 +489,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                 <th className={th}>User</th>
                 <th className={th}>Balance</th>
                 <th className={th}>Spent</th>
-                <th className={th}>In / Out tokens</th>
+                <th className={th}>In / Out Tokens</th>
                 <th className={th}>Purchased</th>
               </tr>
             </thead>
@@ -514,7 +514,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
         <CardHeader className="flex-row items-center justify-between gap-2">
-          <CardTitle className="text-lg">Model pricing</CardTitle>
+          <CardTitle className="text-lg">Model Pricing</CardTitle>
           <SearchBox
             value={modelsQ}
             onChange={setModelsQ}
@@ -527,8 +527,8 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               <tr className="border-b border-zinc-800 text-xs">
                 <th className={th}>Id</th>
                 <th className={th}>Name</th>
-                <th className={th}>¢/1K in</th>
-                <th className={th}>¢/1K out</th>
+                <th className={th}>¢/1K In</th>
+                <th className={th}>¢/1K Out</th>
                 <th className={th}>Sort</th>
                 <th className={th}>Enabled</th>
                 <th className={th}>Default</th>
@@ -732,7 +732,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
           <CardHeader>
-            <CardTitle className="text-lg">By model</CardTitle>
+            <CardTitle className="text-lg">By Model</CardTitle>
           </CardHeader>
           <CardContent>
             <table className="w-full text-left text-sm">
@@ -741,6 +741,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                   <th className={th}>Model</th>
                   <th className={th}>Jobs</th>
                   <th className={th}>Charged</th>
+                  <th className={th}>Avg/job</th>
                 </tr>
               </thead>
               <tbody>
@@ -749,6 +750,9 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                     <td className={td}>{m.model}</td>
                     <td className={td}>{m.job_count}</td>
                     <td className={td}>{fmtMoney(m.cents, "usd")}</td>
+                    <td className={td}>
+                      {fmtMoney(m.cents / m.job_count, "usd")}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -758,7 +762,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
 
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
           <CardHeader>
-            <CardTitle className="text-lg">By feature</CardTitle>
+            <CardTitle className="text-lg">By Feature</CardTitle>
           </CardHeader>
           <CardContent>
             <table className="w-full text-left text-sm">
@@ -767,6 +771,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                   <th className={th}>Kind</th>
                   <th className={th}>Jobs</th>
                   <th className={th}>Charged</th>
+                  <th className={th}>Avg/job</th>
                 </tr>
               </thead>
               <tbody>
@@ -775,6 +780,9 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                     <td className={td}>{k.job_kind}</td>
                     <td className={td}>{k.job_count}</td>
                     <td className={td}>{fmtMoney(k.cents, "usd")}</td>
+                    <td className={td}>
+                      {fmtMoney(k.cents / k.job_count, "usd")}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -784,7 +792,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
 
         <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
           <CardHeader>
-            <CardTitle className="text-lg">Last 30 days</CardTitle>
+            <CardTitle className="text-lg">Last 30 Days</CardTitle>
           </CardHeader>
           <CardContent>
             <table className="w-full text-left text-sm">
@@ -845,7 +853,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
 
       <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
         <CardHeader className="flex-row items-center justify-between gap-2">
-          <CardTitle className="text-lg">Recent usage events</CardTitle>
+          <CardTitle className="text-lg">Recent Usage Events</CardTitle>
           <SearchBox
             value={recentQ}
             onChange={setRecentQ}
@@ -862,7 +870,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                 <th className={th}>Model</th>
                 <th className={th}>In / Out</th>
                 <th className={th}>Charged</th>
-                <th className={th}>Actual cost</th>
+                <th className={th}>Actual Cost</th>
               </tr>
             </thead>
             <tbody>

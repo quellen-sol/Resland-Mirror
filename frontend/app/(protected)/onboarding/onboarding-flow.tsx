@@ -77,10 +77,10 @@ export default function OnboardingFlow({
               >
                 <FileText className="size-6 text-purple-400" />
                 <h2 className="mt-4 text-lg font-medium text-zinc-100">
-                  Upload a resume
+                  Upload a Resume
                 </h2>
                 <p className="mt-1 text-sm text-zinc-500">
-                  We&apos;ll parse your resume and fill in your profile for you.
+                  We&apos;ll read your resume and fill in your profile for you.
                 </p>
               </button>
 
@@ -90,7 +90,7 @@ export default function OnboardingFlow({
               >
                 <PenLine className="size-6 text-purple-400" />
                 <h2 className="mt-4 text-lg font-medium text-zinc-100">
-                  Enter my own information
+                  Enter Your Own Information
                 </h2>
                 <p className="mt-1 text-sm text-zinc-500">
                   Add your experience, education, projects, and skills manually.
@@ -103,7 +103,7 @@ export default function OnboardingFlow({
               disabled={isPending}
               className="text-sm text-zinc-500 underline-offset-4 hover:text-zinc-300 hover:underline disabled:opacity-50"
             >
-              Skip for now
+              Skip for Now
             </button>
           </div>
         )}
@@ -111,7 +111,7 @@ export default function OnboardingFlow({
         {step === "upload" && (
           <Card className="mx-auto w-full max-w-xl border-zinc-800 bg-zinc-900/80 text-zinc-100">
             <CardHeader>
-              <CardTitle className="text-xl">Upload your resume</CardTitle>
+              <CardTitle className="text-xl">Upload Your Resume</CardTitle>
               <CardDescription className="text-zinc-400">
                 PDF, DOCX, or whatever you&apos;ve got.
               </CardDescription>
@@ -135,7 +135,7 @@ export default function OnboardingFlow({
         {step === "manual" && (
           <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
             <CardHeader>
-              <CardTitle className="text-xl">Your information</CardTitle>
+              <CardTitle className="text-xl">Your Information</CardTitle>
               <CardDescription className="text-zinc-400">
                 Fill in as much as you&apos;d like — you can always edit later.
               </CardDescription>
@@ -147,14 +147,14 @@ export default function OnboardingFlow({
                   className="border-red-500/30 bg-red-500/10"
                 >
                   <CircleAlert />
-                  <AlertTitle>Couldn&apos;t save</AlertTitle>
+                  <AlertTitle>Couldn&apos;t Save</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}
 
               <ProfileForm
                 pending={isPending}
-                submitLabel="Save and continue"
+                submitLabel="Save and Continue"
                 onSubmit={handleSaveManual}
               />
 

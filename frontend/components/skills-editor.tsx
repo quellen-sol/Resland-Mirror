@@ -204,7 +204,7 @@ export default function SkillsEditor({
                   setDropTarget(null);
                 }}
                 className="cursor-grab text-zinc-500 hover:text-zinc-300"
-                aria-label="Drag to reorder category"
+                aria-label="Drag to Reorder Category"
               >
                 <GripVertical className="size-4" />
               </button>
@@ -226,7 +226,7 @@ export default function SkillsEditor({
                 disabled={gi === 0}
                 onClick={() => swapGroup(gi, gi - 1)}
                 className="text-zinc-500 hover:text-zinc-200 disabled:cursor-default disabled:opacity-30 disabled:hover:text-zinc-500"
-                aria-label="Move category up"
+                aria-label="Move Category Up"
               >
                 <ArrowUp className="size-4" />
               </button>
@@ -235,7 +235,7 @@ export default function SkillsEditor({
                 disabled={gi === groups.length - 1}
                 onClick={() => swapGroup(gi, gi + 1)}
                 className="text-zinc-500 hover:text-zinc-200 disabled:cursor-default disabled:opacity-30 disabled:hover:text-zinc-500"
-                aria-label="Move category down"
+                aria-label="Move Category Down"
               >
                 <ArrowDown className="size-4" />
               </button>
@@ -244,7 +244,7 @@ export default function SkillsEditor({
                   type="button"
                   onClick={() => removeGroup(gi)}
                   className="text-zinc-500 hover:text-red-400"
-                  aria-label={`Remove category ${group.category}`}
+                  aria-label={`Remove Category ${group.category}`}
                   title="Remove category — its skills move to Ungrouped"
                 >
                   <Trash2 className="size-4" />
@@ -344,7 +344,7 @@ export default function SkillsEditor({
             ])
           }
         >
-          <Plus /> Add category
+          <Plus /> Add Category
         </Button>
       </div>
       {groups.length > 1 && (

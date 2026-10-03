@@ -13,6 +13,7 @@ from .db_ops import (
     set_suggestion_failed,
     set_suggestion_question,
     set_suggestion_result,
+    usage_job_id,
 )
 from .generic import RunnerError
 from .local_threaded import LocalThreadJobRunner
@@ -96,7 +97,7 @@ class SuggestionsRunner(LocalThreadJobRunner):
                                 pg_conn,
                                 user_id=user_id,
                                 job_kind="SUGGESTION",
-                                job_id=session_id,
+                                job_id=usage_job_id(session_id, self.job_data),
                                 model=model_spec,
                                 input_tokens=usage["input_tokens"],
                                 output_tokens=usage["output_tokens"],
