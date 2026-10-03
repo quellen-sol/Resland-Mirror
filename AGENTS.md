@@ -51,6 +51,7 @@ docs/                 Design docs (billing plan, UX specs)
 docker compose up -d amqp postgres                 # infra (host ports 5672/15672/5432)
 cd frontend && pnpm install
 cd frontend && DATABASE_URL=postgres://resland:resland@localhost:5432/resland pnpm prisma db init
+cd frontend && DATABASE_URL=postgres://resland:resland@localhost:5432/resland_test pnpm prisma db init  # test DB
 backend/dispatcher: uv run dispatcher   # or: AMQP_URL=amqp://guest:guest@localhost:5672/ PG_URL=... uv run dispatcher
 backend/api:        uv run api          # port 3001
 frontend:           pnpm dev            # port 3000
@@ -77,8 +78,9 @@ cd frontend           && pnpm test          # node --test (explicit file list in
 
 - `asyncio_mode = "auto"` is set in **api only** (`backend/api/pyproject.toml`). Dispatcher/shared
   async tests use `unittest.IsolatedAsyncioTestCase` (no `pytest-asyncio` dependency there).
-- Tests default to **fakes**, not live infrastructure. Anything Postgres-dependent is gated on
-  `TEST_PG_URL` and skips when unset (set it to `postgres://resland:resland@localhost:5432/resland_test`).
+- Tests default to **fakes**, not live infrastructure. Postgres-dependent tests use `TEST_PG_URL`,
+  which **defaults to** `postgres://resland:resland@localhost:5432/resland_test`. They run whenever
+  that database is reachable and skip only when it isn't (or when the guard below refuses it).
 - ⚠️ **Destructive live-PG fixtures refuse to run** unless the effective database name's last token
   is a scratch marker (`resland_test`, `app-scratch`, `test`…) or `ALLOW_DESTRUCTIVE_TESTS=1` is set
   (see `shared.testing.destructive_db_ok`). When they do run they truncate tables
@@ -86,7 +88,9 @@ cd frontend           && pnpm test          # node --test (explicit file list in
   `.../resland_test` — never point `TEST_PG_URL` at data you care about.
 - `compose.yml` creates `resland_test` via `postgres/init/01-test-db.sql`, but
   `docker-entrypoint-initdb.d` only runs on an **empty data dir** — an existing `db-data` volume
-  must be recreated for the test DB to appear.
+  must be recreated (or the database created by hand) for the test DB to appear.
+- `resland_test` starts **empty**: apply the schema to it too (the `resland_test` line in Local
+  bring-up) — without it the live-PG fixtures *fail* on missing tables instead of skipping.
 - Real LLM calls need `OPENROUTER_API_KEY`; without it agents settle into
   `WAITING_FOR_INPUT`/`pending_question`, which is still a valid end-to-end proof of the pipeline.
 
