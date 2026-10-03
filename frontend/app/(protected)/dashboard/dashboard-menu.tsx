@@ -7,6 +7,7 @@ import {
   Files,
   LogOut,
   Menu,
+  Network,
   PenLine,
   ShieldCheck,
   Sparkles,
@@ -33,6 +34,7 @@ import ExportResumeButton from "./export-resume-button";
 const LINK_ICONS: Partial<Record<DashboardMenuItemKey, LucideIcon>> = {
   tailor: Sparkles,
   tailored: Files,
+  "system-design": Network,
   admin: ShieldCheck,
   "edit-profile": PenLine,
   billing: Zap,

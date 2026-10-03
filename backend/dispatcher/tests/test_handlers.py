@@ -21,6 +21,7 @@ from dispatcher.handlers.generic import (
 )
 from dispatcher.handlers.resume_handler import ResumeHandler
 from dispatcher.handlers.suggestion_handler import SuggestionHandler
+from dispatcher.handlers.system_design_handler import SystemDesignHandler
 from dispatcher.handlers.tailor_handler import TailorHandler
 from dispatcher.runners.generic import JobHandle
 
@@ -309,6 +310,40 @@ class TailorHandlerMessages(unittest.IsolatedAsyncioTestCase):
             get_pg.assert_not_called()
 
             self.handler.update_db_status("r1", "FAILED")
+            failed.assert_called_once()
+
+
+
+class SystemDesignHandlerMessages(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.handler = SystemDesignHandler()
+
+    async def test_missing_session_id_nacks(self):
+        msg = _message({"nope": 1})
+        await self.handler.on_message(msg)
+        msg.nack.assert_awaited_once_with(requeue=False)
+
+    async def test_valid_message_dispatches_runner(self):
+        msg = _message({"session_id": "s1", "action": "start"})
+        with patch(
+            "dispatcher.handlers.system_design_handler.SystemDesignRunner"
+        ) as runner_cls:
+            runner_cls.return_value = _Runner(_Handle("PROCESSING"))
+            await self.handler.on_message(msg)
+        self.assertIn("s1", self.handler.running_jobs)
+        runner_cls.assert_called_once_with({"session_id": "s1", "action": "start"})
+
+    def test_update_db_status_only_acts_on_failed(self):
+        with patch(
+            "dispatcher.handlers.system_design_handler.set_system_design_failed"
+        ) as failed, patch(
+            "dispatcher.handlers.system_design_handler.get_pg_client"
+        ) as get_pg:
+            self.handler.update_db_status("s1", "COMPLETED")
+            failed.assert_not_called()
+            get_pg.assert_not_called()
+
+            self.handler.update_db_status("s1", "FAILED")
             failed.assert_called_once()
 
 

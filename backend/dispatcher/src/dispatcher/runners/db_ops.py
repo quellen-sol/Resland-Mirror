@@ -10,6 +10,11 @@ from shared.docgen import FormatProfile
 
 from ..agents.docx_parser import UserDocxProfile
 from ..agents.suggestions import FetchSuggestionRow, SuggestionsResult
+from ..agents.system_design import (
+    FetchSystemDesignSessionRow,
+    GradeReport,
+    TranscriptRow,
+)
 from ..agents.tailor import (
     FetchTailorRunRow,
     TailoredResume,
@@ -416,6 +421,188 @@ def set_tailor_failed(pg_client: Connection, run_id: str):
             WHERE id = %s AND status NOT IN ('COMPLETED')
             """,
             (run_id,),
+        )
+
+
+# Closes out the current phase: its elapsed seconds land in phase_durations.
+# Shared by every write that moves a session into FEEDBACK.
+_SYSTEM_DESIGN_ENTER_FEEDBACK = """
+    phase_durations = CASE WHEN phase = 'FEEDBACK' THEN phase_durations ELSE
+        (phase_durations::jsonb || jsonb_build_object(
+            phase,
+            GREATEST(0, EXTRACT(EPOCH FROM now() - phase_started_at))::int
+        ))::text END,
+    phase_started_at = CASE WHEN phase = 'FEEDBACK' THEN phase_started_at
+        ELSE now() END,
+    phase = 'FEEDBACK'
+"""
+
+
+def fetch_system_design_session(
+    pg_client: Connection, session_id: str
+) -> FetchSystemDesignSessionRow | None:
+    with pg_client.cursor(
+        row_factory=class_row(FetchSystemDesignSessionRow)
+    ) as cursor:
+        return cursor.execute(
+            """
+            SELECT id, user_id, source, problem_id, company_name, role,
+                   job_description, level, model, status, phase, title, prompt,
+                   brief, requirements, estimates, diagram, agent_context,
+                   last_turn_id, phase_durations, phase_started_at, created_at
+            FROM user_system_design_session WHERE id = %s
+            """,
+            [session_id],
+        ).fetchone()
+
+
+def fetch_system_design_transcript(
+    pg_client: Connection, session_id: str
+) -> list[TranscriptRow]:
+    with pg_client.cursor(row_factory=class_row(TranscriptRow)) as cursor:
+        return cursor.execute(
+            """
+            SELECT role, phase, content FROM system_design_message
+            WHERE session_id = %s ORDER BY id
+            """,
+            [session_id],
+        ).fetchall()
+
+
+def _add_interviewer_message(
+    pg_client: Connection, session_id: str, phase: str, content: str
+) -> None:
+    pg_client.execute(
+        """
+        INSERT INTO system_design_message (session_id, role, phase, content)
+        VALUES (%s, 'INTERVIEWER', %s, %s)
+        """,
+        (session_id, phase, content),
+    )
+
+
+def start_system_design_session(
+    pg_client: Connection,
+    session_id: str,
+    *,
+    title: str,
+    prompt: str,
+    brief_json: str,
+    opening: str,
+    turn_id: str | None,
+) -> None:
+    """Store the problem and brief and post the interviewer's opening."""
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            UPDATE user_system_design_session
+            SET title = %s, prompt = %s, brief = %s,
+                status = 'WAITING_FOR_INPUT', notice = NULL, last_turn_id = %s,
+                phase_started_at = now()
+            WHERE id = %s
+            """,
+            (title, prompt, brief_json, turn_id, session_id),
+        )
+        _add_interviewer_message(pg_client, session_id, "REQUIREMENTS", opening)
+
+
+def save_system_design_turn(
+    pg_client: Connection,
+    session_id: str,
+    *,
+    reply: str,
+    phase: str,
+    agent_context: str,
+    interview_over: bool,
+    turn_id: str | None,
+) -> None:
+    """Post the interviewer's reply. A finished interview moves to FEEDBACK
+    and stays PROCESSING for grading; otherwise it's the candidate's turn."""
+    with pg_client.transaction():
+        _add_interviewer_message(pg_client, session_id, phase, reply)
+        if interview_over:
+            pg_client.execute(
+                f"""
+                UPDATE user_system_design_session
+                SET agent_context = %s, notice = NULL,
+                    {_SYSTEM_DESIGN_ENTER_FEEDBACK}
+                WHERE id = %s
+                """,
+                (agent_context, session_id),
+            )
+        else:
+            pg_client.execute(
+                """
+                UPDATE user_system_design_session
+                SET agent_context = %s, notice = NULL,
+                    status = 'WAITING_FOR_INPUT', last_turn_id = %s
+                WHERE id = %s
+                """,
+                (agent_context, turn_id, session_id),
+            )
+
+
+def complete_system_design_session(
+    pg_client: Connection,
+    session_id: str,
+    report: GradeReport,
+    turn_id: str | None,
+) -> None:
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            UPDATE user_system_design_session
+            SET result = %s, letter_grade = %s, hire_signal = %s,
+                status = 'COMPLETED', notice = NULL, last_turn_id = %s,
+                completed_at = now()
+            WHERE id = %s
+            """,
+            (
+                report.to_json(),
+                report.letter_grade,
+                report.hire_signal,
+                turn_id,
+                session_id,
+            ),
+        )
+        # A graded interview takes no more turns, and its transcript lives in
+        # system_design_message — the interviewer thread is dead weight.
+        for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+            exists = pg_client.execute(
+                "SELECT to_regclass(%s)", (table,)
+            ).fetchone()
+            if exists and exists[0]:
+                pg_client.execute(
+                    f"DELETE FROM {table} WHERE thread_id = %s", (session_id,)
+                )
+
+
+def set_system_design_notice(
+    pg_client: Connection, session_id: str, notice: str
+) -> None:
+    """A turn crashed — hand the turn back to the candidate with a retry
+    notice. The checkpointed thread lets the retry pick up where it died."""
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            UPDATE user_system_design_session
+            SET status = 'WAITING_FOR_INPUT', notice = %s
+            WHERE id = %s
+            """,
+            (notice, session_id),
+        )
+
+
+def set_system_design_failed(pg_client: Connection, session_id: str) -> None:
+    # A waiting session is still usable (retry notice) — leave it be.
+    with pg_client.transaction():
+        pg_client.execute(
+            """
+            UPDATE user_system_design_session
+            SET status = 'FAILED'
+            WHERE id = %s AND status NOT IN ('COMPLETED', 'WAITING_FOR_INPUT')
+            """,
+            (session_id,),
         )
 
 

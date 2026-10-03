@@ -1,0 +1,326 @@
+[
+  {
+    "id": "dropCheckConstraint.token_usage.token_usage_job_kind_check_74df029d",
+    "label": "Drop check constraint \"token_usage_job_kind_check_74df029d\" on \"token_usage\"",
+    "operationClass": "destructive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "token_usage_job_kind_check_74df029d",
+        "table": "token_usage"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"token_usage_job_kind_check_74df029d\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "token_usage_job_kind_check_74df029d",
+          "public",
+          "\"public\".\"token_usage\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "drop check constraint \"token_usage_job_kind_check_74df029d\"",
+        "sql": "ALTER TABLE \"public\".\"token_usage\" DROP CONSTRAINT \"token_usage_job_kind_check_74df029d\""
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"token_usage_job_kind_check_74df029d\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "token_usage_job_kind_check_74df029d",
+          "public",
+          "\"public\".\"token_usage\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.system_design_message",
+    "label": "Create table \"system_design_message\"",
+    "summary": "Creates table \"system_design_message\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "system_design_message"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"system_design_message\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"system_design_message\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"system_design_message\"",
+        "sql": "CREATE TABLE \"public\".\"system_design_message\" (\n  \"content\" text NOT NULL,\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" SERIAL NOT NULL,\n  \"phase\" text NOT NULL,\n  \"role\" text NOT NULL,\n  \"session_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"system_design_message_phase_check_affcc3a8\" CHECK (\"phase\" IN ('REQUIREMENTS', 'ESTIMATION', 'HIGH_LEVEL_DESIGN', 'DEEP_DIVE', 'FEEDBACK')),\n  CONSTRAINT \"system_design_message_role_check_c450733a\" CHECK (\"role\" IN ('INTERVIEWER', 'CANDIDATE'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"system_design_message\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"system_design_message\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "table.user_system_design_session",
+    "label": "Create table \"user_system_design_session\"",
+    "summary": "Creates table \"user_system_design_session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "user_system_design_session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"user_system_design_session\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_system_design_session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"user_system_design_session\"",
+        "sql": "CREATE TABLE \"public\".\"user_system_design_session\" (\n  \"agent_context\" text,\n  \"brief\" text,\n  \"company_name\" text,\n  \"completed_at\" timestamptz,\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"diagram\" text DEFAULT '[]' NOT NULL,\n  \"estimates\" text DEFAULT '' NOT NULL,\n  \"hire_signal\" text,\n  \"id\" text NOT NULL,\n  \"job_description\" text,\n  \"last_turn_id\" text,\n  \"letter_grade\" text,\n  \"level\" text DEFAULT 'SENIOR' NOT NULL,\n  \"model\" text,\n  \"notice\" text,\n  \"phase\" text DEFAULT 'REQUIREMENTS' NOT NULL,\n  \"phase_durations\" text DEFAULT '{}' NOT NULL,\n  \"phase_started_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"problem_id\" text,\n  \"prompt\" text,\n  \"requirements\" text DEFAULT '' NOT NULL,\n  \"result\" text,\n  \"role\" text,\n  \"source\" text NOT NULL,\n  \"status\" text DEFAULT 'PROCESSING' NOT NULL,\n  \"tailored_resume_id\" text,\n  \"title\" text,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"user_system_design_session_level_check_a955ca61\" CHECK (\"level\" IN ('MID', 'SENIOR', 'STAFF')),\n  CONSTRAINT \"user_system_design_session_phase_check_affcc3a8\" CHECK (\"phase\" IN ('REQUIREMENTS', 'ESTIMATION', 'HIGH_LEVEL_DESIGN', 'DEEP_DIVE', 'FEEDBACK')),\n  CONSTRAINT \"user_system_design_session_source_check_e9786979\" CHECK (\"source\" IN ('BANK', 'JOB')),\n  CONSTRAINT \"user_system_design_session_status_check_fa868dec\" CHECK (\"status\" IN ('PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED', 'FAILED'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"user_system_design_session\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_system_design_session\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "checkConstraint.token_usage.token_usage_job_kind_check_2fbdeefd",
+    "label": "Add check constraint \"token_usage_job_kind_check_2fbdeefd\" on \"token_usage\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "checkConstraint",
+        "name": "token_usage_job_kind_check_2fbdeefd",
+        "table": "token_usage"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure constraint \"token_usage_job_kind_check_2fbdeefd\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "token_usage_job_kind_check_2fbdeefd",
+          "public",
+          "\"public\".\"token_usage\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add check constraint \"token_usage_job_kind_check_2fbdeefd\"",
+        "sql": "ALTER TABLE \"public\".\"token_usage\" ADD CONSTRAINT \"token_usage_job_kind_check_2fbdeefd\" CHECK (\"job_kind\" IN ('SUGGESTION', 'TAILOR', 'SYSTEM_DESIGN'))"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify constraint \"token_usage_job_kind_check_2fbdeefd\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "token_usage_job_kind_check_2fbdeefd",
+          "public",
+          "\"public\".\"token_usage\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.system_design_message.system_design_message_session_id_idx_00ba47bf",
+    "label": "Create index \"system_design_message_session_id_idx_00ba47bf\" on \"system_design_message\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "system_design_message_session_id_idx_00ba47bf",
+        "table": "system_design_message"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"system_design_message_session_id_idx_00ba47bf\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"system_design_message_session_id_idx_00ba47bf\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"system_design_message_session_id_idx_00ba47bf\"",
+        "sql": "CREATE INDEX \"system_design_message_session_id_idx_00ba47bf\" ON \"public\".\"system_design_message\" (\"session_id\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"system_design_message_session_id_idx_00ba47bf\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"system_design_message_session_id_idx_00ba47bf\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.user_system_design_session.user_system_design_session_user_id_idx_6c952402",
+    "label": "Create index \"user_system_design_session_user_id_idx_6c952402\" on \"user_system_design_session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "user_system_design_session_user_id_idx_6c952402",
+        "table": "user_system_design_session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"user_system_design_session_user_id_idx_6c952402\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_system_design_session_user_id_idx_6c952402\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"user_system_design_session_user_id_idx_6c952402\"",
+        "sql": "CREATE INDEX \"user_system_design_session_user_id_idx_6c952402\" ON \"public\".\"user_system_design_session\" (\"user_id\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"user_system_design_session_user_id_idx_6c952402\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_system_design_session_user_id_idx_6c952402\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.system_design_message.system_design_message_session_id_fkey",
+    "label": "Add foreign key \"system_design_message_session_id_fkey\" on \"system_design_message\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "system_design_message_session_id_fkey",
+        "table": "system_design_message"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"system_design_message_session_id_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "system_design_message_session_id_fkey",
+          "public",
+          "\"public\".\"system_design_message\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"system_design_message_session_id_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"system_design_message\"\nADD CONSTRAINT \"system_design_message_session_id_fkey\"\nFOREIGN KEY (\"session_id\")\nREFERENCES \"public\".\"user_system_design_session\" (\"id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"system_design_message_session_id_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "system_design_message_session_id_fkey",
+          "public",
+          "\"public\".\"system_design_message\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.user_system_design_session.user_system_design_session_user_id_fkey",
+    "label": "Add foreign key \"user_system_design_session_user_id_fkey\" on \"user_system_design_session\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "user_system_design_session_user_id_fkey",
+        "table": "user_system_design_session"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"user_system_design_session_user_id_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_system_design_session_user_id_fkey",
+          "public",
+          "\"public\".\"user_system_design_session\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"user_system_design_session_user_id_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"user_system_design_session\"\nADD CONSTRAINT \"user_system_design_session_user_id_fkey\"\nFOREIGN KEY (\"user_id\")\nREFERENCES \"public\".\"user\" (\"auth0_id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"user_system_design_session_user_id_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_system_design_session_user_id_fkey",
+          "public",
+          "\"public\".\"user_system_design_session\""
+        ]
+      }
+    ]
+  }
+]

@@ -25,7 +25,7 @@ export default function ModelSelect({
   className?: string;
   /** When set, shows what that action has recently averaged in cost per
    *  model (in the options and under the picker). */
-  jobKind?: "SUGGESTION" | "TAILOR";
+  jobKind?: "SUGGESTION" | "TAILOR" | "SYSTEM_DESIGN";
 }) {
   const [models, setModels] = useState<PricedModel[]>([]);
   const defaultModel = models.find((m) => m.is_default);

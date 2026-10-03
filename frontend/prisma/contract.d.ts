@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'bc3ed381debcbee76352fb5ba436fd0db987dc694f94fc7a46913c0dc559498e'>;
+  StorageHashBase<'4dbd015ad3e021f63ef04bfa31778f34a218409bd517c766541be7427453a580'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -265,10 +265,19 @@ export type FieldOutputTypes = {
       readonly payments_paused: CodecTypes['pg/bool@1']['output'];
       readonly updated_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
+    readonly SystemDesignMessage: {
+      readonly id: CodecTypes['pg/int4@1']['output'];
+      readonly session_id: CodecTypes['pg/text@1']['output'];
+      readonly role: 'INTERVIEWER' | 'CANDIDATE';
+      readonly phase:
+        'REQUIREMENTS' | 'ESTIMATION' | 'HIGH_LEVEL_DESIGN' | 'DEEP_DIVE' | 'FEEDBACK';
+      readonly content: CodecTypes['pg/text@1']['output'];
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+    };
     readonly TokenUsage: {
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly user_id: CodecTypes['pg/text@1']['output'];
-      readonly job_kind: 'SUGGESTION' | 'TAILOR';
+      readonly job_kind: 'SUGGESTION' | 'TAILOR' | 'SYSTEM_DESIGN';
       readonly job_id: CodecTypes['pg/text@1']['output'];
       readonly model: CodecTypes['pg/text@1']['output'];
       readonly input_tokens: CodecTypes['pg/int4@1']['output'];
@@ -364,6 +373,37 @@ export type FieldOutputTypes = {
       readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
+    readonly UserSystemDesignSession: {
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly user_id: CodecTypes['pg/text@1']['output'];
+      readonly source: 'BANK' | 'JOB';
+      readonly problem_id: CodecTypes['pg/text@1']['output'] | null;
+      readonly tailored_resume_id: CodecTypes['pg/text@1']['output'] | null;
+      readonly company_name: CodecTypes['pg/text@1']['output'] | null;
+      readonly role: CodecTypes['pg/text@1']['output'] | null;
+      readonly job_description: CodecTypes['pg/text@1']['output'] | null;
+      readonly level: 'MID' | 'SENIOR' | 'STAFF';
+      readonly model: CodecTypes['pg/text@1']['output'] | null;
+      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
+      readonly phase:
+        'REQUIREMENTS' | 'ESTIMATION' | 'HIGH_LEVEL_DESIGN' | 'DEEP_DIVE' | 'FEEDBACK';
+      readonly title: CodecTypes['pg/text@1']['output'] | null;
+      readonly prompt: CodecTypes['pg/text@1']['output'] | null;
+      readonly brief: CodecTypes['pg/text@1']['output'] | null;
+      readonly requirements: CodecTypes['pg/text@1']['output'];
+      readonly estimates: CodecTypes['pg/text@1']['output'];
+      readonly diagram: CodecTypes['pg/text@1']['output'];
+      readonly agent_context: CodecTypes['pg/text@1']['output'] | null;
+      readonly last_turn_id: CodecTypes['pg/text@1']['output'] | null;
+      readonly notice: CodecTypes['pg/text@1']['output'] | null;
+      readonly phase_durations: CodecTypes['pg/text@1']['output'];
+      readonly phase_started_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly result: CodecTypes['pg/text@1']['output'] | null;
+      readonly letter_grade: CodecTypes['pg/text@1']['output'] | null;
+      readonly hire_signal: CodecTypes['pg/text@1']['output'] | null;
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly completed_at: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+    };
     readonly UserTailoredResume: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly user_id: CodecTypes['pg/text@1']['output'];
@@ -426,10 +466,19 @@ export type FieldInputTypes = {
       readonly payments_paused: CodecTypes['pg/bool@1']['input'];
       readonly updated_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
+    readonly SystemDesignMessage: {
+      readonly id: CodecTypes['pg/int4@1']['input'];
+      readonly session_id: CodecTypes['pg/text@1']['input'];
+      readonly role: 'INTERVIEWER' | 'CANDIDATE';
+      readonly phase:
+        'REQUIREMENTS' | 'ESTIMATION' | 'HIGH_LEVEL_DESIGN' | 'DEEP_DIVE' | 'FEEDBACK';
+      readonly content: CodecTypes['pg/text@1']['input'];
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+    };
     readonly TokenUsage: {
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly user_id: CodecTypes['pg/text@1']['input'];
-      readonly job_kind: 'SUGGESTION' | 'TAILOR';
+      readonly job_kind: 'SUGGESTION' | 'TAILOR' | 'SYSTEM_DESIGN';
       readonly job_id: CodecTypes['pg/text@1']['input'];
       readonly model: CodecTypes['pg/text@1']['input'];
       readonly input_tokens: CodecTypes['pg/int4@1']['input'];
@@ -525,6 +574,37 @@ export type FieldInputTypes = {
       readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
       readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
+    readonly UserSystemDesignSession: {
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly user_id: CodecTypes['pg/text@1']['input'];
+      readonly source: 'BANK' | 'JOB';
+      readonly problem_id: CodecTypes['pg/text@1']['input'] | null;
+      readonly tailored_resume_id: CodecTypes['pg/text@1']['input'] | null;
+      readonly company_name: CodecTypes['pg/text@1']['input'] | null;
+      readonly role: CodecTypes['pg/text@1']['input'] | null;
+      readonly job_description: CodecTypes['pg/text@1']['input'] | null;
+      readonly level: 'MID' | 'SENIOR' | 'STAFF';
+      readonly model: CodecTypes['pg/text@1']['input'] | null;
+      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
+      readonly phase:
+        'REQUIREMENTS' | 'ESTIMATION' | 'HIGH_LEVEL_DESIGN' | 'DEEP_DIVE' | 'FEEDBACK';
+      readonly title: CodecTypes['pg/text@1']['input'] | null;
+      readonly prompt: CodecTypes['pg/text@1']['input'] | null;
+      readonly brief: CodecTypes['pg/text@1']['input'] | null;
+      readonly requirements: CodecTypes['pg/text@1']['input'];
+      readonly estimates: CodecTypes['pg/text@1']['input'];
+      readonly diagram: CodecTypes['pg/text@1']['input'];
+      readonly agent_context: CodecTypes['pg/text@1']['input'] | null;
+      readonly last_turn_id: CodecTypes['pg/text@1']['input'] | null;
+      readonly notice: CodecTypes['pg/text@1']['input'] | null;
+      readonly phase_durations: CodecTypes['pg/text@1']['input'];
+      readonly phase_started_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly result: CodecTypes['pg/text@1']['input'] | null;
+      readonly letter_grade: CodecTypes['pg/text@1']['input'] | null;
+      readonly hire_signal: CodecTypes['pg/text@1']['input'] | null;
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly completed_at: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+    };
     readonly UserTailoredResume: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly user_id: CodecTypes['pg/text@1']['input'];
@@ -587,6 +667,15 @@ export type StorageColumnTypes = {
       readonly payments_paused: CodecTypes['pg/bool@1']['output'];
       readonly updated_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
     };
+    readonly system_design_message: {
+      readonly content: CodecTypes['pg/text@1']['output'];
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly id: CodecTypes['pg/int4@1']['output'];
+      readonly phase:
+        'REQUIREMENTS' | 'ESTIMATION' | 'HIGH_LEVEL_DESIGN' | 'DEEP_DIVE' | 'FEEDBACK';
+      readonly role: 'INTERVIEWER' | 'CANDIDATE';
+      readonly session_id: CodecTypes['pg/text@1']['output'];
+    };
     readonly token_usage: {
       readonly actual_cost_cents: CodecTypes['pg/numeric@1']['output'] | null;
       readonly amount_cents: CodecTypes['pg/numeric@1']['output'];
@@ -594,7 +683,7 @@ export type StorageColumnTypes = {
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly input_tokens: CodecTypes['pg/int4@1']['output'];
       readonly job_id: CodecTypes['pg/text@1']['output'];
-      readonly job_kind: 'SUGGESTION' | 'TAILOR';
+      readonly job_kind: 'SUGGESTION' | 'TAILOR' | 'SYSTEM_DESIGN';
       readonly model: CodecTypes['pg/text@1']['output'];
       readonly openrouter_generation_ids: ReadonlyArray<CodecTypes['pg/text@1']['output']>;
       readonly output_tokens: CodecTypes['pg/int4@1']['output'];
@@ -684,6 +773,37 @@ export type StorageColumnTypes = {
       readonly pending_question: CodecTypes['pg/text@1']['output'] | null;
       readonly result: CodecTypes['pg/text@1']['output'] | null;
       readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
+      readonly user_id: CodecTypes['pg/text@1']['output'];
+    };
+    readonly user_system_design_session: {
+      readonly agent_context: CodecTypes['pg/text@1']['output'] | null;
+      readonly brief: CodecTypes['pg/text@1']['output'] | null;
+      readonly company_name: CodecTypes['pg/text@1']['output'] | null;
+      readonly completed_at: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly diagram: CodecTypes['pg/text@1']['output'];
+      readonly estimates: CodecTypes['pg/text@1']['output'];
+      readonly hire_signal: CodecTypes['pg/text@1']['output'] | null;
+      readonly id: CodecTypes['pg/text@1']['output'];
+      readonly job_description: CodecTypes['pg/text@1']['output'] | null;
+      readonly last_turn_id: CodecTypes['pg/text@1']['output'] | null;
+      readonly letter_grade: CodecTypes['pg/text@1']['output'] | null;
+      readonly level: 'MID' | 'SENIOR' | 'STAFF';
+      readonly model: CodecTypes['pg/text@1']['output'] | null;
+      readonly notice: CodecTypes['pg/text@1']['output'] | null;
+      readonly phase:
+        'REQUIREMENTS' | 'ESTIMATION' | 'HIGH_LEVEL_DESIGN' | 'DEEP_DIVE' | 'FEEDBACK';
+      readonly phase_durations: CodecTypes['pg/text@1']['output'];
+      readonly phase_started_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly problem_id: CodecTypes['pg/text@1']['output'] | null;
+      readonly prompt: CodecTypes['pg/text@1']['output'] | null;
+      readonly requirements: CodecTypes['pg/text@1']['output'];
+      readonly result: CodecTypes['pg/text@1']['output'] | null;
+      readonly role: CodecTypes['pg/text@1']['output'] | null;
+      readonly source: 'BANK' | 'JOB';
+      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
+      readonly tailored_resume_id: CodecTypes['pg/text@1']['output'] | null;
+      readonly title: CodecTypes['pg/text@1']['output'] | null;
       readonly user_id: CodecTypes['pg/text@1']['output'];
     };
     readonly user_tailor_run: {
@@ -748,6 +868,15 @@ export type StorageColumnInputTypes = {
       readonly payments_paused: CodecTypes['pg/bool@1']['input'];
       readonly updated_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
+    readonly system_design_message: {
+      readonly content: CodecTypes['pg/text@1']['input'];
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly id: CodecTypes['pg/int4@1']['input'];
+      readonly phase:
+        'REQUIREMENTS' | 'ESTIMATION' | 'HIGH_LEVEL_DESIGN' | 'DEEP_DIVE' | 'FEEDBACK';
+      readonly role: 'INTERVIEWER' | 'CANDIDATE';
+      readonly session_id: CodecTypes['pg/text@1']['input'];
+    };
     readonly token_usage: {
       readonly actual_cost_cents: CodecTypes['pg/numeric@1']['input'] | null;
       readonly amount_cents: CodecTypes['pg/numeric@1']['input'];
@@ -755,7 +884,7 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly input_tokens: CodecTypes['pg/int4@1']['input'];
       readonly job_id: CodecTypes['pg/text@1']['input'];
-      readonly job_kind: 'SUGGESTION' | 'TAILOR';
+      readonly job_kind: 'SUGGESTION' | 'TAILOR' | 'SYSTEM_DESIGN';
       readonly model: CodecTypes['pg/text@1']['input'];
       readonly openrouter_generation_ids: ReadonlyArray<CodecTypes['pg/text@1']['input']>;
       readonly output_tokens: CodecTypes['pg/int4@1']['input'];
@@ -845,6 +974,37 @@ export type StorageColumnInputTypes = {
       readonly pending_question: CodecTypes['pg/text@1']['input'] | null;
       readonly result: CodecTypes['pg/text@1']['input'] | null;
       readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
+      readonly user_id: CodecTypes['pg/text@1']['input'];
+    };
+    readonly user_system_design_session: {
+      readonly agent_context: CodecTypes['pg/text@1']['input'] | null;
+      readonly brief: CodecTypes['pg/text@1']['input'] | null;
+      readonly company_name: CodecTypes['pg/text@1']['input'] | null;
+      readonly completed_at: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly diagram: CodecTypes['pg/text@1']['input'];
+      readonly estimates: CodecTypes['pg/text@1']['input'];
+      readonly hire_signal: CodecTypes['pg/text@1']['input'] | null;
+      readonly id: CodecTypes['pg/text@1']['input'];
+      readonly job_description: CodecTypes['pg/text@1']['input'] | null;
+      readonly last_turn_id: CodecTypes['pg/text@1']['input'] | null;
+      readonly letter_grade: CodecTypes['pg/text@1']['input'] | null;
+      readonly level: 'MID' | 'SENIOR' | 'STAFF';
+      readonly model: CodecTypes['pg/text@1']['input'] | null;
+      readonly notice: CodecTypes['pg/text@1']['input'] | null;
+      readonly phase:
+        'REQUIREMENTS' | 'ESTIMATION' | 'HIGH_LEVEL_DESIGN' | 'DEEP_DIVE' | 'FEEDBACK';
+      readonly phase_durations: CodecTypes['pg/text@1']['input'];
+      readonly phase_started_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly problem_id: CodecTypes['pg/text@1']['input'] | null;
+      readonly prompt: CodecTypes['pg/text@1']['input'] | null;
+      readonly requirements: CodecTypes['pg/text@1']['input'];
+      readonly result: CodecTypes['pg/text@1']['input'] | null;
+      readonly role: CodecTypes['pg/text@1']['input'] | null;
+      readonly source: 'BANK' | 'JOB';
+      readonly status: 'PROCESSING' | 'WAITING_FOR_INPUT' | 'COMPLETED' | 'FAILED';
+      readonly tailored_resume_id: CodecTypes['pg/text@1']['input'] | null;
+      readonly title: CodecTypes['pg/text@1']['input'] | null;
       readonly user_id: CodecTypes['pg/text@1']['input'];
     };
     readonly user_tailor_run: {
@@ -1068,6 +1228,69 @@ type ContractBase = Omit<
               uniques: readonly [];
               indexes: readonly [];
               foreignKeys: readonly [];
+            };
+            readonly system_design_message: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'function';
+                    readonly expression: 'autoincrement()';
+                  };
+                };
+                readonly session_id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly role: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly phase: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly content: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly created_at: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'system_design_message_session_id_idx_00ba47bf';
+                  readonly prefix: 'system_design_message_session_id_idx';
+                  readonly columns: readonly ['session_id'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'system_design_message';
+                    readonly columns: readonly ['session_id'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'user_system_design_session';
+                    readonly columns: readonly ['id'];
+                  };
+                },
+              ];
             };
             readonly token_usage: {
               columns: {
@@ -1860,6 +2083,204 @@ type ContractBase = Omit<
                 },
               ];
             };
+            readonly user_system_design_session: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly user_id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly source: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly problem_id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly tailored_resume_id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly company_name: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly role: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly job_description: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly level: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', 'SENIOR'>;
+                  };
+                };
+                readonly model: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly status: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', 'PROCESSING'>;
+                  };
+                };
+                readonly phase: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', 'REQUIREMENTS'>;
+                  };
+                };
+                readonly title: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly prompt: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly brief: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly requirements: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', ''>;
+                  };
+                };
+                readonly estimates: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', ''>;
+                  };
+                };
+                readonly diagram: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', '[]'>;
+                  };
+                };
+                readonly agent_context: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly last_turn_id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly notice: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly phase_durations: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'literal';
+                    readonly value: DefaultLiteralValue<'pg/text@1', '{}'>;
+                  };
+                };
+                readonly phase_started_at: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+                readonly result: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly letter_grade: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly hire_signal: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly created_at: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+                readonly completed_at: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: true;
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'user_system_design_session_user_id_idx_6c952402';
+                  readonly prefix: 'user_system_design_session_user_id_idx';
+                  readonly columns: readonly ['user_id'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'user_system_design_session';
+                    readonly columns: readonly ['user_id'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'user';
+                    readonly columns: readonly ['auth0_id'];
+                  };
+                },
+              ];
+            };
             readonly user_tailor_run: {
               columns: {
                 readonly id: {
@@ -2109,13 +2530,39 @@ type ContractBase = Omit<
               readonly kind: 'valueSet';
               readonly values: readonly ['PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED', 'FAILED'];
             };
+            readonly SystemDesignLevel: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['MID', 'SENIOR', 'STAFF'];
+            };
+            readonly SystemDesignPhase: {
+              readonly kind: 'valueSet';
+              readonly values: readonly [
+                'REQUIREMENTS',
+                'ESTIMATION',
+                'HIGH_LEVEL_DESIGN',
+                'DEEP_DIVE',
+                'FEEDBACK',
+              ];
+            };
+            readonly SystemDesignRole: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['INTERVIEWER', 'CANDIDATE'];
+            };
+            readonly SystemDesignSource: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['BANK', 'JOB'];
+            };
+            readonly SystemDesignStatus: {
+              readonly kind: 'valueSet';
+              readonly values: readonly ['PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED', 'FAILED'];
+            };
             readonly TailorStatus: {
               readonly kind: 'valueSet';
               readonly values: readonly ['PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED', 'FAILED'];
             };
             readonly UsageJobKind: {
               readonly kind: 'valueSet';
-              readonly values: readonly ['SUGGESTION', 'TAILOR'];
+              readonly values: readonly ['SUGGESTION', 'TAILOR', 'SYSTEM_DESIGN'];
             };
           };
         };
@@ -2184,6 +2631,14 @@ type ContractBase = Omit<
     readonly token_usage: {
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'TokenUsage';
+    };
+    readonly user_system_design_session: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'UserSystemDesignSession';
+    };
+    readonly system_design_message: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'SystemDesignMessage';
     };
     readonly site_settings: {
       readonly namespace: 'public' & NamespaceId;
@@ -2338,6 +2793,62 @@ type ContractBase = Omit<
                 readonly maintenance_mode: { readonly column: 'maintenance_mode' };
                 readonly payments_paused: { readonly column: 'payments_paused' };
                 readonly updated_at: { readonly column: 'updated_at' };
+              };
+            };
+          };
+          readonly SystemDesignMessage: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly session_id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly role: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly phase: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly content: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly created_at: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+            };
+            readonly relations: {
+              readonly session: {
+                readonly to: {
+                  readonly namespace: 'public' & NamespaceId;
+                  readonly model: 'UserSystemDesignSession';
+                };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['session_id'];
+                  readonly targetFields: readonly ['id'];
+                };
+              };
+            };
+            readonly storage: {
+              readonly table: 'system_design_message';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly session_id: { readonly column: 'session_id' };
+                readonly role: { readonly column: 'role' };
+                readonly phase: { readonly column: 'phase' };
+                readonly content: { readonly column: 'content' };
+                readonly created_at: { readonly column: 'created_at' };
               };
             };
           };
@@ -2986,6 +3497,175 @@ type ContractBase = Omit<
               };
             };
           };
+          readonly UserSystemDesignSession: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly user_id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly source: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly problem_id: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly tailored_resume_id: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly company_name: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly role: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly job_description: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly level: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly model: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly status: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly phase: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly title: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly prompt: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly brief: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly requirements: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly estimates: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly diagram: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly agent_context: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly last_turn_id: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly notice: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly phase_durations: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly phase_started_at: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+              readonly result: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly letter_grade: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly hire_signal: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly created_at: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+              readonly completed_at: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+            };
+            readonly relations: {
+              readonly user: {
+                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['user_id'];
+                  readonly targetFields: readonly ['auth0_id'];
+                };
+              };
+            };
+            readonly storage: {
+              readonly table: 'user_system_design_session';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly user_id: { readonly column: 'user_id' };
+                readonly source: { readonly column: 'source' };
+                readonly problem_id: { readonly column: 'problem_id' };
+                readonly tailored_resume_id: { readonly column: 'tailored_resume_id' };
+                readonly company_name: { readonly column: 'company_name' };
+                readonly role: { readonly column: 'role' };
+                readonly job_description: { readonly column: 'job_description' };
+                readonly level: { readonly column: 'level' };
+                readonly model: { readonly column: 'model' };
+                readonly status: { readonly column: 'status' };
+                readonly phase: { readonly column: 'phase' };
+                readonly title: { readonly column: 'title' };
+                readonly prompt: { readonly column: 'prompt' };
+                readonly brief: { readonly column: 'brief' };
+                readonly requirements: { readonly column: 'requirements' };
+                readonly estimates: { readonly column: 'estimates' };
+                readonly diagram: { readonly column: 'diagram' };
+                readonly agent_context: { readonly column: 'agent_context' };
+                readonly last_turn_id: { readonly column: 'last_turn_id' };
+                readonly notice: { readonly column: 'notice' };
+                readonly phase_durations: { readonly column: 'phase_durations' };
+                readonly phase_started_at: { readonly column: 'phase_started_at' };
+                readonly result: { readonly column: 'result' };
+                readonly letter_grade: { readonly column: 'letter_grade' };
+                readonly hire_signal: { readonly column: 'hire_signal' };
+                readonly created_at: { readonly column: 'created_at' };
+                readonly completed_at: { readonly column: 'completed_at' };
+              };
+            };
+          };
           readonly UserTailoredResume: {
             readonly fields: {
               readonly id: {
@@ -3238,6 +3918,48 @@ type ContractBase = Omit<
             readonly members: readonly [
               { readonly name: 'SUGGESTION'; readonly value: 'SUGGESTION' },
               { readonly name: 'TAILOR'; readonly value: 'TAILOR' },
+              { readonly name: 'SYSTEM_DESIGN'; readonly value: 'SYSTEM_DESIGN' },
+            ];
+          };
+          readonly SystemDesignStatus: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'PROCESSING'; readonly value: 'PROCESSING' },
+              { readonly name: 'WAITING_FOR_INPUT'; readonly value: 'WAITING_FOR_INPUT' },
+              { readonly name: 'COMPLETED'; readonly value: 'COMPLETED' },
+              { readonly name: 'FAILED'; readonly value: 'FAILED' },
+            ];
+          };
+          readonly SystemDesignPhase: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'REQUIREMENTS'; readonly value: 'REQUIREMENTS' },
+              { readonly name: 'ESTIMATION'; readonly value: 'ESTIMATION' },
+              { readonly name: 'HIGH_LEVEL_DESIGN'; readonly value: 'HIGH_LEVEL_DESIGN' },
+              { readonly name: 'DEEP_DIVE'; readonly value: 'DEEP_DIVE' },
+              { readonly name: 'FEEDBACK'; readonly value: 'FEEDBACK' },
+            ];
+          };
+          readonly SystemDesignSource: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'BANK'; readonly value: 'BANK' },
+              { readonly name: 'JOB'; readonly value: 'JOB' },
+            ];
+          };
+          readonly SystemDesignLevel: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'MID'; readonly value: 'MID' },
+              { readonly name: 'SENIOR'; readonly value: 'SENIOR' },
+              { readonly name: 'STAFF'; readonly value: 'STAFF' },
+            ];
+          };
+          readonly SystemDesignRole: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'INTERVIEWER'; readonly value: 'INTERVIEWER' },
+              { readonly name: 'CANDIDATE'; readonly value: 'CANDIDATE' },
             ];
           };
           readonly PurchaseStatus: {

@@ -12,16 +12,18 @@ import dispatcher
 from dispatcher import pg as pg_module
 from dispatcher.handlers.resume_handler import ResumeHandler
 from dispatcher.handlers.suggestion_handler import SuggestionHandler
+from dispatcher.handlers.system_design_handler import SystemDesignHandler
 from dispatcher.handlers.tailor_handler import TailorHandler
 from shared.amqp import (
     BULLET_SUGG_QUEUE_NAME,
     RESUME_QUEUE_NAME,
+    SYSTEM_DESIGN_QUEUE_NAME,
     TAILOR_QUEUE_NAME,
 )
 
 
 class AsyncMain(unittest.IsolatedAsyncioTestCase):
-    async def test_consumes_three_queues_with_their_handlers(self):
+    async def test_consumes_every_queue_with_its_handler(self):
         calls = []
         client = MagicMock()
         client.setup = AsyncMock(side_effect=lambda: calls.append("setup"))
@@ -47,12 +49,18 @@ class AsyncMain(unittest.IsolatedAsyncioTestCase):
         client.setup.assert_awaited_once()
         self.assertEqual(
             [c.args[0] for c in client.consume.await_args_list],
-            [RESUME_QUEUE_NAME, BULLET_SUGG_QUEUE_NAME, TAILOR_QUEUE_NAME],
+            [
+                RESUME_QUEUE_NAME,
+                BULLET_SUGG_QUEUE_NAME,
+                TAILOR_QUEUE_NAME,
+                SYSTEM_DESIGN_QUEUE_NAME,
+            ],
         )
         handlers = [c.args[1].__self__ for c in client.consume.await_args_list]
         self.assertIsInstance(handlers[0], ResumeHandler)
         self.assertIsInstance(handlers[1], SuggestionHandler)
         self.assertIsInstance(handlers[2], TailorHandler)
+        self.assertIsInstance(handlers[3], SystemDesignHandler)
         client.close.assert_awaited_once()
 
 
