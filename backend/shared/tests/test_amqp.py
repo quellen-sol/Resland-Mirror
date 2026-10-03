@@ -22,6 +22,10 @@ from shared.amqp import (
     RESUME_DLX_NAME,
     RESUME_EXCHANGE_NAME,
     RESUME_QUEUE_NAME,
+    SYSTEM_DESIGN_DLQ_NAME,
+    SYSTEM_DESIGN_DLX_NAME,
+    SYSTEM_DESIGN_EXCHANGE_NAME,
+    SYSTEM_DESIGN_QUEUE_NAME,
     TAILOR_DLQ_NAME,
     TAILOR_DLX_NAME,
     TAILOR_EXCHANGE_NAME,
@@ -30,6 +34,7 @@ from shared.amqp import (
     AmqpClientException,
     AmqpResumeJob,
     AmqpSuggestionJob,
+    AmqpSystemDesignJob,
     AmqpTailorJob,
 )
 
@@ -54,6 +59,21 @@ class JobSerialization(unittest.TestCase):
         self.assertEqual(payload["session_id"], "s1")
         self.assertIsNone(payload["answer"])
         self.assertEqual(payload["job_type"], "suggestion")
+
+    def test_system_design_job_defaults(self):
+        job = AmqpSystemDesignJob(session_id="s1")
+        payload = json.loads(job.to_bytes())
+        self.assertEqual(payload["session_id"], "s1")
+        self.assertEqual(payload["action"], "start")
+        self.assertIsNone(payload["text"])
+        self.assertEqual(payload["job_type"], "system_design")
+        self.assertTrue(payload["turn_id"])
+
+    def test_system_design_turns_get_fresh_turn_ids(self):
+        a = AmqpSystemDesignJob(session_id="s1", action="message", text="hi")
+        b = AmqpSystemDesignJob(session_id="s1", action="message", text="hi")
+        self.assertNotEqual(a.turn_id, b.turn_id)
+        self.assertEqual(json.loads(a.to_bytes())["text"], "hi")
 
     def test_suggestion_job_with_answer(self):
         job = AmqpSuggestionJob(session_id="s1", answer="team of 5")
@@ -270,6 +290,8 @@ class DeclareTopology(unittest.IsolatedAsyncioTestCase):
                 BULLET_SUGG_DLX_NAME,
                 TAILOR_EXCHANGE_NAME,
                 TAILOR_DLX_NAME,
+                SYSTEM_DESIGN_EXCHANGE_NAME,
+                SYSTEM_DESIGN_DLX_NAME,
             },
         )
         self.assertEqual(
@@ -281,6 +303,8 @@ class DeclareTopology(unittest.IsolatedAsyncioTestCase):
                 BULLET_SUGG_DLQ_NAME,
                 TAILOR_QUEUE_NAME,
                 TAILOR_DLQ_NAME,
+                SYSTEM_DESIGN_QUEUE_NAME,
+                SYSTEM_DESIGN_DLQ_NAME,
             },
         )
         # Every queue ends up bound to its exchange.
@@ -292,6 +316,11 @@ class DeclareTopology(unittest.IsolatedAsyncioTestCase):
             {"x-dead-letter-exchange": RESUME_DLX_NAME},
         )
         self.assertIsNone(queues[RESUME_DLQ_NAME][1]["arguments"])
+        self.assertEqual(
+            queues[SYSTEM_DESIGN_QUEUE_NAME][1]["arguments"],
+            {"x-dead-letter-exchange": SYSTEM_DESIGN_DLX_NAME},
+        )
+        self.assertIsNone(queues[SYSTEM_DESIGN_DLQ_NAME][1]["arguments"])
 
         for call in channel.declare_exchange.await_args_list:
             self.assertEqual(call.kwargs["durable"], True)
