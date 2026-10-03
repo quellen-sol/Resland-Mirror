@@ -3,7 +3,24 @@ import Image from "next/image";
 import Link from "next/link";
 import SiteFooter from "@/components/site-footer";
 
-export const metadata: Metadata = { title: "Help & FAQ" };
+export const metadata: Metadata = {
+  title: "Help & FAQ",
+  // The root layout's canonical is "/" — override it so /help indexes as
+  // its own page.
+  alternates: { canonical: "/help" },
+};
+
+// This page is otherwise fully static; re-render daily so the footer's
+// copyright year doesn't stay frozen at the last build.
+export const revalidate = 86400;
+
+/** "Billing & Credits" -> "faq-billing-credits" — a valid, space-free id. */
+function sectionId(title: string) {
+  return `faq-${title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")}`;
+}
 
 const SECTIONS: {
   title: string;
@@ -18,7 +35,7 @@ const SECTIONS: {
       ],
       [
         "How do I set up my profile?",
-        "When you first sign in, onboarding lets you upload an existing resume (we parse it into your profile automatically) or enter your information by hand. If you skipped onboarding, upload a resume or open Edit Profile from the dashboard menu.",
+        "When you first sign in, you can upload an existing resume (we read it and fill in your profile automatically) or enter your information by hand. If you skipped that step, upload a resume or open Edit Profile from the dashboard menu.",
       ],
       [
         "What is the dashboard?",
@@ -31,11 +48,11 @@ const SECTIONS: {
     faqs: [
       [
         "What does the sparkle icon do?",
-        "The sparkle next to a bullet or job opens an AI suggestion. The agent may ask a question or two, then proposes a rewrite you can accept or dismiss. You can also steer it with your own prompt.",
+        "The sparkle next to a bullet or job asks the AI for a suggestion. It may ask you a question or two, then proposes a rewrite you can accept or dismiss. You can also tell it what you'd like changed in your own words.",
       ],
       [
         "How do I tailor my resume to a job?",
-        "Open Tailor Resume from the dashboard menu and paste the job description. The agent rewrites and reorders your bullets to match it, then saves the result to your Tailored Resumes board where you can keep editing and export it.",
+        "Open Tailor Resume from the dashboard menu and paste the job description. The AI rewrites and reorders your bullets to match it. Results aren't saved automatically — click Save to Tailored Resumes to keep one, then edit and export it from your Tailored Resumes board.",
       ],
       [
         "Can I copy a bullet point?",
@@ -43,7 +60,7 @@ const SECTIONS: {
       ],
       [
         "Which AI model is used?",
-        "You pick the model when starting a suggestion or tailoring run. Different models have different per-token prices — cheaper models cost less per run.",
+        "You can pick a model when you ask for a suggestion or tailor a resume, or just use the default. More capable models usually cost more each time you use them.",
       ],
     ],
   },
@@ -52,15 +69,15 @@ const SECTIONS: {
     faqs: [
       [
         "How does billing work?",
-        "Resland is pay-as-you-go — no subscription. You buy balance in packs on the Billing page, and AI actions (suggestions and tailoring) draw from it. Bigger packs include bonus balance.",
+        "Resland is pay-as-you-go — no subscription. You buy balance in packs on the Billing page, and AI features (suggestions and tailoring) draw from it. Bigger packs include bonus balance.",
       ],
       [
         "How much does each action cost?",
-        "Cost is based on the tokens your chosen model uses, priced per 1K tokens. Exact amounts vary with resume length and the model you pick.",
+        "You're charged for what each request actually uses: the AI provider's cost for that work, plus a service fee. Longer resumes and job descriptions take more work, and more capable models cost more. Any prices shown next to a model are estimates — your actual charge is based on what was really used.",
       ],
       [
-        "What if my balance runs out mid-run?",
-        "A job that already started is never interrupted — the balance is deducted afterward and simply can't go below zero. You just need a positive balance to start something new.",
+        "What if my balance runs out partway through?",
+        "Anything that's already started is never interrupted — the charge is taken afterward and simply can't take your balance below zero. You just need a balance above zero to start something new.",
       ],
       [
         "How do purchases work?",
@@ -81,7 +98,7 @@ const SECTIONS: {
       ],
       [
         "What format are exports?",
-        "Resumes export as editable DOCX documents so you can make final tweaks before sending them out.",
+        "Resumes export as editable Word (.docx) documents so you can make final tweaks before sending them out.",
       ],
     ],
   },
@@ -101,7 +118,7 @@ export default function HelpPage() {
             alt="Resland"
             width={32}
             height={32}
-            priority
+            preload
             className="rounded-lg"
           />{" "}
           Resland
@@ -124,9 +141,12 @@ export default function HelpPage() {
         </p>
         <div className="mt-10 flex flex-col gap-10">
           {SECTIONS.map((section) => (
-            <section key={section.title} aria-labelledby={section.title}>
+            <section
+              key={section.title}
+              aria-labelledby={sectionId(section.title)}
+            >
               <h2
-                id={section.title}
+                id={sectionId(section.title)}
                 className="text-xl font-semibold text-zinc-100"
               >
                 {section.title}
