@@ -31,15 +31,19 @@ const faqs = [
 export default async function Home() {
   let session: Awaited<ReturnType<typeof auth0.getSession>> = null;
   let lookupFailed = false;
+  let signedInTarget: string | null = null;
   try {
     session = await auth0.getSession();
     if (session) {
       const user = await getUser();
-      if (user) redirect(user.has_onboarded ? "/dashboard" : "/onboarding");
+      if (user) signedInTarget = user.has_onboarded ? "/dashboard" : "/onboarding";
     }
   } catch {
     lookupFailed = true;
   }
+  // redirect() works by throwing, so it must stay outside the try above or
+  // the catch swallows it and signed-in users never leave the landing page.
+  if (signedInTarget) redirect(signedInTarget);
   const primaryHref = lookupFailed || session ? "/dashboard" : "/auth/login?screen_hint=signup";
   const primaryLabel = lookupFailed || session ? "Go to Dashboard" : "Get Started";
   const jsonLd = [

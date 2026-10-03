@@ -1,13 +1,16 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getAccessTokenOrLogin } from "@/lib/auth";
-import { requireOnboardedUser } from "@/lib/db";
+import { getUser } from "@/lib/db";
 import AdminClient from "./admin-client";
 
 export const metadata: Metadata = { title: "Admin" };
 
 export default async function AdminPage() {
-  const user = await requireOnboardedUser();
+  // Plain getUser(), not requireOnboardedUser(): the site_admin check must run
+  // first so non-admins get the 404 and admins aren't gated on onboarding.
+  const user = await getUser();
+  if (!user) redirect("/auth/login");
   // Hidden route — pretend it doesn't exist for non-admins.
   if (!user.site_admin) notFound();
   const accessToken = await getAccessTokenOrLogin("/admin");
