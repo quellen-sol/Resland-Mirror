@@ -428,6 +428,19 @@ class FixtureCapture(unittest.TestCase):
             FormatProfile.from_json(self.fmt.to_json()), self.fmt
         )
 
+    def test_sections_keep_their_own_entry_order(self):
+        # Experience is company-first; the education line is
+        # "Certificate (Hartwell Academy)" — title-first, bracketed.
+        self.assertTrue(self.fmt.entry_title_tail_first)
+        self.assertEqual(self.fmt.education_title_separator, " (")
+        self.assertFalse(self.fmt.education_title_tail_first)
+
+    def test_profile_serializes(self):
+        self.assertEqual(
+            FormatProfile.from_json(self.fmt.to_json()), self.fmt
+        )
+
+
 
 @unittest.skipUnless(HAS_PDFMINER, "pdfminer.six not installed")
 class FixtureRender(unittest.TestCase):
@@ -489,6 +502,13 @@ class FixtureRender(unittest.TestCase):
         cols = self.rendered.sections[0]._sectPr.find(qn("w:cols"))
         num = cols.get(qn("w:num")) if cols is not None else None
         self.assertIn(num, (None, "1"))
+
+    def test_education_entry_keeps_brackets_and_drops_dangling_dash(self):
+        edu = next(p for p in self.paras if "Hartwell Academy" in p.text)
+        self.assertEqual(
+            edu.text,
+            "Operations Planning Professional Certificate (Hartwell Academy)\tDecember 2024",
+        )
 
 
 
