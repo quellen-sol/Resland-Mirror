@@ -282,7 +282,7 @@ export default function InterviewRoom({
         toast.error(rejection.message);
       } else if (isInsufficientBalance(error)) {
         toast.error("Insufficient balance", {
-          description: "Top up to keep going — your work is saved.",
+          description: "Top up to keep going. Your work is saved.",
           action: { label: "Top Up", onClick: () => router.push("/billing") },
         });
       } else {
@@ -310,12 +310,12 @@ export default function InterviewRoom({
 
   if (gone) {
     return (
-      <Card className="border-amber-500/30 bg-zinc-900/80 text-zinc-100">
+      <Card className="ring-amber-500/30">
         <CardContent className="flex flex-col gap-3 pt-6">
           <p className="text-sm text-amber-400">This interview no longer exists.</p>
           <Link
             href="/system-design"
-            className="text-sm text-purple-300 underline underline-offset-4"
+            className="text-sm text-brand-300 underline underline-offset-4"
           >
             Start a new one
           </Link>
@@ -327,7 +327,7 @@ export default function InterviewRoom({
   if (!status || !workspace) {
     return (
       <div className="flex items-center gap-2 text-sm text-zinc-400">
-        <Loader2 className="size-4 animate-spin text-purple-400" /> Loading
+        <Loader2 className="size-4 animate-spin text-brand-400" /> Loading
         interview…
       </div>
     );
@@ -338,7 +338,7 @@ export default function InterviewRoom({
       <InterviewReport status={status} diagramElements={finalDiagram} />
     ) : (
       <div className="flex items-center gap-2 text-sm text-zinc-400">
-        <Loader2 className="size-4 animate-spin text-purple-400" /> Loading
+        <Loader2 className="size-4 animate-spin text-brand-400" /> Loading
         your report…
       </div>
     );
@@ -360,7 +360,7 @@ export default function InterviewRoom({
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="truncate bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-2xl font-semibold text-transparent">
+            <h1 className="truncate text-2xl font-semibold tracking-[-0.03em]">
               {status.title ?? "Setting up your interview…"}
             </h1>
             <HelpTip title="How This Works">
@@ -411,7 +411,7 @@ export default function InterviewRoom({
               className={cn(
                 "flex flex-col gap-0.5 rounded-md border px-2 py-1.5",
                 current
-                  ? "border-purple-500/50 bg-purple-500/10 text-purple-100"
+                  ? "border-brand-500/50 bg-brand-500/10 text-brand-100"
                   : done
                     ? "border-zinc-800 bg-zinc-900/60 text-zinc-300"
                     : "border-zinc-800/60 text-zinc-600",
@@ -432,16 +432,15 @@ export default function InterviewRoom({
         })}
       </ol>
 
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100 lg:hidden">
+      <Card className="lg:hidden">
         <CardContent className="flex items-center gap-3 pt-6 text-sm text-zinc-300">
-          <MonitorSmartphone className="size-5 shrink-0 text-purple-400" />
-          The whiteboard needs a larger screen — open this interview on a
-          laptop or desktop to continue.
+          <MonitorSmartphone className="size-5 shrink-0 text-brand-400" />
+          The whiteboard needs a bigger screen. Open this interview on a laptop or desktop to keep going.
         </CardContent>
       </Card>
 
       {failed && (
-        <Card className="border-red-500/30 bg-zinc-900/80 text-zinc-100">
+        <Card className="ring-red-500/30">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
             <p className="text-sm text-red-400">
               This interview couldn&apos;t be set up. Discard it and start
@@ -494,7 +493,7 @@ export default function InterviewRoom({
               {saveState === "saving"
                 ? "Saving…"
                 : saveState === "error"
-                  ? "Couldn't save — retrying with your next change"
+                  ? "Couldn't save. We'll retry on your next change."
                   : "All changes saved"}
             </span>
             {issues.length > 0 && (
@@ -521,7 +520,7 @@ export default function InterviewRoom({
                 }}
                 disabled={!open}
                 placeholder={"Functional:\n- …\n\nNon-functional:\n- …"}
-                className="min-h-40 border-zinc-700 bg-zinc-950/50 font-mono text-xs text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                className="min-h-40 border-zinc-700 bg-zinc-950/50 font-mono text-xs text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
               />
             </label>
             <label className="flex flex-col gap-1.5">
@@ -536,7 +535,7 @@ export default function InterviewRoom({
                 }}
                 disabled={!open}
                 placeholder={"DAU, reads/writes per second, storage, bandwidth…"}
-                className="min-h-40 border-zinc-700 bg-zinc-950/50 font-mono text-xs text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                className="min-h-40 border-zinc-700 bg-zinc-950/50 font-mono text-xs text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
               />
             </label>
           </div>
@@ -545,7 +544,7 @@ export default function InterviewRoom({
         {/* Problem + interviewer */}
         <div className="flex min-h-0 flex-col gap-3 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)]">
           {status.prompt && (
-            <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+            <Card>
               <CardContent className="pt-4 text-sm">
                 <p className="mb-1 text-xs font-medium tracking-wide text-zinc-500 uppercase">
                   Problem
@@ -555,7 +554,7 @@ export default function InterviewRoom({
             </Card>
           )}
 
-          <Card className="flex min-h-0 flex-1 flex-col border-zinc-800 bg-zinc-900/80 py-0 text-zinc-100">
+          <Card className="flex min-h-0 flex-1 flex-col py-0">
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4 text-sm">
               {status.messages.map((m) => (
                 <div
@@ -563,7 +562,7 @@ export default function InterviewRoom({
                   className={cn(
                     "max-w-[90%] rounded-lg px-3 py-2 whitespace-pre-wrap",
                     m.role === "INTERVIEWER"
-                      ? "self-start border border-purple-500/30 bg-purple-500/10 text-purple-100"
+                      ? "self-start border border-brand-500/30 bg-brand-500/10 text-brand-100"
                       : "self-end bg-zinc-800 text-zinc-100",
                   )}
                 >
@@ -572,7 +571,7 @@ export default function InterviewRoom({
               ))}
               {processing && (
                 <div className="flex items-center gap-2 self-start text-xs text-zinc-400">
-                  <Loader2 className="size-3.5 animate-spin text-purple-400" />
+                  <Loader2 className="size-3.5 animate-spin text-brand-400" />
                   {phase === "FEEDBACK"
                     ? "Grading your interview…"
                     : notStarted
@@ -616,13 +615,13 @@ export default function InterviewRoom({
                       ? "Answer the interviewer…"
                       : "Ask a question or think out loud…"
                   }
-                  className="min-h-0 resize-none border-zinc-700 bg-zinc-950/50 text-sm text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                  className="min-h-0 resize-none border-zinc-700 bg-zinc-950/50 text-sm text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
                 />
                 <Button
                   onClick={() => takeTurn("message", { text: message.trim() })}
                   disabled={!canAct || !message.trim()}
                   aria-label="Send"
-                  className="h-auto border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
+                  className="h-auto"
                 >
                   {busy ? <Loader2 className="animate-spin" /> : <Send />}
                 </Button>
@@ -643,7 +642,6 @@ export default function InterviewRoom({
                     onClick={() =>
                       takeTurn("advance", { text: message.trim() || undefined })
                     }
-                    className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                   >
                     {advance} <ArrowRight />
                   </Button>
@@ -660,7 +658,7 @@ export default function InterviewRoom({
           if (!o) setIssueDialog(null);
         }}
       >
-        <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-zinc-100">
               Some of Your Diagram Isn&apos;t Connected
@@ -709,7 +707,6 @@ export default function InterviewRoom({
                     acknowledge: true,
                   })
                 }
-                className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
               >
                 Submit Anyway
               </Button>
@@ -719,7 +716,7 @@ export default function InterviewRoom({
       </Dialog>
 
       <Dialog open={confirmFinish} onOpenChange={setConfirmFinish}>
-        <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-zinc-100">End the Interview?</DialogTitle>
             <DialogDescription className="text-zinc-400">
@@ -746,7 +743,6 @@ export default function InterviewRoom({
               <Button
                 disabled={busy}
                 onClick={() => takeTurn("finish")}
-                className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
               >
                 {busy ? <Loader2 className="animate-spin" /> : <Flag />} End &amp;
                 Grade

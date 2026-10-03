@@ -20,12 +20,12 @@ export default function MaintenancePage() {
           height={64}
           preload
         />
-        <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+        <h1 className="text-3xl font-semibold tracking-[-0.03em]">
           Down for Maintenance
         </h1>
         <p className="text-zinc-400">
-          Resland is temporarily paused while we make some updates. Your data is
-          safe — please check back shortly.
+          Resland is down for a bit while we make some updates. Your data is
+          safe. Check back soon.
         </p>
         <Link
           href="/auth/login?returnTo=%2Fdashboard"

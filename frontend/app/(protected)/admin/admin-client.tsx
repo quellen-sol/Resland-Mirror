@@ -369,7 +369,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
     <div className="flex flex-col gap-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+          <h1 className="text-3xl font-semibold tracking-[-0.03em]">
             Admin
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
@@ -394,7 +394,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       )}
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardContent className="pt-6">
             <p className="text-2xl font-semibold">
               {loaded ? users.length : "—"}
@@ -402,7 +402,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
             <p className="text-xs text-zinc-500">users</p>
           </CardContent>
         </Card>
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardContent className="pt-6">
             <p className="text-2xl font-semibold">
               {loaded
@@ -415,7 +415,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
             <p className="text-xs text-zinc-500">Balance Consumed</p>
           </CardContent>
         </Card>
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardContent className="pt-6">
             <p className="text-2xl font-semibold">
               {loaded ? fmtMoney(revenueCents, "usd") : "—"}
@@ -425,7 +425,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
         </Card>
       </div>
 
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Site Settings</CardTitle>
         </CardHeader>
@@ -450,7 +450,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
             >
               <input
                 type="checkbox"
-                className="mt-0.5 size-4 cursor-pointer accent-purple-500"
+                className="mt-0.5 size-4 cursor-pointer accent-brand-500"
                 checked={settings?.[row.key] ?? false}
                 disabled={!settings || savingSettings}
                 onChange={(e) =>
@@ -473,7 +473,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
         </CardContent>
       </Card>
 
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle className="text-lg">Per-User Usage</CardTitle>
           <SearchBox
@@ -512,7 +512,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
         </CardContent>
       </Card>
 
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle className="text-lg">Model Pricing</CardTitle>
           <SearchBox
@@ -591,7 +591,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                   <td className={td}>
                     <input
                       type="checkbox"
-                      className="size-4 cursor-pointer accent-purple-500"
+                      className="size-4 cursor-pointer accent-brand-500"
                       checked={m.enabled}
                       onChange={(e) =>
                         updateModel(m.id, { enabled: e.target.checked })
@@ -602,7 +602,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                     <input
                       type="radio"
                       name="default-model"
-                      className="size-4 cursor-pointer accent-purple-500"
+                      className="size-4 cursor-pointer accent-brand-500"
                       checked={m.is_default}
                       onChange={() => {
                         if (m.is_default) return;
@@ -710,7 +710,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
                 <td className={td}></td>
                 <td className={td}>
                   <button
-                    className="rounded bg-purple-600/80 px-2.5 py-1 text-xs font-medium hover:bg-purple-500"
+                    className="rounded bg-brand-600/80 px-2.5 py-1 text-xs font-medium hover:bg-brand-500"
                     disabled={savingModel !== null}
                     onClick={addModel}
                   >
@@ -721,7 +721,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
             </tbody>
           </table>
           <p className="mt-2 text-xs text-zinc-500">
-            Rates are the advertised fallback price — actual charges use
+            Rates are the advertised fallback price. Actual charges use
             OpenRouter&apos;s reported cost ×1.25. Disabled models are rejected
             at job creation.
           </p>
@@ -730,7 +730,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
       </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="text-lg">By Model</CardTitle>
           </CardHeader>
@@ -760,7 +760,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="text-lg">By Feature</CardTitle>
           </CardHeader>
@@ -790,7 +790,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
           </CardContent>
         </Card>
 
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="text-lg">Last 30 Days</CardTitle>
           </CardHeader>
@@ -815,7 +815,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
         </Card>
       </div>
 
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle className="text-lg">Purchases</CardTitle>
           <SearchBox
@@ -851,7 +851,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
         </CardContent>
       </Card>
 
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader className="flex-row items-center justify-between gap-2">
           <CardTitle className="text-lg">Recent Usage Events</CardTitle>
           <SearchBox

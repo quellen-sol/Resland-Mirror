@@ -9,10 +9,10 @@ import type { SkillGroupForm } from "@/lib/skills";
 import { newGroupId, ungroupedGroup } from "@/lib/skills";
 
 const inputCls =
-  "border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30";
+  "border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30";
 
 const chipCls =
-  "inline-flex items-center gap-1.5 rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200";
+  "inline-flex items-center gap-1.5 rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-0.5 text-sm text-brand-200";
 
 type DragPayload =
   | { kind: "skill"; group: number; index: number }
@@ -171,7 +171,7 @@ export default function SkillsEditor({
             dropTarget?.group === gi &&
               dropTarget.index === null &&
               drag?.kind === "skill" &&
-              "ring-1 ring-purple-500/60",
+              "ring-1 ring-brand-500/60",
           )}
         >
           {!singleUngrouped && (
@@ -186,7 +186,7 @@ export default function SkillsEditor({
                 "mb-2 flex items-center gap-1",
                 dropTarget?.group === gi &&
                   drag?.kind === "group" &&
-                  "rounded ring-1 ring-purple-500/60",
+                  "rounded ring-1 ring-brand-500/60",
               )}
             >
               <button
@@ -245,7 +245,7 @@ export default function SkillsEditor({
                   onClick={() => removeGroup(gi)}
                   className="text-zinc-500 hover:text-red-400"
                   aria-label={`Remove Category ${group.category}`}
-                  title="Remove category — its skills move to Ungrouped"
+                  title="Remove category (its skills move to Ungrouped)"
                 >
                   <Trash2 className="size-4" />
                 </button>
@@ -277,14 +277,14 @@ export default function SkillsEditor({
                   "cursor-grab",
                   dropTarget?.group === gi &&
                     dropTarget.index === si &&
-                    "ring-1 ring-purple-400",
+                    "ring-1 ring-brand-400",
                 )}
               >
                 {skill}
                 <button
                   type="button"
                   onClick={() => removeSkill(gi, si)}
-                  className="text-purple-300/60 hover:text-purple-200"
+                  className="text-brand-300/60 hover:text-brand-200"
                   aria-label={`Remove ${skill}`}
                 >
                   ×
@@ -305,7 +305,7 @@ export default function SkillsEditor({
               onBlur={() => addSkill(gi)}
               placeholder={
                 group.skills.length === 0
-                  ? "Add a skill — press Enter"
+                  ? "Add a skill and press Enter"
                   : "+ skill"
               }
               className={cn(inputCls, "h-7 w-36 text-sm")}
@@ -326,7 +326,7 @@ export default function SkillsEditor({
           className={cn(
             "rounded-lg border border-dashed border-zinc-700 px-3 py-2 text-center text-xs text-zinc-500",
             dropTarget?.group === groups.length &&
-              "border-purple-500/60 text-purple-300",
+              "border-brand-500/60 text-brand-300",
           )}
         >
           Drop here to move to the end

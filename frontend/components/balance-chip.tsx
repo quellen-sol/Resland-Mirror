@@ -26,7 +26,7 @@ export default function BalanceChip({ accessToken }: { accessToken: string }) {
   return (
     <Link
       href="/billing"
-      title="Balance — Top Up"
+      title="Top Up Balance"
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs",
         balance > 0
@@ -34,7 +34,7 @@ export default function BalanceChip({ accessToken }: { accessToken: string }) {
           : "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20",
       )}
     >
-      <Zap className="size-3.5 text-purple-400" />
+      <Zap className="size-3.5 text-brand-400" />
       {fmtCents(balance)}
     </Link>
   );

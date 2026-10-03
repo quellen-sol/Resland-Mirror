@@ -5,6 +5,7 @@ import { getAccessTokenOrLogin } from "@/lib/auth";
 import { getUserTailoredResumes, requireOnboardedUser } from "@/lib/db";
 import HelpTip from "@/components/help-tip";
 import TailoredBoard from "./tailored-board";
+import Backdrop from "@/components/backdrop";
 
 export const metadata: Metadata = { title: "Tailored Resumes" };
 
@@ -16,12 +17,12 @@ export default async function TailoredPage() {
 
   return (
     <div className="relative flex flex-1 overflow-hidden bg-zinc-950 font-sans">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
+      <Backdrop />
       <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
         <header className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+              <h1 className="text-3xl font-semibold tracking-[-0.03em]">
                 Tailored Resumes
               </h1>
               <HelpTip title="Tailored Resumes">
@@ -33,8 +34,8 @@ export default async function TailoredPage() {
               </HelpTip>
             </div>
             <p className="mt-1 text-sm text-zinc-400">
-              Saved versions of your resume tailored to a specific job — edit
-              one or generate its document.
+              One saved version for each job you&apos;ve tailored for. Open one to
+              edit or export it.
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -46,7 +47,7 @@ export default async function TailoredPage() {
             </Link>
             <Link
               href="/tailor"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 px-2.5 py-1.5 text-sm font-medium text-white hover:from-violet-500 hover:to-purple-500 [&_svg]:size-4"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-sm font-medium text-zinc-950 hover:bg-zinc-200 [&_svg]:size-4"
             >
               <Sparkles /> Tailor Resume
             </Link>

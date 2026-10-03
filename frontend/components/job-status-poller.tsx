@@ -48,7 +48,7 @@ export default function JobStatusPoller({ jobIds }: { jobIds: string[] }) {
               toast.warning("Can't reach the server", {
                 id: LOADING_TOAST_ID,
                 description:
-                  "Still trying — your resume is processing in the background.",
+                  "Still trying. Your resume keeps processing in the background.",
               });
             }
             continue;
@@ -72,7 +72,7 @@ export default function JobStatusPoller({ jobIds }: { jobIds: string[] }) {
             });
           } else {
             toast.error("Resume processing failed", {
-              description: "Something went wrong — try uploading again.",
+              description: "Something went wrong. Try uploading it again.",
             });
           }
         } catch {
@@ -81,7 +81,7 @@ export default function JobStatusPoller({ jobIds }: { jobIds: string[] }) {
             toast.warning("Can't reach the server", {
               id: LOADING_TOAST_ID,
               description:
-                "Still trying — your resume is processing in the background.",
+                "Still trying. Your resume keeps processing in the background.",
             });
           }
         }

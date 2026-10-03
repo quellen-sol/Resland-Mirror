@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import UploadForm from "@/components/upload-form";
+import Backdrop from "@/components/backdrop";
 
 export default async function TestUploadPage() {
   const user = await getUser();
@@ -20,16 +21,16 @@ export default async function TestUploadPage() {
 
   return (
     <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-zinc-950 p-6 font-sans">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
+      <Backdrop />
 
-      <Card className="relative w-full max-w-xl border-zinc-800 bg-zinc-900/80 text-zinc-100 shadow-2xl shadow-purple-950/40 backdrop-blur">
+      <Card className="relative w-full max-w-xl shadow-2xl shadow-brand-950/40 backdrop-blur">
         <CardHeader>
-          <CardTitle className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-2xl text-transparent">
+          <CardTitle className="text-2xl tracking-[-0.03em]">
             Test Upload
           </CardTitle>
           <CardDescription className="text-zinc-400">
             Sends a file to{" "}
-            <code className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-[0.85em] text-purple-300">
+            <code className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-[0.85em] text-brand-300">
               {"${NEXT_PUBLIC_API_BASE_URL}/upload-initial-resume"}
             </code>
           </CardDescription>

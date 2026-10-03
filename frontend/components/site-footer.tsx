@@ -19,15 +19,14 @@ export default function SiteFooter({
   links?: FooterLink[];
 }) {
   return (
-    <footer className="relative border-t border-zinc-800/80 px-6 py-8 sm:px-8">
+    <footer className="relative border-t border-white/[.07] px-6 py-8">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <Image
             src="/resland-logo.png"
             alt=""
-            width={24}
-            height={24}
-            className="rounded-md"
+            width={20}
+            height={20}
           />
           © {new Date().getFullYear()} Quellen Ventures LLC
         </div>

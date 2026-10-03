@@ -318,7 +318,7 @@ export default function SuggestionDialog({
       {variant === "icon" ? (
         <DialogTrigger
           title="Suggest Improvement"
-          className="inline-flex shrink-0 align-middle text-zinc-500 hover:text-purple-300"
+          className="inline-flex shrink-0 align-middle text-zinc-500 hover:text-brand-300"
         >
           <Sparkles className="size-3.5" />
         </DialogTrigger>
@@ -328,19 +328,19 @@ export default function SuggestionDialog({
             "inline-flex items-center gap-1.5 rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:bg-zinc-800",
           )}
         >
-          <Sparkles className="size-3.5 text-purple-400" /> Suggest Improvements
+          <Sparkles className="size-3.5 text-brand-400" /> Suggest Improvements
         </DialogTrigger>
       )}
 
-      <DialogContent className="max-h-[85vh] overflow-y-auto border-zinc-800 bg-zinc-900 text-zinc-100 sm:max-w-xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-zinc-100">
-            <Sparkles className="size-4 text-purple-400" />
+            <Sparkles className="size-4 text-brand-400" />
             {bulletId ? "Improve This Bullet" : "Improve This Experience"}
           </DialogTitle>
           <DialogDescription className="text-zinc-400">
-            {contextLabel ? `${contextLabel} — ` : ""}
-            The AI may ask you a question or two before suggesting a rewrite.
+            {contextLabel ? `${contextLabel}. ` : ""}             Resland may
+            ask you a question or two before it suggests a rewrite.
           </DialogDescription>
         </DialogHeader>
 
@@ -357,7 +357,6 @@ export default function SuggestionDialog({
               <Button
                 onClick={start}
                 disabled={busy || !apiBaseUrl}
-                className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
               >
                 {busy ? <Loader2 className="animate-spin" /> : "Start"}
               </Button>
@@ -378,14 +377,14 @@ export default function SuggestionDialog({
           {(session?.status === "PENDING" ||
             session?.status === "PROCESSING") && (
             <div className="flex items-center gap-2 text-sm text-zinc-400">
-              <Loader2 className="size-4 animate-spin text-purple-400" />
+              <Loader2 className="size-4 animate-spin text-brand-400" />
               Thinking…
             </div>
           )}
 
           {waiting && (
             <div className="flex flex-col gap-3">
-              <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-sm text-purple-200">
+              <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 p-3 text-sm text-brand-200">
                 {session.pending_question}
               </div>
               <div className="flex gap-2">
@@ -399,12 +398,11 @@ export default function SuggestionDialog({
                     }
                   }}
                   placeholder="Your answer…"
-                  className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                  className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
                 />
                 <Button
                   onClick={sendAnswer}
                   disabled={busy || !answer.trim()}
-                  className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                 >
                   <Send />
                 </Button>
@@ -435,13 +433,12 @@ export default function SuggestionDialog({
                         void submitOwnPrompt();
                       }
                     }}
-                    placeholder="Tell the AI what to change…"
-                    className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                    placeholder="Tell Resland what to change…"
+                    className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
                   />
                   <Button
                     onClick={submitOwnPrompt}
                     disabled={busy || !ownPrompt.trim()}
-                    className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                   >
                     <Send />
                   </Button>
@@ -462,12 +459,11 @@ export default function SuggestionDialog({
                   disabled={busy}
                   className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                 >
-                  Enter Own Prompt
+                  Ask for Changes
                 </Button>
                 <Button
                   onClick={accept}
                   disabled={busy}
-                  className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                 >
                   {busy ? <Loader2 className="animate-spin" /> : "Accept"}
                 </Button>
@@ -478,7 +474,7 @@ export default function SuggestionDialog({
           {timedOut && (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-amber-400">
-                This is taking too long — we couldn&apos;t finish the request.
+                This took too long, so we stopped waiting. Start over to try again.
               </p>
               <Button
                 variant="outline"
@@ -498,7 +494,6 @@ export default function SuggestionDialog({
                 <Button
                   onClick={retry}
                   disabled={busy}
-                  className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                 >
                   {busy ? <Loader2 className="animate-spin" /> : "Retry"}
                 </Button>
@@ -516,7 +511,7 @@ export default function SuggestionDialog({
           {gone && (
             <div className="flex flex-col gap-3">
               <p className="text-sm text-amber-400">
-                This session no longer exists — start a new one.
+                This session has expired. Start a new one.
               </p>
               <Button
                 variant="outline"

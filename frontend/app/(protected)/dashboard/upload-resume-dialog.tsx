@@ -36,13 +36,12 @@ export default function UploadResumeDialog({
         }
         className={cn(
           buttonVariants({ size: "sm" }),
-          "border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-purple-950/50 hover:from-violet-500 hover:to-purple-500",
           disabled && "cursor-not-allowed opacity-50",
         )}
       >
         <Upload /> Upload New Resume
       </DialogTrigger>
-      <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle className="text-zinc-100">
             Upload a New Resume

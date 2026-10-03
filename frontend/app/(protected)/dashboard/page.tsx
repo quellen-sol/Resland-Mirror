@@ -19,6 +19,7 @@ import HelpTip from "@/components/help-tip";
 import JobStatusPoller from "@/components/job-status-poller";
 import SuggestionDialog from "@/components/suggestion-dialog";
 import DashboardMenu from "./dashboard-menu";
+import Backdrop from "@/components/backdrop";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
@@ -75,27 +76,25 @@ export default async function DashboardPage() {
 
   return (
     <div className="relative flex flex-1 overflow-hidden bg-zinc-950 font-sans">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
+      <Backdrop />
 
       <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
         <JobStatusPoller jobIds={activeJobIds} />
         <header className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+              <h1 className="text-3xl font-semibold tracking-[-0.03em]">
                 Dashboard
               </h1>
               <HelpTip title="Your Dashboard">
                 <p>
-                  This is your base resume information — the version everything
-                  else builds on. Keep it current, then tailor it to job
-                  postings, improve it with AI suggestions, and re-export it
-                  anytime.
+                  This is your base resume, the version everything else starts
+                  from. Tailoring, suggestions and exports all use it, so keep
+                  it current.
                 </p>
                 <p>
-                  The sparkle icons ask AI for suggestions on a bullet or a
-                  whole job, and the copy icon copies a bullet to your
-                  clipboard.
+                  The sparkle asks for a suggestion on a bullet or a whole job.
+                  The copy icon copies a bullet to your clipboard.
                 </p>
               </HelpTip>
             </div>
@@ -111,10 +110,10 @@ export default async function DashboardPage() {
         </header>
 
         {/* Contact */}
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <UserRound className="size-4 text-purple-400" /> Basic Information
+              <UserRound className="size-4 text-brand-400" /> Basic Information
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -150,7 +149,7 @@ export default async function DashboardPage() {
                     href={normalizeHref(link.link)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-purple-300 underline-offset-4 hover:underline"
+                    className="inline-flex items-center gap-1 text-sm text-brand-300 underline-offset-4 hover:underline"
                   >
                     <Link2 className="size-3.5" />
                     {SOCIAL_LINK_LABELS[link.type] ?? link.type.toLowerCase()}
@@ -162,10 +161,10 @@ export default async function DashboardPage() {
         </Card>
 
         {/* Professional summary */}
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <FileText className="size-4 text-purple-400" /> Professional Summary
+              <FileText className="size-4 text-brand-400" /> Professional Summary
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -174,16 +173,16 @@ export default async function DashboardPage() {
                 {user.summary}
               </p>
             ) : (
-              <Empty text="No professional summary yet — upload a resume that includes one." />
+              <Empty text="No summary yet. Upload a resume that has one and it'll show up here." />
             )}
           </CardContent>
         </Card>
 
         {/* Skills */}
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <ClipboardCheck className="size-4 text-purple-400" /> Skills
+              <ClipboardCheck className="size-4 text-brand-400" /> Skills
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -204,7 +203,7 @@ export default async function DashboardPage() {
                       {group.skills.map((skill) => (
                         <span
                           key={skill}
-                          className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
+                          className="rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-0.5 text-sm text-brand-200"
                         >
                           {skill}
                         </span>
@@ -218,10 +217,10 @@ export default async function DashboardPage() {
         </Card>
 
         {/* Work experience */}
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Briefcase className="size-4 text-purple-400" /> Work Experience
+              <Briefcase className="size-4 text-brand-400" /> Work Experience
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -236,7 +235,7 @@ export default async function DashboardPage() {
                     <span className="text-zinc-400"> · {exp.company_name}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2 text-xs text-zinc-500">
-                    {fmtDate(exp.start_date)} — {fmtDate(exp.end_date)}
+                    {fmtDate(exp.start_date)} – {fmtDate(exp.end_date)}
                     <SuggestionDialog
                       accessToken={accessToken}
                       experienceId={exp.id}
@@ -280,10 +279,10 @@ export default async function DashboardPage() {
         </Card>
 
         {/* Education */}
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <GraduationCap className="size-4 text-purple-400" /> Education
+              <GraduationCap className="size-4 text-brand-400" /> Education
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -296,7 +295,7 @@ export default async function DashboardPage() {
                     <span className="text-zinc-400"> · {edu.institution}</span>
                   </span>
                   <span className="shrink-0 text-xs text-zinc-500">
-                    {fmtDate(edu.start_date)} — {fmtDate(edu.end_date)}
+                    {fmtDate(edu.start_date)} – {fmtDate(edu.end_date)}
                   </span>
                 </div>
                 <p className="text-sm text-zinc-400">{edu.field_of_study}</p>
@@ -309,10 +308,10 @@ export default async function DashboardPage() {
         </Card>
 
         {/* Projects */}
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <FolderGit2 className="size-4 text-purple-400" /> Projects
+              <FolderGit2 className="size-4 text-brand-400" /> Projects
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -329,7 +328,7 @@ export default async function DashboardPage() {
                           href={normalizeHref(proj.link)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-purple-300 underline-offset-4 hover:underline"
+                          className="text-sm text-brand-300 underline-offset-4 hover:underline"
                         >
                           link
                         </a>
@@ -337,7 +336,7 @@ export default async function DashboardPage() {
                     )}
                   </span>
                   <span className="shrink-0 text-xs text-zinc-500">
-                    {fmtDate(proj.start_date)} — {fmtDate(proj.end_date)}
+                    {fmtDate(proj.start_date)} – {fmtDate(proj.end_date)}
                   </span>
                 </div>
                 {proj.description && (

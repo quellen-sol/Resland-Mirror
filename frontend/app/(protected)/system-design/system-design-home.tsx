@@ -188,7 +188,7 @@ export default function SystemDesignHome({
     cn(
       "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors [&_svg]:size-4",
       on
-        ? "bg-purple-500/20 text-purple-100"
+        ? "bg-brand-500/20 text-brand-100"
         : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200",
     );
 
@@ -197,7 +197,7 @@ export default function SystemDesignHome({
       <header className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+            <h1 className="text-3xl font-semibold tracking-[-0.03em]">
               System Design Mock
             </h1>
             <HelpTip title="System Design Mock">
@@ -207,9 +207,7 @@ export default function SystemDesignHome({
                 answer deep-dive questions about it.
               </p>
               <p>
-                Draw with the component palette and connect boxes with arrows
-                — the interviewer reads which components connect to which,
-                so arrows must be attached at both ends.
+                Draw with the component palette and connect boxes with arrows. The interviewer reads which components connect to which, so attach both ends of every arrow.
               </p>
               <p>
                 You get a letter grade, a hire signal, and feedback on each
@@ -232,7 +230,7 @@ export default function SystemDesignHome({
       </header>
 
       {active && (
-        <Card className="border-purple-500/30 bg-purple-500/5 text-zinc-100">
+        <Card className="bg-brand-500/5 ring-brand-500/30">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
             <div className="text-sm">
               <p className="font-medium text-zinc-100">
@@ -252,7 +250,6 @@ export default function SystemDesignHome({
               </Button>
               <Button
                 onClick={() => router.push(`/system-design/${active.session_id}`)}
-                className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
               >
                 <Play /> Resume
               </Button>
@@ -262,10 +259,10 @@ export default function SystemDesignHome({
       )}
 
       {!active && (
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Network className="size-4 text-purple-400" /> New Interview
+              <Network className="size-4 text-brand-400" /> New Interview
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-5">
@@ -294,12 +291,12 @@ export default function SystemDesignHome({
                   className={cn(
                     "flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors",
                     problemId === null
-                      ? "border-purple-500/60 bg-purple-500/10"
+                      ? "border-brand-500/60 bg-brand-500/10"
                       : "border-zinc-800 bg-zinc-950/40 hover:border-zinc-700",
                   )}
                 >
                   <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-100">
-                    <Dices className="size-4 text-purple-400" /> Surprise Me
+                    <Dices className="size-4 text-brand-400" /> Surprise Me
                   </span>
                   <span className="text-xs text-zinc-400">
                     A random problem you haven&apos;t practiced yet.
@@ -313,7 +310,7 @@ export default function SystemDesignHome({
                     className={cn(
                       "flex flex-col gap-1 rounded-lg border p-3 text-left transition-colors",
                       problemId === p.id
-                        ? "border-purple-500/60 bg-purple-500/10"
+                        ? "border-brand-500/60 bg-brand-500/10"
                         : "border-zinc-800 bg-zinc-950/40 hover:border-zinc-700",
                     )}
                   >
@@ -349,7 +346,7 @@ export default function SystemDesignHome({
                     id="sd-tailored"
                     value={tailoredId}
                     onChange={(e) => setTailoredId(e.target.value)}
-                    className="max-w-md rounded-md border border-zinc-700 bg-zinc-950/50 px-2 py-2 text-sm text-zinc-200 focus:border-purple-500 focus:outline-none"
+                    className="max-w-md rounded-md border border-zinc-700 bg-zinc-950/50 px-2 py-2 text-sm text-zinc-200 focus:border-brand-500 focus:outline-none"
                   >
                     {tailoredResumes.map((t) => (
                       <option key={t.id} value={t.id}>
@@ -367,7 +364,7 @@ export default function SystemDesignHome({
                   You have no tailored resumes yet.{" "}
                   <Link
                     href="/tailor"
-                    className="text-purple-300 underline underline-offset-4 hover:text-purple-200"
+                    className="text-brand-300 underline underline-offset-4 hover:text-brand-200"
                   >
                     Tailor one to a job
                   </Link>{" "}
@@ -404,7 +401,6 @@ export default function SystemDesignHome({
                 <Button
                   onClick={start}
                   disabled={busy || (source === "JOB" && !tailoredId)}
-                  className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                 >
                   {busy ? <Loader2 className="animate-spin" /> : <Play />} Start
                   Interview
@@ -417,7 +413,7 @@ export default function SystemDesignHome({
 
       {history.length > 0 && (
         <div className="grid gap-6 lg:grid-cols-3">
-          <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100 lg:col-span-2">
+          <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle className="text-lg">Past Interviews</CardTitle>
             </CardHeader>
@@ -441,7 +437,7 @@ export default function SystemDesignHome({
                       <td className="py-2 pr-3">
                         <Link
                           href={`/system-design/${h.id}`}
-                          className="font-medium text-zinc-100 underline-offset-4 hover:text-purple-300 hover:underline"
+                          className="font-medium text-zinc-100 underline-offset-4 hover:text-brand-300 hover:underline"
                         >
                           {h.title ?? "Interview"}
                         </Link>
@@ -471,10 +467,10 @@ export default function SystemDesignHome({
             </CardContent>
           </Card>
 
-          <Card className="h-fit border-zinc-800 bg-zinc-900/80 text-zinc-100">
+          <Card className="h-fit">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Target className="size-4 text-purple-400" /> Your Progress
+                <Target className="size-4 text-brand-400" /> Your Progress
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
@@ -488,7 +484,7 @@ export default function SystemDesignHome({
                     <div
                       className={cn(
                         "h-1.5 rounded-full",
-                        a.key === weakest?.key ? "bg-amber-400" : "bg-purple-500",
+                        a.key === weakest?.key ? "bg-amber-400" : "bg-brand-500",
                       )}
                       style={{ width: `${(a.average / 5) * 100}%` }}
                     />
@@ -497,7 +493,7 @@ export default function SystemDesignHome({
               ))}
               {weakest && (
                 <p className="mt-1 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">
-                  Focus next on <strong>{weakest.label}</strong> — it&apos;s
+                  Focus next on <strong>{weakest.label}</strong>. It&apos;s
                   your lowest average across {history.length} interview
                   {history.length === 1 ? "" : "s"}.
                 </p>

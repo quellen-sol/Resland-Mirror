@@ -96,7 +96,7 @@ export default function BillingClient({
 
   useEffect(() => {
     if (checkoutResult === "success") {
-      toast.success("Purchase complete — balance topped up");
+      toast.success("Balance topped up");
       // The Stripe webhook lands a moment after the redirect — poll so the
       // new balance and purchase row show up without a manual refresh.
       const interval = setInterval(() => void loadBilling(), 2000);
@@ -164,14 +164,13 @@ export default function BillingClient({
       <header className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+            <h1 className="text-3xl font-semibold tracking-[-0.03em]">
               Billing
             </h1>
             <HelpTip title="How Billing Works">
               <p>
-                Resland is pay-as-you-go — no subscription. Buy a pack below to
-                add to your balance, and AI features like suggestions and
-                tailoring draw from it.
+                There&apos;s no subscription. Buy a pack below to add balance,
+                and each suggestion or tailoring run takes a little from it.
               </p>
               <p>
                 Each request is charged for what it actually uses: the AI
@@ -180,9 +179,9 @@ export default function BillingClient({
                 are estimates.
               </p>
               <p>
-                Bigger packs include bonus balance. Anything that&apos;s already
-                started is never cut off partway through — the charge just
-                can&apos;t take your balance below zero. You need a balance
+                Bigger packs include bonus balance. Nothing gets cut off
+                halfway: if a run costs more than you have left, it still
+                finishes and your balance stops at zero. You just need a balance
                 above zero to start something new.
               </p>
               <p>
@@ -192,7 +191,7 @@ export default function BillingClient({
             </HelpTip>
           </div>
           <p className="mt-1 text-sm text-zinc-400">
-            Balance powers suggestions and tailoring — top up when you run low.
+            Your balance pays for suggestions and tailoring. Top up when it runs low.
           </p>
         </div>
         <Link
@@ -212,10 +211,10 @@ export default function BillingClient({
         />
       )}
 
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
-            <Zap className="size-4 text-purple-400" /> Balance
+            <Zap className="size-4 text-brand-400" /> Balance
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -223,16 +222,16 @@ export default function BillingClient({
             {balance === null ? "—" : fmtCents(balance)}
           </p>
           <p className="mt-1 text-xs text-zinc-500">
-            Available for AI features — suggestions and tailoring
+            Available for suggestions and tailoring
           </p>
         </CardContent>
       </Card>
 
       {paused && (
-        <Card className="border-amber-800/60 bg-amber-950/40 text-amber-200">
+        <Card className="bg-amber-950/40 text-amber-200 ring-amber-800/60">
           <CardContent className="pt-6 text-sm">
-            Purchases are temporarily paused — your balance and history are
-            unaffected. Please check back soon.
+            Purchases are paused for now. Your balance and history aren&apos;t
+            affected, so check back soon.
           </CardContent>
         </Card>
       )}
@@ -241,7 +240,6 @@ export default function BillingClient({
         {packs.map((pack) => (
           <Card
             key={pack.id}
-            className="border-zinc-800 bg-zinc-900/80 text-zinc-100"
           >
             <CardHeader>
               <CardTitle className="text-lg">{pack.name}</CardTitle>
@@ -256,7 +254,6 @@ export default function BillingClient({
               <Button
                 onClick={() => buy(pack.id)}
                 disabled={busyPack !== null || paused}
-                className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
               >
                 {busyPack === pack.id ? (
                   <Loader2 className="animate-spin" />
@@ -269,7 +266,7 @@ export default function BillingClient({
         ))}
       </div>
 
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Purchase History</CardTitle>
         </CardHeader>

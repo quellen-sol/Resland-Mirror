@@ -30,19 +30,19 @@ export default function HelpTip({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
-        aria-label={`${title} — Help`}
+        aria-label={`Help: ${title}`}
         title="Help"
         className={cn(
-          "inline-flex shrink-0 items-center justify-center rounded-full border border-zinc-700 p-1 text-zinc-400 transition-colors hover:border-purple-500/50 hover:text-purple-300",
+          "inline-flex shrink-0 items-center justify-center rounded-full border border-zinc-700 p-1 text-zinc-400 transition-colors hover:border-brand-500/50 hover:text-brand-300",
           className,
         )}
       >
         <CircleHelp className="size-4" />
       </DialogTrigger>
-      <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100 sm:max-w-md">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-zinc-100">
-            <CircleHelp className="size-4 text-purple-400" /> {title}
+            <CircleHelp className="size-4 text-brand-400" /> {title}
           </DialogTitle>
           <DialogDescription
             render={<div className="flex flex-col gap-2 text-zinc-400" />}
@@ -55,7 +55,7 @@ export default function HelpTip({
           <Link
             href="/help"
             onClick={() => setOpen(false)}
-            className="text-purple-300 underline-offset-4 hover:underline"
+            className="text-brand-300 underline-offset-4 hover:underline"
           >
             Help &amp; FAQ
           </Link>{" "}

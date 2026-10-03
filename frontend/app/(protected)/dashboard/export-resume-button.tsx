@@ -52,22 +52,22 @@ export default function ExportResumeButton({
         <Download /> Export Resume
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-zinc-100">
               Export Your Resume
             </DialogTitle>
             <DialogDescription className="text-zinc-400">
-              We do our best to match your original formatting, but the
-              generated document may differ. Please double-check it before
-              sending it to employers.
+              We try to match your original formatting, but the document may not
+              come out exactly the same. Give it a quick look before you send
+              it.
             </DialogDescription>
             <p className="text-sm text-zinc-500">
               This exports your <span className="text-zinc-300">base</span>{" "}
               resume. For a version tailored to a specific job, head to{" "}
               <Link
                 href="/tailored"
-                className="text-purple-300 underline-offset-4 hover:underline"
+                className="text-brand-300 underline-offset-4 hover:underline"
               >
                 Tailored Resumes
               </Link>
@@ -88,7 +88,6 @@ export default function ExportResumeButton({
               size="sm"
               onClick={onExport}
               disabled={busy}
-              className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
             >
               {busy ? (
                 <Loader2 className="animate-spin" />

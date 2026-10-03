@@ -130,7 +130,7 @@ export default function TailorForm({
     // has to finish or cancel it.
     toast.info("Resumed your in-progress tailoring", {
       description:
-        "An unfinished session is still open — continue it here, or Cancel to discard it.",
+        "You still have an unfinished session. Pick up where you left off, or hit Cancel to drop it.",
     });
   }
 
@@ -337,29 +337,28 @@ export default function TailorForm({
       <header className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+            <h1 className="text-3xl font-semibold tracking-[-0.03em]">
               Tailor Resume
             </h1>
             <HelpTip title="Tailor Resume">
               <p>
-                Paste a job description and AI rewrites and reorders your
-                bullets to match it.
+                Paste a job description and Resland reorders and rewrites your
+                bullets to fit it. If something is vague, it may ask you a
+                question first.
               </p>
               <p>
-                Results aren&apos;t saved automatically — click Save to
-                Tailored Resumes to keep one. Saved resumes live on your
-                Tailored Resumes board, where you can keep editing and export
-                them.
+                Results aren&apos;t saved on their own. Click Save to Tailored
+                Resumes to keep one; saved versions live on your Tailored
+                Resumes board, where you can edit and export them.
               </p>
               <p>
-                Tailoring draws from your balance — the cost depends on how
-                much work it takes and the model you pick.
+                Each run takes a little from your balance. The cost depends on
+                how much work it takes and which model you pick.
               </p>
             </HelpTip>
           </div>
           <p className="mt-1 text-sm text-zinc-400">
-            Paste a job description — AI rewrites and reorders your bullets to
-            match it.
+            Paste a job posting and get a version of your resume written for it.
           </p>
         </div>
         <Link
@@ -371,14 +370,13 @@ export default function TailorForm({
       </header>
 
       {checked && !hasProfile && !run && (
-        <Card className="border-amber-500/30 bg-amber-500/5 text-zinc-100">
+        <Card className="bg-amber-500/5 ring-amber-500/30">
           <CardContent className="pt-6 text-sm text-amber-200">
-            You have no work experience yet —{" "}
+            You don&apos;t have any work experience yet.{" "}
             <Link
               href="/dashboard"
               className="underline underline-offset-4 hover:text-amber-100"
-            >
-              upload a resume
+            >               Upload a resume
             </Link>{" "}
             first so there&apos;s something to tailor.
           </CardContent>
@@ -387,10 +385,10 @@ export default function TailorForm({
 
       {/* Job description input */}
       {checked && !run && hasProfile && (
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-lg">
-              <Sparkles className="size-4 text-purple-400" /> Job Description
+              <Sparkles className="size-4 text-brand-400" /> Job Description
             </CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -400,21 +398,21 @@ export default function TailorForm({
                 onChange={(e) => setCompany(e.target.value)}
                 placeholder="Company name"
                 aria-label="Company name"
-                className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
               />
               <Input
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
                 placeholder="Role (e.g. Senior Backend Engineer)"
                 aria-label="Role"
-                className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
               />
             </div>
             <Textarea
               value={jd}
               onChange={(e) => setJd(e.target.value.slice(0, MAX_JD_CHARS))}
               placeholder="Paste the full job description here…"
-              className="min-h-48 border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+              className="min-h-48 border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
             />
             <div className="flex items-center justify-between">
               <span
@@ -440,7 +438,6 @@ export default function TailorForm({
                   disabled={
                     busy || !jd.trim() || !company.trim() || !role.trim()
                   }
-                  className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                 >
                   {busy ? (
                     <Loader2 className="animate-spin" />
@@ -459,10 +456,10 @@ export default function TailorForm({
       {/* Active run — job posting next to the live status/result */}
       {run && (running || waiting || done) && (
         <div className="grid gap-6 lg:grid-cols-5">
-          <Card className="h-fit border-zinc-800 bg-zinc-900/80 text-zinc-100 lg:sticky lg:top-6 lg:col-span-2">
+          <Card className="h-fit lg:sticky lg:top-6 lg:col-span-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <Briefcase className="size-4 text-purple-400" /> Job Posting
+                <Briefcase className="size-4 text-brand-400" /> Job Posting
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
@@ -481,7 +478,7 @@ export default function TailorForm({
           <div className="flex flex-col gap-6 lg:col-span-3">
             {running && (
               <div className="flex items-center gap-2 text-sm text-zinc-400">
-                <Loader2 className="size-4 animate-spin text-purple-400" />
+                <Loader2 className="size-4 animate-spin text-brand-400" />
                 {tailored
                   ? "Refining your resume…"
                   : "Tailoring your resume…"}
@@ -489,9 +486,9 @@ export default function TailorForm({
             )}
 
             {waiting && !tailored && (
-              <Card className="border-purple-500/30 bg-zinc-900/80 text-zinc-100">
+              <Card className="ring-brand-500/30">
                 <CardContent className="flex flex-col gap-3 pt-6">
-                  <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-sm text-purple-200">
+                  <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 p-3 text-sm text-brand-200">
                     {run.pending_question}
                   </div>
                   <div className="flex gap-2">
@@ -505,12 +502,11 @@ export default function TailorForm({
                         }
                       }}
                       placeholder="Your answer…"
-                      className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                      className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
                     />
                     <Button
                       onClick={sendAnswer}
                       disabled={busy || !answer.trim()}
-                      className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                     >
                       <Send />
                     </Button>
@@ -529,7 +525,7 @@ export default function TailorForm({
             {tailored && (
               <>
                 {tailored.summary && (
-                  <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+                  <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Summary</CardTitle>
                     </CardHeader>
@@ -541,7 +537,7 @@ export default function TailorForm({
                   </Card>
                 )}
 
-                <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+                <Card>
                   <CardHeader>
                     <CardTitle className="text-lg">Experience</CardTitle>
                   </CardHeader>
@@ -582,7 +578,7 @@ export default function TailorForm({
                 </Card>
 
                 {tailored.skills.length > 0 && (
-                  <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+                  <Card>
                     <CardHeader>
                       <CardTitle className="text-lg">Skills</CardTitle>
                     </CardHeader>
@@ -603,7 +599,7 @@ export default function TailorForm({
                             {group.skills.map((skill) => (
                               <span
                                 key={skill}
-                                className="rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
+                                className="rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-0.5 text-sm text-brand-200"
                               >
                                 {skill}
                               </span>
@@ -618,9 +614,9 @@ export default function TailorForm({
             )}
 
             {waiting && tailored && (
-              <Card className="border-purple-500/30 bg-zinc-900/80 text-zinc-100">
+              <Card className="ring-brand-500/30">
                 <CardContent className="flex flex-col gap-3 pt-6">
-                  <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 p-3 text-sm text-purple-200">
+                  <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 p-3 text-sm text-brand-200">
                     {run.pending_question}
                   </div>
                   <div className="flex gap-2">
@@ -634,12 +630,11 @@ export default function TailorForm({
                         }
                       }}
                       placeholder="Describe a tweak, or reply 'done'…"
-                      className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+                      className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
                     />
                     <Button
                       onClick={sendAnswer}
                       disabled={busy || !answer.trim()}
-                      className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                     >
                       <Send />
                     </Button>
@@ -653,15 +648,14 @@ export default function TailorForm({
                 {savedId ? (
                   <Link
                     href={`/tailored/${savedId}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/10 px-2.5 py-1.5 text-sm font-medium text-purple-200 hover:bg-purple-500/20 [&_svg]:size-4"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-brand-500/40 bg-brand-500/10 px-2.5 py-1.5 text-sm font-medium text-brand-200 hover:bg-brand-500/20 [&_svg]:size-4"
                   >
-                    <Check /> Saved — Open It
+                    <Check /> Open Saved Version
                   </Link>
                 ) : (
                   <Button
                     onClick={save}
                     disabled={busy}
-                    className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                   >
                     {busy ? <Loader2 className="animate-spin" /> : <Bookmark />}{" "}
                     Save to Tailored Resumes
@@ -681,10 +675,10 @@ export default function TailorForm({
       )}
 
       {failed && (
-        <Card className="border-red-500/30 bg-zinc-900/80 text-zinc-100">
+        <Card className="ring-red-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-red-400">
-              Something went wrong while tailoring — try again.
+              Something went wrong while tailoring. Please try again.
             </p>
             <div>
               <Button
@@ -700,10 +694,10 @@ export default function TailorForm({
       )}
 
       {timedOut && (
-        <Card className="border-amber-500/30 bg-zinc-900/80 text-zinc-100">
+        <Card className="ring-amber-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-amber-400">
-              This is taking too long — we couldn&apos;t finish the request.
+              This took too long, so we stopped waiting. Start over to try again.
             </p>
             <div>
               <Button
@@ -719,10 +713,10 @@ export default function TailorForm({
       )}
 
       {gone && (
-        <Card className="border-amber-500/30 bg-zinc-900/80 text-zinc-100">
+        <Card className="ring-amber-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-amber-400">
-              This session no longer exists — start a new one.
+              This session has expired. Start a new one.
             </p>
             <Button
               variant="outline"
@@ -746,10 +740,10 @@ export default function TailorForm({
       )}
 
       {done && !tailored && (
-        <Card className="border-red-500/30 bg-zinc-900/80 text-zinc-100">
+        <Card className="ring-red-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-red-400">
-              We couldn&apos;t read the tailored result — try again.
+              We couldn&apos;t read the tailored result. Please try again.
             </p>
             <div>
               <Button

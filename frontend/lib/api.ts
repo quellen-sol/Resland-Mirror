@@ -30,7 +30,7 @@ export function describeApiError(error: unknown): string {
   }
   if (error instanceof ApiError) {
     if (error.status === 401)
-      return "Your session expired — please sign in again.";
+      return "Your session expired. Please sign in again.";
     if (error.status === 404) return "That no longer exists.";
     const message = error.message.trim();
     try {

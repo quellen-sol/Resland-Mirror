@@ -36,7 +36,7 @@ export default function EditProfileForm({
           className="border-red-500/30 bg-red-500/10"
         >
           <CircleAlert />
-          <AlertTitle>Couldn&apos;t save</AlertTitle>
+          <AlertTitle>Couldn&apos;t Save</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}

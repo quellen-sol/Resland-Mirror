@@ -55,7 +55,7 @@ export default function ModelSelect({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         className={cn(
-          "rounded-md border border-zinc-700 bg-zinc-950/50 px-2 py-1.5 text-xs text-zinc-300 focus:border-purple-500 focus:outline-none disabled:opacity-50",
+          "rounded-md border border-zinc-700 bg-zinc-950/50 px-2 py-1.5 text-xs text-zinc-300 focus:border-brand-500 focus:outline-none disabled:opacity-50",
           className,
         )}
       >

@@ -16,6 +16,7 @@ import UploadForm from "@/components/upload-form";
 import ProfileForm, { ProfileFormValues } from "@/components/profile-form";
 import { toProfileInput } from "@/lib/profile-input";
 import { completeOnboarding, saveManualProfile } from "./actions";
+import Backdrop from "@/components/backdrop";
 
 type Step = "choice" | "upload" | "manual";
 
@@ -56,13 +57,13 @@ export default function OnboardingFlow({
 
   return (
     <div className="relative flex flex-1 justify-center overflow-hidden bg-zinc-950 px-6 py-10 font-sans">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
+      <Backdrop />
 
       <div className="relative w-full max-w-3xl">
         {step === "choice" && (
           <div className="flex flex-col items-center gap-8">
             <div className="text-center">
-              <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+              <h1 className="text-3xl font-semibold tracking-[-0.03em]">
                 Welcome to Resland
               </h1>
               <p className="mt-2 text-zinc-400">
@@ -73,9 +74,9 @@ export default function OnboardingFlow({
             <div className="grid w-full gap-4 sm:grid-cols-2">
               <button
                 onClick={() => setStep("upload")}
-                className="group rounded-xl border border-zinc-800 bg-zinc-900/80 p-6 text-left transition-colors hover:border-purple-500/50 hover:bg-zinc-900"
+                className="edge group rounded-xl border border-white/[.08] bg-card p-6 text-left transition-colors hover:border-brand-400/50 hover:bg-white/[.03]"
               >
-                <FileText className="size-6 text-purple-400" />
+                <FileText className="size-6 text-brand-400" />
                 <h2 className="mt-4 text-lg font-medium text-zinc-100">
                   Upload a Resume
                 </h2>
@@ -86,9 +87,9 @@ export default function OnboardingFlow({
 
               <button
                 onClick={() => setStep("manual")}
-                className="group rounded-xl border border-zinc-800 bg-zinc-900/80 p-6 text-left transition-colors hover:border-purple-500/50 hover:bg-zinc-900"
+                className="edge group rounded-xl border border-white/[.08] bg-card p-6 text-left transition-colors hover:border-brand-400/50 hover:bg-white/[.03]"
               >
-                <PenLine className="size-6 text-purple-400" />
+                <PenLine className="size-6 text-brand-400" />
                 <h2 className="mt-4 text-lg font-medium text-zinc-100">
                   Enter Your Own Information
                 </h2>
@@ -109,11 +110,11 @@ export default function OnboardingFlow({
         )}
 
         {step === "upload" && (
-          <Card className="mx-auto w-full max-w-xl border-zinc-800 bg-zinc-900/80 text-zinc-100">
+          <Card className="mx-auto w-full max-w-xl">
             <CardHeader>
               <CardTitle className="text-xl">Upload Your Resume</CardTitle>
               <CardDescription className="text-zinc-400">
-                PDF, DOCX, or whatever you&apos;ve got.
+                A PDF or .docx file.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
@@ -133,11 +134,11 @@ export default function OnboardingFlow({
         )}
 
         {step === "manual" && (
-          <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+          <Card>
             <CardHeader>
               <CardTitle className="text-xl">Your Information</CardTitle>
               <CardDescription className="text-zinc-400">
-                Fill in as much as you&apos;d like — you can always edit later.
+                Fill in as much as you like. You can change it later.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-6">

@@ -4,6 +4,7 @@ import type { ProfileFormValues } from "@/components/profile-form";
 import { rowsToGroups } from "@/lib/skills";
 import HelpTip from "@/components/help-tip";
 import EditProfileForm from "./edit-profile-form";
+import Backdrop from "@/components/backdrop";
 
 export const metadata: Metadata = { title: "Edit Profile" };
 
@@ -69,18 +70,17 @@ export default async function EditProfilePage() {
 
   return (
     <div className="relative flex flex-1 justify-center overflow-clip bg-zinc-950 px-6 py-10 font-sans">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
+      <Backdrop />
 
       <main className="relative w-full max-w-3xl">
         <div className="flex items-center gap-2">
-          <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+          <h1 className="text-3xl font-semibold tracking-[-0.03em]">
             Edit Profile
           </h1>
           <HelpTip title="Edit Profile">
             <p>
-              Everything here is your base resume — it&apos;s what AI
-              suggestions, tailoring, and exports all read from. Save to keep
-              it current.
+              This is your base resume. Suggestions, tailoring and exports all
+              read from it, so save your changes to keep it current.
             </p>
           </HelpTip>
         </div>
