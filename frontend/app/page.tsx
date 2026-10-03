@@ -1,32 +1,53 @@
 import Image from "next/image";
 import Link from "next/link";
-import { FileText, Gauge, MessageCircleQuestion, Sparkles } from "lucide-react";
 import { redirect } from "next/navigation";
+import { ArrowRight, Plus } from "lucide-react";
 import { auth0 } from "@/lib/auth0";
 import { getUser } from "@/lib/db";
-import { buttonVariants } from "@/components/ui/button";
+import Backdrop from "@/components/backdrop";
 import SiteFooter from "@/components/site-footer";
-import { cn } from "cn";
+import HowItWorks from "@/components/landing/how-it-works";
+import LiveDemo from "@/components/landing/live-demo";
+import Reveal from "@/components/landing/reveal";
+import Spotlight from "@/components/landing/spotlight";
 
-const steps = [
-  ["1", "Upload Your Resume", "We turn it into an organized, editable profile."],
-  ["2", "Sharpen Every Bullet", "AI suggestions that ask you questions first."],
-  ["3", "Tailor to Any Job", "Paste the job description, get a reordered and rewritten resume."],
+// Mirrors TOKEN_PACKS in backend/api/src/api/billing/model.py. The packs
+// endpoint needs a signed-in user, so the landing page can't fetch them.
+const PACKS = [
+  { name: "Starter", pay: 5, get: 5 },
+  { name: "Standard", pay: 10, get: 11 },
+  { name: "Pro", pay: 20, get: 25 },
 ];
-const features = [
-  ["AI-Powered Suggestions", "Turn vague experience into clear, specific impact."],
-  ["Tailor to Every Role", "Match your resume to the language hiring teams use."],
-  ["One Structured Profile", "Keep your experience, skills, and projects in one place."],
-  ["Choose Your AI Model", "Pick the AI model that fits your needs and budget."],
-  ["Pay-As-You-Go Credits", "Pay only for what you use — no subscription."],
-  ["Your Data Stays Yours", "Your resume is yours, and your profile stays private."],
+
+const QUESTION_CHIPS = [
+  "How many people?",
+  "What changed after?",
+  "Roughly how much?",
+  "Who used it?",
 ];
+
 const faqs = [
-  ["Is Resland a subscription?", "No. Resland uses pay-as-you-go credits, so you only pay for the AI work you choose to run."],
-  ["Can I choose which AI model is used?", "Yes. Pick from our list of supported AI models when you ask for suggestions or tailor a resume — or just use the default."],
-  ["Will Resland rewrite my resume automatically?", "Resland suggests changes and asks questions first. You stay in control of what gets accepted."],
-  ["What happens to my resume data?", "Your profile is stored securely for your account and is not used as someone else’s resume."],
+  [
+    "Will it change my resume without asking?",
+    "No. Every suggestion is a proposal. You can accept it, ask for something different, or throw it out.",
+  ],
+  [
+    "Which AI model does it use?",
+    "There's a default, and you can switch models any time you ask for a suggestion or tailor a resume.",
+  ],
+  [
+    "Who can see my resume?",
+    "Your profile is private to your account. When you run a suggestion or tailor a resume, the text involved is sent to the AI model you picked so it can do the work.",
+  ],
+  [
+    "What do I end up with?",
+    "A Word file for your main resume, plus one for every tailored version you save.",
+  ],
 ];
+
+const card = "edge rounded-2xl border border-white/[.08] bg-card";
+const eyebrow = "font-mono text-xs tracking-wider text-brand-400 uppercase";
+const h2 = "text-4xl font-semibold tracking-[-0.03em]";
 
 export default async function Home() {
   let session: Awaited<ReturnType<typeof auth0.getSession>> = null;
@@ -60,38 +81,214 @@ export default async function Home() {
   ];
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden bg-zinc-950 font-sans text-zinc-100">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[600px] bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
-      <header className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5 sm:px-8">
-        <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-          <Image src="/resland-logo.png" alt="Resland" width={32} height={32} preload className="rounded-lg" /> Resland
+    <div className="relative flex flex-1 flex-col overflow-x-clip">
+      <Backdrop variant="hero" />
+
+      <header className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
+        <Link href="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
+          <Image src="/resland-logo.png" alt="" width={28} height={28} preload /> Resland
         </Link>
-        <Link href="/auth/login?returnTo=/dashboard" className={cn(buttonVariants({ variant: "ghost" }), "text-zinc-300")}>Log In</Link>
+        <nav aria-label="Sections" className="hidden items-center gap-8 text-sm text-zinc-400 md:flex">
+          <a href="#how" className="hover:text-zinc-100">How it works</a>
+          <a href="#pricing" className="hover:text-zinc-100">Pricing</a>
+          <a href="#faq" className="hover:text-zinc-100">FAQ</a>
+        </nav>
+        <div className="flex items-center gap-1">
+          <Link href="/auth/login?returnTo=/dashboard" className="rounded-lg px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/5 hover:text-white">
+            Log In
+          </Link>
+          <Link href={primaryHref} className="rounded-lg bg-white px-3.5 py-1.5 text-sm font-medium text-zinc-950 hover:bg-zinc-200">
+            {primaryLabel}
+          </Link>
+        </div>
       </header>
-      <main className="relative mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col gap-24 overflow-hidden px-6 pb-20 pt-16 sm:px-8 sm:pt-24">
-        <section className="flex w-full min-w-0 flex-col items-center text-center">
-          <span className="mb-5 rounded-full border border-purple-500/20 bg-purple-500/10 px-3 py-1 text-xs text-purple-300">Resume clarity, without the busywork</span>
-          <h1 className="w-full max-w-[calc(100vw-3rem)] break-words bg-gradient-to-r from-purple-300 via-violet-400 to-purple-500 bg-clip-text text-4xl leading-tight font-semibold tracking-tight text-transparent sm:max-w-3xl sm:text-7xl">Land Your Next Role</h1>
-          <p className="mt-6 w-full max-w-[calc(100vw-3rem)] break-words text-lg leading-8 text-zinc-400 sm:max-w-2xl">Upload your resume, sharpen every bullet with AI, and tailor your story to any job description in minutes.</p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link href={primaryHref} className={cn(buttonVariants({ size: "lg" }), "h-11 border-0 bg-gradient-to-r from-violet-600 to-purple-600 px-8 text-white shadow-lg shadow-purple-950/50 hover:from-violet-500 hover:to-purple-500")}>{primaryLabel}</Link>
-            <Link href="/auth/login?returnTo=/dashboard" className={cn(buttonVariants({ variant: "outline", size: "lg" }), "h-11 border-zinc-700 bg-transparent px-8 text-zinc-200 hover:bg-zinc-800/60 hover:text-zinc-100")}>Log In</Link>
+
+      <main className="relative">
+        {/* Hero */}
+        <section className="mx-auto grid max-w-6xl items-center gap-14 px-6 pt-16 pb-12 lg:grid-cols-2 lg:pt-24">
+          <div>
+            <h1 className="text-[44px] leading-[0.98] font-semibold tracking-[-0.045em] sm:text-[62px]">
+              <span className="rise block text-balance">A resume for every job.</span>
+              <span className="rise block text-zinc-500 [animation-delay:.12s]">Nothing made up.</span>
+            </h1>
+            <p className="rise mt-7 max-w-md text-[17px] leading-7 text-zinc-400 [animation-delay:.24s]">
+              Paste a job posting and Resland reorders and rewrites your experience to fit it. When a
+              bullet is vague, it asks you for the details instead of guessing.
+            </p>
+            <div className="rise mt-9 flex flex-wrap gap-3 [animation-delay:.36s]">
+              <Link
+                href={primaryHref}
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-white px-6 text-[15px] font-medium text-zinc-950 shadow-[0_0_0_1px_rgba(255,255,255,.2),0_8px_30px_-6px_rgba(123,123,255,.55)] hover:bg-zinc-200"
+              >
+                {primaryLabel} <ArrowRight className="size-4" />
+              </Link>
+              <a
+                href="#how"
+                className="edge inline-flex h-11 items-center rounded-xl border border-white/10 bg-white/[.03] px-6 text-[15px] font-medium text-zinc-200 hover:bg-white/[.07]"
+              >
+                See how it works
+              </a>
+            </div>
+            <p className="rise mt-5 font-mono text-xs text-zinc-500 [animation-delay:.48s]">
+              No subscription · pay per use
+            </p>
           </div>
-          <p className="mt-5 text-xs text-zinc-500">Pay only for what you use — no subscription</p>
+          <div className="rise [animation-delay:.2s]">
+            <LiveDemo />
+          </div>
         </section>
-        <section aria-labelledby="how-it-works" className="w-full min-w-0">
-          <h2 id="how-it-works" className="w-full max-w-[calc(100vw-3rem)] break-words text-center text-2xl font-semibold">How It Works</h2>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">{steps.map(([number, title, description]) => <div key={number} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-6"><span className="text-sm font-semibold text-purple-400">{number}</span><h3 className="mt-3 font-medium">{title}</h3><p className="mt-2 text-sm leading-6 text-zinc-500">{description}</p></div>)}</div>
-        </section>
-        <section aria-labelledby="features" className="w-full min-w-0">
-          <h2 id="features" className="w-full max-w-[calc(100vw-3rem)] break-words text-center text-2xl font-semibold">Everything You Need to Apply with Confidence</h2>
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{features.map(([title, description], index) => { const Icon = [FileText, Sparkles, Gauge, MessageCircleQuestion, Sparkles, FileText][index]; return <div key={title} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5"><Icon className="size-5 text-purple-400" /><h3 className="mt-3 text-sm font-medium">{title}</h3><p className="mt-1 text-sm leading-6 text-zinc-500">{description}</p></div>; })}</div>
-        </section>
-        <section aria-labelledby="faq" className="mx-auto w-full max-w-3xl">
-          <h2 id="faq" className="w-full max-w-[calc(100vw-3rem)] break-words text-center text-2xl font-semibold">Frequently Asked Questions</h2>
-          <div className="mt-8 divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900/60 px-5">{faqs.map(([question, answer]) => <details key={question} className="group py-4"><summary className="cursor-pointer list-none font-medium text-zinc-200">{question}<span className="float-right text-purple-400 transition-transform group-open:rotate-45">+</span></summary><p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-500">{answer}</p></details>)}</div>
-        </section>
+
+        {/* How it works */}
+        <Reveal id="how" aria-labelledby="how-heading" className="mx-auto max-w-6xl scroll-mt-8 px-6 pt-32">
+          <p className={eyebrow}>How it works</p>
+          <h2 id="how-heading" className={`mt-3 max-w-xl ${h2}`}>
+            Three steps. You approve every change.
+          </h2>
+          <HowItWorks />
+        </Reveal>
+
+        {/* What you get */}
+        <Reveal aria-labelledby="features-heading" className="mx-auto max-w-6xl px-6 pt-32">
+          <h2 id="features-heading" className={`max-w-xl ${h2}`}>
+            Built for people applying to more than one job.
+          </h2>
+          <div className="mt-12 grid gap-4 md:grid-cols-3">
+            <Spotlight className={`${card} p-6 md:col-span-2`}>
+              <h3 className="font-medium">It asks before it writes</h3>
+              <p className="mt-1.5 max-w-md text-sm leading-6 text-zinc-400">
+                When a bullet needs a number or an outcome, Resland asks you for it instead of guessing.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2 text-sm">
+                {QUESTION_CHIPS.map((q) => (
+                  <span key={q} className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                    {q}
+                  </span>
+                ))}
+              </div>
+            </Spotlight>
+            <Spotlight className={`${card} p-6`}>
+              <h3 className="font-medium">A version per job</h3>
+              <p className="mt-1.5 text-sm leading-6 text-zinc-400">Every tailored copy is saved on its own.</p>
+              <ul className="mt-5 divide-y divide-white/[.06] rounded-xl border border-white/[.08] text-sm">
+                <li className="flex justify-between px-3 py-2">
+                  <span>Platform Eng · Globex</span>
+                  <span className="font-mono text-xs text-emerald-300">Exported</span>
+                </li>
+                <li className="flex justify-between px-3 py-2">
+                  <span>SRE · Initech</span>
+                  <span className="font-mono text-xs text-zinc-500">Saved</span>
+                </li>
+              </ul>
+            </Spotlight>
+            <Spotlight className={`${card} p-6`}>
+              <h3 className="font-medium">Your pick of model</h3>
+              <p className="mt-1.5 text-sm leading-6 text-zinc-400">
+                Use the default or switch. You see pricing for each model before anything runs.
+              </p>
+            </Spotlight>
+            <Spotlight className={`${card} p-6`}>
+              <h3 className="font-medium">Word export</h3>
+              <p className="mt-1.5 text-sm leading-6 text-zinc-400">
+                Download any version as a .docx and tweak it before you send it.
+              </p>
+            </Spotlight>
+            <Spotlight className={`${card} p-6`}>
+              <h3 className="font-medium">Private</h3>
+              <p className="mt-1.5 text-sm leading-6 text-zinc-400">
+                Your profile is only visible to you. Payments go through Stripe.
+              </p>
+            </Spotlight>
+          </div>
+        </Reveal>
+
+        {/* Pricing */}
+        <Reveal id="pricing" aria-labelledby="pricing-heading" className="mx-auto max-w-6xl scroll-mt-8 px-6 pt-32">
+          <Spotlight className="edge grid items-center gap-10 rounded-3xl border border-white/[.08] bg-card p-8 sm:p-12 md:grid-cols-[1.2fr_1fr]">
+            <div>
+              <p className={eyebrow}>Pricing</p>
+              <h2 id="pricing-heading" className={`mt-3 ${h2}`}>
+                Pay for what you use.
+              </h2>
+              <p className="mt-4 max-w-md leading-7 text-zinc-400">
+                There&apos;s no subscription. Add balance when you need it, and each suggestion or
+                tailoring run takes a little from it. Bigger packs come with bonus balance.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/[.08] bg-black/30 p-6">
+              <p className="text-sm text-zinc-400">Balance packs</p>
+              <ul className="mt-4 space-y-3 font-mono text-sm">
+                {PACKS.map((p) => (
+                  <li key={p.name} className="flex items-baseline justify-between gap-4">
+                    <span className="text-zinc-300">
+                      {p.name} <span className="text-zinc-500">· ${p.pay}</span>
+                    </span>
+                    <span className="text-zinc-100">
+                      ${p.get.toFixed(2)}
+                      {p.get > p.pay && (
+                        <span className="ml-2 text-emerald-300">
+                          +{Math.round(((p.get - p.pay) / p.pay) * 100)}%
+                        </span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-5 text-xs text-zinc-500">One-time payments through Stripe. Nothing renews.</p>
+            </div>
+          </Spotlight>
+        </Reveal>
+
+        {/* FAQ */}
+        <Reveal
+          id="faq"
+          aria-labelledby="faq-heading"
+          className="mx-auto grid max-w-6xl scroll-mt-8 gap-10 px-6 pt-32 md:grid-cols-[1fr_1.6fr]"
+        >
+          <h2 id="faq-heading" className={h2}>
+            Questions
+          </h2>
+          <div className="divide-y divide-white/[.08] border-y border-white/[.08]">
+            {faqs.map(([question, answer], i) => (
+              <details key={question} className="group py-5" open={i === 0}>
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-6 font-medium [&::-webkit-details-marker]:hidden">
+                  {question}
+                  <Plus className="size-4 shrink-0 text-zinc-500 transition-transform group-open:rotate-45" />
+                </summary>
+                <p className="mt-3 text-sm leading-6 text-zinc-400">{answer}</p>
+              </details>
+            ))}
+            <p className="py-5 text-sm text-zinc-500">
+              More in{" "}
+              <Link href="/help" className="text-zinc-300 underline-offset-4 hover:underline">
+                Help &amp; FAQ
+              </Link>
+              .
+            </p>
+          </div>
+        </Reveal>
+
+        {/* Closing CTA */}
+        <Reveal className="mx-auto max-w-6xl px-6 py-32">
+          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-brand-400/50 via-white/10 to-brand-cyan/40 p-px">
+            <div className="relative rounded-[23px] bg-card px-8 py-16 text-center">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 -top-24 mx-auto h-48 w-[600px] max-w-full rounded-full bg-brand-400/20 blur-3xl"
+              />
+              <h2 className="relative text-4xl font-semibold tracking-[-0.03em] text-balance sm:text-5xl">
+                Try it on the next job you apply for.
+              </h2>
+              <Link
+                href={primaryHref}
+                className="relative mt-8 inline-flex h-11 items-center gap-2 rounded-xl bg-white px-6 text-[15px] font-medium text-zinc-950 hover:bg-zinc-200"
+              >
+                {primaryLabel} <ArrowRight className="size-4" />
+              </Link>
+            </div>
+          </div>
+        </Reveal>
       </main>
+
       <SiteFooter
         links={[
           { href: "/auth/login", label: "Log In" },

@@ -121,6 +121,28 @@
   mask-image: radial-gradient(ellipse 60% 70% at 70% 20%, #000 20%, transparent 70%);
 }
 
+/* Lights up under the pointer; the Spotlight component sets --x/--y. */
+@utility spotlight {
+  position: relative;
+  overflow: hidden;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+    background: radial-gradient(
+      420px circle at var(--x, 50%) var(--y, 0%),
+      rgb(123 123 255 / 0.14),
+      transparent 45%
+    );
+  }
+  &:hover::before {
+    opacity: 1;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -185,6 +207,9 @@
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
   .rise {
     animation: rise 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
