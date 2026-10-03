@@ -74,7 +74,7 @@ const SECTIONS: {
       ],
       [
         "How do I draw my design?",
-        "Add components from the palette above the whiteboard and connect them with the arrow tool. Drag each end of an arrow onto a box until it snaps — the interviewer reads which boxes your arrows connect, so loose arrows and plain lines don't count. Submitting your design points out anything that isn't connected.",
+        "Add components from the palette above the whiteboard and connect them with the arrow tool. Drag each end of an arrow onto a box until it snaps. The interviewer reads which boxes your arrows connect, so loose arrows and plain lines don't count. Submitting your design points out anything that isn't connected.",
       ],
       [
         "How am I graded?",

@@ -95,7 +95,7 @@ export default function InterviewReport({
 
   if (!report) {
     return (
-      <Card className="border-red-500/30 bg-zinc-900/80 text-zinc-100">
+      <Card className="ring-red-500/30">
         <CardContent className="pt-6 text-sm text-red-400">
           We couldn&apos;t read this interview&apos;s report.
         </CardContent>
@@ -109,7 +109,7 @@ export default function InterviewReport({
     <div className="flex flex-col gap-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-2xl font-semibold text-transparent">
+          <h1 className="text-2xl font-semibold tracking-[-0.03em]">
             {status.title}
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
@@ -126,14 +126,14 @@ export default function InterviewReport({
           </Link>
           <Link
             href="/system-design"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 px-2.5 py-1.5 text-sm font-medium text-white hover:from-violet-500 hover:to-purple-500 [&_svg]:size-4"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white px-2.5 py-1.5 text-sm font-medium text-zinc-950 hover:bg-zinc-200 [&_svg]:size-4"
           >
             <Play /> Practice Another
           </Link>
         </div>
       </header>
 
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardContent className="flex flex-wrap items-center gap-6 pt-6">
           <div className="flex flex-col items-center">
             <span className={cn("text-6xl font-bold", GRADE_TONE_CLASSES[tone])}>
@@ -168,7 +168,7 @@ export default function InterviewReport({
       </Card>
 
       <div className="grid gap-6 lg:grid-cols-5">
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100 lg:col-span-3">
+        <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle className="text-lg">Rubric</CardTitle>
           </CardHeader>
@@ -209,7 +209,7 @@ export default function InterviewReport({
         </Card>
 
         <div className="flex flex-col gap-6 lg:col-span-2">
-          <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <ThumbsUp className="size-4 text-emerald-400" /> Strengths
@@ -219,7 +219,7 @@ export default function InterviewReport({
               <List items={report.strengths} />
             </CardContent>
           </Card>
-          <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
                 <TrendingUp className="size-4 text-amber-400" /> Do Differently
@@ -229,10 +229,10 @@ export default function InterviewReport({
               <List items={report.improvements} />
             </CardContent>
           </Card>
-          <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-lg">
-                <BookOpen className="size-4 text-purple-400" /> Study Next
+                <BookOpen className="size-4 text-brand-400" /> Study Next
               </CardTitle>
             </CardHeader>
             <CardContent className="text-sm">
@@ -242,7 +242,7 @@ export default function InterviewReport({
         </div>
       </div>
 
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Your Design</CardTitle>
         </CardHeader>
@@ -285,7 +285,7 @@ export default function InterviewReport({
       </Card>
 
       {reference && (
-        <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+        <Card>
           <CardHeader>
             <CardTitle className="text-lg">Reference Design</CardTitle>
             <p className="text-sm text-zinc-400">
@@ -345,7 +345,7 @@ export default function InterviewReport({
               <MessageSquareText
                 className={cn(
                   "mt-0.5 size-4 shrink-0",
-                  m.role === "INTERVIEWER" ? "text-purple-400" : "text-zinc-500",
+                  m.role === "INTERVIEWER" ? "text-brand-400" : "text-zinc-500",
                 )}
               />
               <div>

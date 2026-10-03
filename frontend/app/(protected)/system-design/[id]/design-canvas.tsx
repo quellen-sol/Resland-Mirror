@@ -178,7 +178,7 @@ export default function DesignCanvas({
   );
 
   return (
-    <div className="h-full w-full overflow-hidden rounded-lg border border-zinc-800">
+    <div className="whiteboard h-full w-full overflow-hidden rounded-lg border border-white/[.08]">
       <Excalidraw
         excalidrawAPI={setApi}
         initialData={initialData}

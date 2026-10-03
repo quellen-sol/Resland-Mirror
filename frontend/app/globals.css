@@ -170,6 +170,21 @@
   }
 }
 
+/* Excalidraw's dark theme, pulled toward Midnight: brand indigo for its
+   accent and the app's raised surface for its floating panels. Scoped under
+   .whiteboard so it outranks Excalidraw's own stylesheet, which loads later. */
+.whiteboard .excalidraw.theme--dark {
+  --color-primary: #7b7bff;
+  --color-primary-darker: #8f8fff;
+  --color-primary-darkest: #a9a9ff;
+  --color-primary-hover: #8f8fff;
+  --color-primary-light: #34327a;
+  --color-primary-light-darker: #2d2a6b;
+  --color-surface-primary-container: #34327a;
+  --island-bg-color: #15151c;
+  --color-surface-low: #15151c;
+}
+
 /* ---- Motion -------------------------------------------------------------
    Everything below is opt-in: it only runs when the visitor hasn't asked for
    reduced motion, and the scroll reveal only hides content when scripting is
