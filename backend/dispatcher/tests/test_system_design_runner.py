@@ -325,6 +325,50 @@ class SystemDesignRunnerTask(unittest.TestCase):
             self.agent.run_interview_turn.call_args.args[1], "openrouter:admin/default"
         )
 
+    def test_unset_system_design_model_falls_back_to_tailor_model(self):
+        # Deployments already configure TAILOR_MODEL; a missing
+        # SYSTEM_DESIGN_MODEL must not leave the interviewer without a model.
+        self.db.fetch_system_design_session.return_value = started(model=None)
+        with (
+            patch.object(runner_mod, "SYSTEM_DESIGN_MODEL", ""),
+            patch.object(runner_mod, "TAILOR_MODEL", "openrouter:tailor/model"),
+        ):
+            self.run_job({"session_id": "s1", "action": "advance"})
+        self.assertEqual(
+            self.agent.run_interview_turn.call_args.args[1], "openrouter:tailor/model"
+        )
+
+    def test_no_model_configured_leaves_a_retry_notice(self):
+        self.db.fetch_system_design_session.return_value = started(model=None)
+        with (
+            patch.object(runner_mod, "SYSTEM_DESIGN_MODEL", ""),
+            patch.object(runner_mod, "TAILOR_MODEL", ""),
+        ):
+            status = self.run_job({"session_id": "s1", "action": "advance"})
+        self.assertEqual(status, "COMPLETED")
+        self.agent.run_interview_turn.assert_not_called()
+        self.db.set_system_design_notice.assert_called_once()
+
+    def test_no_model_configured_still_starts_a_bank_problem(self):
+        # Bank starts never call a model, so they don't need one.
+        self.db.fetch_system_design_session.return_value = row(model=None)
+        with (
+            patch.object(runner_mod, "SYSTEM_DESIGN_MODEL", ""),
+            patch.object(runner_mod, "TAILOR_MODEL", ""),
+        ):
+            self.run_job({"session_id": "s1"})
+        self.db.start_system_design_session.assert_called_once()
+        self.db.set_system_design_notice.assert_not_called()
+
+    def test_job_start_crash_leaves_a_retry_notice(self):
+        self.db.fetch_system_design_session.return_value = row(
+            source="JOB", problem_id=None, job_description="Payouts in Go"
+        )
+        self.agent.generate_brief.side_effect = RuntimeError("provider down")
+        self.assertEqual(self.run_job({"session_id": "s1"}), "COMPLETED")
+        self.db.set_system_design_notice.assert_called_once()
+        self.db.start_system_design_session.assert_not_called()
+
     def test_separate_grader_model_bills_its_own_row(self):
         self.db.fetch_system_design_session.return_value = started(phase="FEEDBACK")
 

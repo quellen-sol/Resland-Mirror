@@ -20,7 +20,12 @@ from ..agents.system_design import (
     opening_message,
     run_interview_turn,
 )
-from ..env_vars import PG_URL, SYSTEM_DESIGN_GRADER_MODEL, SYSTEM_DESIGN_MODEL
+from ..env_vars import (
+    PG_URL,
+    SYSTEM_DESIGN_GRADER_MODEL,
+    SYSTEM_DESIGN_MODEL,
+    TAILOR_MODEL,
+)
 from .db_ops import (
     complete_system_design_session,
     default_model_spec,
@@ -40,6 +45,22 @@ from .local_threaded import LocalThreadJobRunner
 RESUME_AFTER_ERROR_MESSAGE = (
     "Something went wrong on our end. Retry to continue the interview."
 )
+
+
+class ModelNotConfiguredError(Exception):
+    pass
+
+
+def require_model(spec: str) -> str:
+    """An empty spec makes init_chat_model build a configurable model that
+    only fails at invoke time with a cryptic error — fail early instead."""
+    if not spec:
+        raise ModelNotConfiguredError(
+            "No model configured for system design interviews: set "
+            "SYSTEM_DESIGN_MODEL (or TAILOR_MODEL) on the dispatcher, or mark "
+            "an enabled model_pricing row as the default."
+        )
+    return spec
 
 
 class SystemDesignRunner(LocalThreadJobRunner):
@@ -83,28 +104,31 @@ class SystemDesignRunner(LocalThreadJobRunner):
                         return
 
                     user_id = session.user_id
+                    # Deployments already set TAILOR_MODEL for agent work, so
+                    # it stands in when SYSTEM_DESIGN_MODEL isn't configured.
                     model_spec = (
                         session.model
                         or default_model_spec(pg_conn)
                         or SYSTEM_DESIGN_MODEL
+                        or TAILOR_MODEL
                     )
                     grader_spec = SYSTEM_DESIGN_GRADER_MODEL or model_spec
 
-                    if session.brief is None:
-                        brief = self._load_brief(session, model_spec, usage)
-                        start_system_design_session(
-                            pg_conn,
-                            session_id,
-                            title=brief.title,
-                            prompt=brief.prompt,
-                            brief_json=brief.to_json(),
-                            opening=opening_message(brief),
-                            turn_id=turn_id,
-                        )
-                        return
-
-                    brief = InterviewBrief.from_json(session.brief)
                     try:
+                        if session.brief is None:
+                            brief = self._load_brief(session, model_spec, usage)
+                            start_system_design_session(
+                                pg_conn,
+                                session_id,
+                                title=brief.title,
+                                prompt=brief.prompt,
+                                brief_json=brief.to_json(),
+                                opening=opening_message(brief),
+                                turn_id=turn_id,
+                            )
+                            return
+
+                        brief = InterviewBrief.from_json(session.brief)
                         if session.phase != "FEEDBACK":
                             over = self._interview_turn(
                                 pg_conn,
@@ -167,7 +191,7 @@ class SystemDesignRunner(LocalThreadJobRunner):
         if not session.job_description:
             raise RunnerError("Job-based session has no job description")
         return generate_brief(
-            model_spec,
+            require_model(model_spec),
             usage,
             company_name=session.company_name,
             role=session.role,
@@ -188,7 +212,7 @@ class SystemDesignRunner(LocalThreadJobRunner):
             new_messages = [HumanMessage(content=message)]
         outcome = run_interview_turn(
             session.id,
-            model_spec,
+            require_model(model_spec),
             usage,
             interviewer_prompt(brief, session.level),
             new_messages,
@@ -217,7 +241,7 @@ class SystemDesignRunner(LocalThreadJobRunner):
         except (ValueError, TypeError, AttributeError):
             durations = {}
         report = grade_interview(
-            grader_spec,
+            require_model(grader_spec),
             usage,
             brief=brief,
             level=session.level,
