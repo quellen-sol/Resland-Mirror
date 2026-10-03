@@ -268,6 +268,7 @@ model ModelPricing {
 enum UsageJobKind {
   SUGGESTION
   TAILOR
+  SYSTEM_DESIGN
 }
 
 // Ledger of billed LLM usage — one row per dispatcher task invocation.
@@ -292,6 +293,105 @@ model TokenUsage {
   @@unique([job_kind, job_id])
   @@index([user_id])
   @@index([created_at])
+}
+
+enum SystemDesignStatus {
+  PROCESSING
+  WAITING_FOR_INPUT
+  COMPLETED
+  FAILED
+}
+
+// Interview phases, in order. FEEDBACK = the interview is over: grading
+// while PROCESSING, report ready once COMPLETED.
+enum SystemDesignPhase {
+  REQUIREMENTS
+  ESTIMATION
+  HIGH_LEVEL_DESIGN
+  DEEP_DIVE
+  FEEDBACK
+}
+
+enum SystemDesignSource {
+  BANK
+  JOB
+}
+
+enum SystemDesignLevel {
+  MID
+  SENIOR
+  STAFF
+}
+
+// A system design mock interview. The API owns phase moves the candidate
+// makes; the dispatcher writes the brief, interviewer turns, and the report.
+model UserSystemDesignSession {
+  id                 String             @id
+  user_id            String
+  user               User               @relation(fields: [user_id], references: [auth0_id])
+  source             SystemDesignSource
+  // Curated bank key (shared.system_design.bank) for BANK sessions.
+  problem_id         String?
+  // Saved tailored resume a JOB session was built from — plain column, no
+  // FK: the posting is snapshotted below so deleting the resume is safe.
+  tailored_resume_id String?
+  company_name       String?
+  role               String?
+  job_description    String?
+  level              SystemDesignLevel  @default(SENIOR)
+  // Null = system default model.
+  model              String?
+  status             SystemDesignStatus @default(PROCESSING)
+  phase              SystemDesignPhase  @default(REQUIREMENTS)
+  // Problem shown to the candidate — null until the first turn writes it.
+  title              String?
+  prompt             String?
+  // Hidden interviewer brief JSON (scale answers, expected requirements,
+  // reference design, deep-dive topics). Only revealed once COMPLETED.
+  brief              String?
+  // Candidate workspace, autosaved. `diagram` is the Excalidraw elements JSON.
+  requirements       String             @default("")
+  estimates          String             @default("")
+  diagram            String             @default("[]")
+  // What the interviewer last saw (content hashes + diagram graph) so each
+  // turn only sends what changed.
+  agent_context      String?
+  // Turn id the dispatcher last finished — a redelivered job is a no-op.
+  last_turn_id       String?
+  // Set when a turn crashed; the candidate retries instead of answering.
+  notice             String?
+  // JSON {phase: seconds} for each phase the candidate has left.
+  phase_durations    String             @default("{}")
+  phase_started_at   DateTime           @default(now())
+  // Graded report JSON — rubric scores, letter grade, hire signal, feedback.
+  result             String?
+  letter_grade       String?
+  hire_signal        String?
+  created_at         DateTime           @default(now())
+  completed_at       DateTime?
+
+  @@map("user_system_design_session")
+  @@index([user_id])
+}
+
+enum SystemDesignRole {
+  INTERVIEWER
+  CANDIDATE
+}
+
+// Interview transcript: candidate turns are written by the API, interviewer
+// turns by the dispatcher. Ordered by id.
+model SystemDesignMessage {
+  id         Int                     @id @default(autoincrement())
+  session_id String
+  session    UserSystemDesignSession @relation(fields: [session_id], references: [id])
+  role       SystemDesignRole
+  phase      SystemDesignPhase
+  content    String
+  created_at DateTime                @default(now())
+
+  @@map("system_design_message")
+  @@index([session_id])
 }
 
 // Site-wide kill switches toggled from /admin — a single row (id = 1).
