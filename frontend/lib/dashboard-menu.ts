@@ -2,6 +2,7 @@ export type DashboardMenuItemKey =
   | "upload"
   | "tailor"
   | "tailored"
+  | "system-design"
   | "export"
   | "admin"
   | "edit-profile"
@@ -21,6 +22,7 @@ const DASHBOARD_MENU_ITEMS: DashboardMenuItem[] = [
   { key: "upload", label: "Upload New Resume" },
   { key: "tailor", label: "Tailor Resume", href: "/tailor" },
   { key: "tailored", label: "Tailored Resumes", href: "/tailored" },
+  { key: "system-design", label: "System Design Mock", href: "/system-design" },
   { key: "export", label: "Export Resume" },
   { key: "admin", label: "Admin Dashboard", href: "/admin", adminOnly: true },
   { key: "edit-profile", label: "Edit Profile", href: "/edit-profile" },
