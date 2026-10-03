@@ -212,6 +212,11 @@ class FontHelpers(unittest.TestCase):
         self.assertEqual(pdfdoc._font_flags("Helvetica-Bold"), (True, False))
         self.assertEqual(pdfdoc._font_flags("Times-Italic"), (False, True))
         self.assertEqual(pdfdoc._font_flags("Inter"), (False, False))
+        # "It"-suffixed styles (the food-service fixture's titles).
+        self.assertEqual(pdfdoc._font_flags("ProximaNova-RegularIt"), (False, True))
+        self.assertEqual(pdfdoc._font_flags("SourceSans-BoldIt"), (True, True))
+        self.assertEqual(pdfdoc._font_flags("Inter-SemiBold"), (True, False))
+        self.assertEqual(pdfdoc._font_flags("Arial,BoldItalic"), (True, True))
 
     def test_color_hex(self):
         self.assertIsNone(pdfdoc._color_hex((0.0, 0.0, 0.0)))
@@ -387,6 +392,33 @@ class ParsePdf(unittest.TestCase):
         doc = pdfdoc.parse_pdf(_pdf_bytes(ops))
         self.assertEqual(doc.lines[0].text, "• Did a thing")
         self.assertEqual(doc.lines[1].text, "Not a bullet")
+
+    def test_winansi_code_127_reads_as_bullet(self):
+        """Some generators write "•" as code 127 (WinAnsi maps unused codes
+        to the bullet); pdfminer leaves it as "(cid:127)"."""
+        ops = [
+            _text(72, 640, "\\177 Built the thing"),
+            _text(72, 624, "\\177 Shipped it"),
+        ]
+        texts = [l.text for l in pdfdoc.parse_pdf(_pdf_bytes(ops)).lines]
+        self.assertEqual(texts, ["• Built the thing", "• Shipped it"])
+
+    def test_lines_carry_style_runs(self):
+        """A bold company and an oblique title on one line keep separate
+        runs (capture reads head/tail styles from them)."""
+        ops = [
+            "BT /F2 11 Tf 72 640 Td (Acme Corp) Tj /F3 11 Tf ( - Engineer) Tj ET",
+            _text(450, 640, "Jan 2020 - Present"),
+        ]
+        line = pdfdoc.parse_pdf(_pdf_bytes(ops)).lines[0]
+        self.assertEqual("".join(r.text for r in line.runs), line.text)
+        # Whitespace rides with the run before it.
+        self.assertEqual(line.runs[0].text.strip(), "Acme Corp")
+        self.assertTrue(line.runs[0].style.bold)
+        self.assertTrue(line.style_at(line.text.index("Engineer")).italic)
+        date_run = line.run_at(line.text.index("Jan 2020"))
+        self.assertFalse(date_run.style.bold or date_run.style.italic)
+        self.assertAlmostEqual(date_run.x0, 450.0, delta=1.0)
 
     def test_localized_two_column_region_is_not_page_columns(self):
         """A small 2-col grid (skills) surrounded by full-width lines must

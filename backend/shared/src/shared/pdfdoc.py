@@ -24,6 +24,16 @@ class PdfStyle:
 
 
 @dataclass
+class PdfRun:
+    """A stretch of a line's text in one character style — the pdf
+    analogue of a docx run. `x0` is where the stretch starts on the page."""
+
+    text: str
+    style: PdfStyle
+    x0: float | None = None
+
+
+@dataclass
 class PdfLine:
     """One visually-contiguous text line. `top`/`bottom` are distances from
     the page's top edge in points (PDF origin is bottom-left; these are
@@ -35,13 +45,29 @@ class PdfLine:
     x1: float  # right edge
     top: float  # pt below page top
     bottom: float  # pt below page top (top + line height)
-    style: PdfStyle
+    style: PdfStyle  # dominant style across the line's glyphs
     gap_before_pt: float = 0.0  # vertical gap above this line on the same page
     ends_page: bool = False
+    # Per-style stretches whose texts concatenate to `text`; empty when the
+    # producer didn't record them (hand-built IR) — `style` covers it all.
+    runs: list[PdfRun] = field(default_factory=list)
 
     @property
     def empty(self) -> bool:
         return not self.text.strip()
+
+    def run_at(self, offset: int) -> PdfRun | None:
+        """The run covering character `offset` of `text`, if runs exist."""
+        pos = 0
+        for run in self.runs:
+            pos += len(run.text)
+            if offset < pos:
+                return run
+        return None
+
+    def style_at(self, offset: int) -> PdfStyle:
+        run = self.run_at(offset)
+        return run.style if run is not None else self.style
 
 
 @dataclass

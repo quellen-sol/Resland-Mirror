@@ -316,6 +316,14 @@ class FixtureParse(unittest.TestCase):
     def test_first_line_is_the_name(self):
         self.assertEqual(self.doc.lines[0].text, "DANA PRESCOTT")
 
+    def test_contact_labels_keep_their_own_runs(self):
+        line = next(l for l in self.doc.lines if l.text.startswith("Phone:"))
+        self.assertTrue(line.style_at(0).bold)  # Inter-SemiBold label
+        value_at = line.text.index("(208)")
+        self.assertFalse(line.style_at(value_at).bold)
+        self.assertAlmostEqual(line.run_at(value_at).x0, 228.7, delta=0.5)
+
+
 
 @unittest.skipUnless(HAS_PDFMINER, "pdfminer.six not installed")
 class FixtureCapture(unittest.TestCase):

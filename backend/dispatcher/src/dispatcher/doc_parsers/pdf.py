@@ -5,6 +5,7 @@ column counts. `capture_format_profile_pdf` in shared.docgen reads the same
 IR to build the resume's FormatProfile."""
 
 import io
+import re
 from collections import Counter
 from typing import Any
 
@@ -12,6 +13,7 @@ from shared.pdfdoc import (
     PdfDoc,
     PdfLine,
     PdfPage,
+    PdfRun,
     PdfStyle,
     column_gutter,
     page_columns,
@@ -32,6 +34,9 @@ _DOT_GAP_MAX_PT = 18.0
 # single space, wider gaps get four — so a right-floated date reads as a
 # gap, not as inline text.
 _ROW_JOIN_GAP_PT = 14.0
+# WinAnsiEncoding maps unused codes (e.g. 127, which some generators emit
+# for "•") to the bullet; pdfminer leaves them as "(cid:127)".
+_WINANSI_BULLET_CID = "(cid:127)"
 
 # pdfminer.layout, bound lazily: the IR and the view helpers below work
 # without the extraction dependency, so a missing/broken install surfaces
@@ -59,8 +64,12 @@ def _strip_subset_prefix(name: str) -> str:
 def _font_flags(font_name: str) -> tuple[bool, bool]:
     lower = font_name.lower()
     bold = any(w in lower for w in _BOLD_WORDS)
-    italic = any(w in lower for w in _ITALIC_WORDS)
+    # "ProximaNova-RegularIt", "SourceSans-BoldIt": the style suffix ends
+    # in "It" instead of spelling out "Italic".
+    style = re.split(r"[-,]", lower)[-1] if re.search(r"[-,]", lower) else ""
+    italic = any(w in lower for w in _ITALIC_WORDS) or style.endswith("it")
     return bold, italic
+
 
 
 def _font_family(font_name: str) -> str:
@@ -83,7 +92,7 @@ def _color_hex(ncolor: Any) -> str | None:
             rgb = (ncolor,) * 3
         else:
             rgb = tuple(ncolor)[:3]
-        vals = [int(round(min(max(float(c), 0.0), 1.0) * 255)) for c in rgb]
+        vals = [round(min(max(float(c), 0.0), 1.0) * 255) for c in rgb]
     except (TypeError, ValueError):
         return None
     if len(vals) < 3 or all(v < 40 for v in vals):
@@ -134,32 +143,19 @@ def _iter_rules(container, min_width: float):
                 yield item
 
 
-def _line_text(line) -> str:
-    return "".join(child.get_text() for child in line).strip()
+def _char_key(char) -> tuple:
+    return (
+        _strip_subset_prefix(char.fontname),
+        round(char.size, 1),
+        _color_hex(getattr(char.graphicstate, "ncolor", None)),
+    )
 
 
-def _line_chars(line) -> list:
-    lt = _layout()
-    return [c for c in line if isinstance(c, lt.LTChar)]
 
-
-def _chars_style(chars) -> PdfStyle:
-    """Dominant character style — the char style covering the most
-    visible glyphs wins."""
-    counter: Counter = Counter()
-    for char in chars:
-        if not char.get_text().strip():
-            continue
-        color = _color_hex(getattr(char.graphicstate, "ncolor", None))
-        key = (
-            _strip_subset_prefix(char.fontname),
-            round(char.size, 1),
-            color,
-        )
-        counter[key] += 1
-    if not counter:
+def _key_style(key: tuple | None) -> PdfStyle:
+    if key is None:
         return PdfStyle()
-    (font_name, size, color), _ = counter.most_common(1)[0]
+    font_name, size, color = key
     bold, italic = _font_flags(font_name)
     return PdfStyle(
         font_name=_font_family(font_name),
@@ -170,18 +166,45 @@ def _chars_style(chars) -> PdfStyle:
     )
 
 
+
+def _pieces(item) -> list[list]:
+    """An LTTextLine's text split into same-style stretches:
+    [text, style key, x0, visible glyph count]. Inserted spaces join the
+    stretch before them; outer whitespace is stripped like the line text."""
+    lt = _layout()
+    pieces: list[list] = []
+    for child in item:
+        text = child.get_text()
+        if text == _WINANSI_BULLET_CID:
+            text = "•"
+        if isinstance(child, lt.LTChar) and text.strip():
+            key = _char_key(child)
+            if pieces and pieces[-1][1] == key:
+                pieces[-1][0] += text
+                pieces[-1][3] += 1
+            else:
+                pieces.append([text, key, child.x0, 1])
+        elif pieces:
+            pieces[-1][0] += text
+    if pieces:
+        pieces[0][0] = pieces[0][0].lstrip()
+        pieces[-1][0] = pieces[-1][0].rstrip()
+    return pieces
+
+
+
 class _Frag:
     """One extracted text fragment (an LTTextLine), in top-down coords."""
 
-    __slots__ = ("x0", "x1", "top", "bottom", "text", "chars")
+    __slots__ = ("bottom", "pieces", "text", "top", "x0", "x1")
 
     def __init__(self, item, page_height: float):
         self.x0 = item.x0
         self.x1 = item.x1
         self.top = page_height - item.y1
         self.bottom = page_height - item.y0
-        self.text = _line_text(item)
-        self.chars = _line_chars(item)
+        self.pieces = _pieces(item)
+        self.text = "".join(p[0] for p in self.pieces)
 
     @property
     def empty(self) -> bool:
@@ -194,6 +217,13 @@ class _Frag:
     @property
     def height(self) -> float:
         return self.bottom - self.top
+
+    def prefix(self, glyph: str, x0: float) -> None:
+        self.text = f"{glyph} {self.text}"
+        if self.pieces:
+            self.pieces[0][0] = f"{glyph} {self.pieces[0][0]}"
+        self.x0 = min(self.x0, x0)
+
 
 
 def _row_rows(frags: list[_Frag]) -> list[list[_Frag]]:
@@ -238,8 +268,7 @@ def _attach_dot(frag: _Frag, dots: list[tuple[float, float, float]]) -> None:
             and frag.x0 - dot[1] <= _DOT_GAP_MAX_PT
             and abs(dot[2] - frag.cy) <= 3.0
         ):
-            frag.text = "• " + frag.text
-            frag.x0 = min(frag.x0, dot[0])
+            frag.prefix("•", dot[0])
             dots.remove(dot)
             return
 
@@ -250,25 +279,37 @@ def _merge_row(page_number: int, frags: list[_Frag]) -> PdfLine | None:
     frags = [f for f in sorted(frags, key=lambda f: f.x0) if not f.empty]
     if not frags:
         return None
-    parts: list[str] = []
-    chars: list = []
+    runs: list[list] = []
+    glyphs: Counter = Counter()
     prev_x1: float | None = None
     for frag in frags:
-        if prev_x1 is not None:
+        if prev_x1 is not None and runs:
             gap = frag.x0 - prev_x1
-            parts.append("    " if gap >= _ROW_JOIN_GAP_PT else " ")
-        parts.append(frag.text)
-        chars.extend(frag.chars)
+            runs[-1][0] += "    " if gap >= _ROW_JOIN_GAP_PT else " "
+        for i, (text, key, x0, count) in enumerate(frag.pieces):
+            glyphs[key] += count
+            # Fragment boundaries stay run boundaries so each run keeps
+            # its own x position.
+            if i and runs and runs[-1][1] == key:
+                runs[-1][0] += text
+            else:
+                runs.append([text, key, frag.x0 if i == 0 else x0])
         prev_x1 = frag.x1
+    dominant = glyphs.most_common(1)[0][0] if glyphs else None
     return PdfLine(
-        text="".join(parts).strip(),
+        text="".join(run[0] for run in runs),
         page=page_number,
         x0=round(min(f.x0 for f in frags), 1),
         x1=round(max(f.x1 for f in frags), 1),
         top=round(min(f.top for f in frags), 1),
         bottom=round(max(f.bottom for f in frags), 1),
-        style=_chars_style(chars),
+        style=_key_style(dominant),
+        runs=[
+            PdfRun(text=text, style=_key_style(key), x0=round(x0, 1))
+            for text, key, x0 in runs
+        ],
     )
+
 
 
 def parse_pdf(file_data: bytes) -> PdfDoc:
