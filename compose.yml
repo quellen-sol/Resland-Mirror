@@ -57,6 +57,8 @@ services:
       POSTGRES_PASSWORD: "resland"
     volumes:
       - db-data:/var/lib/postgresql/18/docker
+      # Creates the `resland_test` scratch DB used by the test suites.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
 
 networks:
   resland_network:
