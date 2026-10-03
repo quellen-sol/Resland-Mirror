@@ -356,6 +356,24 @@ class SuggestionsRunnerTask(unittest.TestCase):
         self.assertEqual(kwargs["input_tokens"], 100)
         self.assertEqual(kwargs["cost_usd"], 0.01)
 
+    def test_each_turn_is_recorded_under_its_own_key(self):
+        def fake_agent(session_id, answer, rows, model_spec, usage, prompt):
+            usage["input_tokens"] = 100
+            usage["output_tokens"] = 20
+            return sugg_agents.SuggestionRunOutcome(status="waiting", question="Q")
+
+        keys = []
+        for job in (
+            {"session_id": "s1", "turn_id": "t1"},
+            {"session_id": "s1", "answer": "5 engineers", "turn_id": "t2"},
+        ):
+            status, _, _, _, record, _ = self._run(
+                job, rows=[_sugg_row()], agent_fn=fake_agent
+            )
+            self.assertEqual(status, "COMPLETED")
+            keys.append(record.call_args.kwargs["job_id"])
+        self.assertEqual(keys, ["s1:t1", "s1:t2"])
+
     def test_no_usage_no_record(self):
         outcome = sugg_agents.SuggestionRunOutcome(status="waiting", question="Q")
         status, _, _, _, record, _ = self._run(
@@ -520,6 +538,21 @@ class TailorRunnerTask(unittest.TestCase):
         self.assertEqual(kw["job_id"], "r1")
         self.assertEqual(kw["cost_usd"], 0.5)
         self.assertEqual(kw["generation_ids"], ["gen-1"])
+
+    def test_answer_turn_is_recorded_under_its_own_key(self):
+        def _agent(run_id, answer, run, profile, model_spec, usage):
+            usage["input_tokens"] = 1
+            usage["output_tokens"] = 1
+            return tailor_agents.TailorRunOutcome(status="waiting", question="Q")
+
+        status, _, _, _, record = self._run(
+            {"run_id": "r1", "answer": "more metrics", "turn_id": "t2"},
+            run=_tailor_run(),
+            profile=_tailor_profile(),
+            agent_fn=_agent,
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.assertEqual(record.call_args.kwargs["job_id"], "r1:t2")
 
     def test_zero_usage_skips_billing_record(self):
         status, _, _, _, record = self._run(

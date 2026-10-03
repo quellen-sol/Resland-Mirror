@@ -82,6 +82,18 @@ def test_redelivered_job_never_double_charges(pg, user):
     assert count == 1
 
 
+def test_each_turn_of_a_session_is_charged(pg, user):
+    """Answers and retries reuse the session id; their per-turn ledger keys
+    must each debit, while a redelivery of one turn still doesn't."""
+    first = charge(pg, job_id=db_ops.usage_job_id("s1", {"turn_id": "t1"}))
+    second = charge(pg, job_id=db_ops.usage_job_id("s1", {"turn_id": "t2"}))
+    redelivered = charge(pg, job_id=db_ops.usage_job_id("s1", {"turn_id": "t2"}))
+    assert redelivered == pytest.approx(second)
+    assert balance(pg) == pytest.approx(1000 - first - second)
+    count = pg.execute("SELECT COUNT(*) FROM token_usage").fetchone()[0]
+    assert count == 2
+
+
 def test_actual_cost_with_markup(pg, user, monkeypatch):
     monkeypatch.setattr(
         db_ops, "fetch_generation_cost_cents", lambda ids: 1.0
@@ -246,6 +258,22 @@ class FetchGenerationCostCentsTest(unittest.TestCase):
         self.assertIsNone(db_ops.fetch_generation_cost_cents([]))
         with patch.object(db_ops, "OPENROUTER_API_KEY", ""):
             self.assertIsNone(db_ops.fetch_generation_cost_cents(["gen-1"]))
+
+
+class UsageJobIdTest(unittest.TestCase):
+    def test_turn_id_scopes_the_key(self):
+        self.assertEqual(db_ops.usage_job_id("s1", {"turn_id": "t1"}), "s1:t1")
+
+    def test_turns_of_one_session_get_distinct_keys(self):
+        self.assertNotEqual(
+            db_ops.usage_job_id("s1", {"turn_id": "t1"}),
+            db_ops.usage_job_id("s1", {"turn_id": "t2"}),
+        )
+
+    def test_legacy_job_without_turn_id_keeps_bare_id(self):
+        self.assertEqual(db_ops.usage_job_id("s1", {}), "s1")
+        self.assertEqual(db_ops.usage_job_id("s1", {"turn_id": ""}), "s1")
+        self.assertEqual(db_ops.usage_job_id("s1", {"turn_id": 7}), "s1")
 
 
 class RecordTokenUsageTest(unittest.TestCase):

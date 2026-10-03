@@ -14,6 +14,7 @@ from .db_ops import (
     record_token_usage,
     set_tailor_question,
     set_tailor_result,
+    usage_job_id,
 )
 from .generic import RunnerError
 from .local_threaded import LocalThreadJobRunner
@@ -108,7 +109,7 @@ class TailorRunner(LocalThreadJobRunner):
                                 pg_conn,
                                 user_id=user_id,
                                 job_kind="TAILOR",
-                                job_id=run_id,
+                                job_id=usage_job_id(run_id, self.job_data),
                                 model=model_spec,
                                 input_tokens=usage["input_tokens"],
                                 output_tokens=usage["output_tokens"],
