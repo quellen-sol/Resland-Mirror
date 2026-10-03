@@ -87,7 +87,7 @@ export default function UploadForm({
           id="file"
           ref={fileInputRef}
           type="file"
-          className="h-auto border-zinc-700 bg-zinc-950/50 py-2 text-zinc-300 file:mr-3 file:rounded-md file:bg-purple-500/10 file:px-2.5 file:py-1 file:text-purple-300 hover:file:bg-purple-500/20 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+          className="h-auto border-zinc-700 bg-zinc-950/50 py-2 text-zinc-300 file:mr-3 file:rounded-md file:bg-brand-500/10 file:px-2.5 file:py-1 file:text-brand-300 hover:file:bg-brand-500/20 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
           onChange={(event) => {
             setFile(event.target.files?.[0] ?? null);
             setResult({ kind: "idle" });
@@ -97,7 +97,7 @@ export default function UploadForm({
 
       {file && (
         <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950/50 px-3 py-2 text-sm text-zinc-400">
-          <FileUp className="size-4 text-purple-400" />
+          <FileUp className="size-4 text-brand-400" />
           <span className="truncate text-zinc-200">{file.name}</span>
           <span className="shrink-0">{(file.size / 1024).toFixed(1)} KB</span>
         </div>
@@ -106,7 +106,7 @@ export default function UploadForm({
       <Button
         onClick={handleUpload}
         disabled={!file || result.kind === "uploading"}
-        className="h-9 w-full border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white shadow-lg shadow-purple-950/50 hover:from-violet-500 hover:to-purple-500"
+        className="h-9 w-full"
       >
         {result.kind === "uploading" ? (
           <>
@@ -122,8 +122,8 @@ export default function UploadForm({
       </Button>
 
       {result.kind === "success" && !onSuccess && (
-        <Alert className="border-purple-500/30 bg-purple-500/10 text-purple-200">
-          <CircleCheck className="text-purple-400" />
+        <Alert className="border-brand-500/30 bg-brand-500/10 text-brand-200">
+          <CircleCheck className="text-brand-400" />
           <AlertTitle>Upload Succeeded (HTTP {result.status})</AlertTitle>
           {result.body && (
             <AlertDescription>

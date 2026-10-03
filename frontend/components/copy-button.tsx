@@ -77,7 +77,7 @@ export default function CopyButton({
       title="Copy"
       aria-label="Copy to Clipboard"
       className={cn(
-        "inline-flex shrink-0 align-middle text-zinc-500 hover:text-purple-300",
+        "inline-flex shrink-0 align-middle text-zinc-500 hover:text-brand-300",
         className,
       )}
     >

@@ -41,7 +41,7 @@ function fmtDate(date: string | null) {
 }
 
 const inputClass =
-  "border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30";
+  "border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30";
 
 export default function TailoredEditor({
   accessToken,
@@ -195,7 +195,7 @@ export default function TailoredEditor({
     <div className="flex flex-col gap-6">
       <header className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+          <h1 className="text-3xl font-semibold tracking-[-0.03em]">
             Tailored Resume
           </h1>
           <p className="mt-1 text-sm text-zinc-400">
@@ -211,7 +211,7 @@ export default function TailoredEditor({
       </header>
 
       {!contentReadable && (
-        <Card className="border-amber-500/30 bg-amber-500/5 text-zinc-100">
+        <Card className="bg-amber-500/5 ring-amber-500/30">
           <CardContent className="pt-6 text-sm text-amber-200">
             This saved resume&apos;s content is unreadable — you can still edit
             the fields below and save to replace it.
@@ -220,7 +220,7 @@ export default function TailoredEditor({
       )}
 
       {/* Job details */}
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Job</CardTitle>
         </CardHeader>
@@ -265,7 +265,7 @@ export default function TailoredEditor({
       </Card>
 
       {/* Summary */}
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Summary</CardTitle>
         </CardHeader>
@@ -285,7 +285,7 @@ export default function TailoredEditor({
       </Card>
 
       {/* Experiences */}
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Experience</CardTitle>
         </CardHeader>
@@ -338,7 +338,7 @@ export default function TailoredEditor({
       </Card>
 
       {/* Skills */}
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardHeader>
           <CardTitle className="text-lg">Skills</CardTitle>
         </CardHeader>
@@ -354,14 +354,14 @@ export default function TailoredEditor({
                 {group.skills.map((skill) => (
                   <span
                     key={skill}
-                    className="inline-flex items-center gap-1 rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-0.5 text-sm text-purple-200"
+                    className="inline-flex items-center gap-1 rounded-md border border-brand-500/30 bg-brand-500/10 px-2 py-0.5 text-sm text-brand-200"
                   >
                     {skill}
                     <button
                       type="button"
                       aria-label={`Remove ${skill}`}
                       onClick={() => removeSkill(gi, skill)}
-                      className="text-purple-300/60 hover:text-purple-100"
+                      className="text-brand-300/60 hover:text-brand-100"
                     >
                       <X className="size-3" />
                     </button>
@@ -424,7 +424,6 @@ export default function TailoredEditor({
           <Button
             onClick={onExport}
             disabled={busy !== null}
-            className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
           >
             {busy === "export" ? (
               <Loader2 className="animate-spin" />
@@ -437,7 +436,7 @@ export default function TailoredEditor({
       </div>
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-zinc-100">
               Delete Tailored Resume?

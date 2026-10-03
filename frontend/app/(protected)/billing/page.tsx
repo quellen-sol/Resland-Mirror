@@ -3,6 +3,7 @@ import { getAccessTokenOrLogin } from "@/lib/auth";
 import { requireOnboardedUser } from "@/lib/db";
 import { getSiteSettings } from "@/lib/settings";
 import BillingClient from "./billing-client";
+import Backdrop from "@/components/backdrop";
 
 export const metadata: Metadata = { title: "Billing" };
 
@@ -20,7 +21,7 @@ export default async function BillingPage({
 
   return (
     <div className="relative flex flex-1 overflow-hidden bg-zinc-950 font-sans">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
+      <Backdrop />
       <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
         <BillingClient
           accessToken={accessToken}

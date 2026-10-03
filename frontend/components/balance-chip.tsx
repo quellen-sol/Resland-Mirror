@@ -34,7 +34,7 @@ export default function BalanceChip({ accessToken }: { accessToken: string }) {
           : "border-amber-500/40 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20",
       )}
     >
-      <Zap className="size-3.5 text-purple-400" />
+      <Zap className="size-3.5 text-brand-400" />
       {fmtCents(balance)}
     </Link>
   );

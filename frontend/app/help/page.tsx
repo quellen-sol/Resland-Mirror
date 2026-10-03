@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import SiteFooter from "@/components/site-footer";
+import Backdrop from "@/components/backdrop";
 
 export const metadata: Metadata = {
   title: "Help & FAQ",
@@ -107,7 +108,7 @@ const SECTIONS: {
 export default function HelpPage() {
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden bg-zinc-950 font-sans text-zinc-100">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
+      <Backdrop />
       <header className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5 sm:px-8">
         <Link
           href="/"
@@ -133,7 +134,7 @@ export default function HelpPage() {
         </nav>
       </header>
       <main className="relative mx-auto w-full max-w-3xl flex-1 px-6 pb-20 pt-10 sm:px-8">
-        <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
+        <h1 className="text-3xl font-semibold tracking-[-0.03em]">
           Help &amp; FAQ
         </h1>
         <p className="mt-2 text-sm text-zinc-400">
@@ -151,12 +152,12 @@ export default function HelpPage() {
               >
                 {section.title}
               </h2>
-              <div className="mt-4 divide-y divide-zinc-800 rounded-xl border border-zinc-800 bg-zinc-900/60 px-5">
+              <div className="edge mt-4 divide-y divide-white/[.08] rounded-xl border border-white/[.08] bg-card px-5">
                 {section.faqs.map(([question, answer]) => (
                   <details key={question} className="group py-4">
                     <summary className="cursor-pointer list-none font-medium text-zinc-200">
                       {question}
-                      <span className="float-right text-purple-400 transition-transform group-open:rotate-45">
+                      <span className="float-right text-brand-400 transition-transform group-open:rotate-45">
                         +
                       </span>
                     </summary>

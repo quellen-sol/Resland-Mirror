@@ -52,7 +52,7 @@ export default function ExportResumeButton({
         <Download /> Export Resume
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-zinc-100">
               Export Your Resume
@@ -67,7 +67,7 @@ export default function ExportResumeButton({
               resume. For a version tailored to a specific job, head to{" "}
               <Link
                 href="/tailored"
-                className="text-purple-300 underline-offset-4 hover:underline"
+                className="text-brand-300 underline-offset-4 hover:underline"
               >
                 Tailored Resumes
               </Link>
@@ -88,7 +88,6 @@ export default function ExportResumeButton({
               size="sm"
               onClick={onExport}
               disabled={busy}
-              className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
             >
               {busy ? (
                 <Loader2 className="animate-spin" />

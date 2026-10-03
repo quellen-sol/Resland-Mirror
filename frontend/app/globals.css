@@ -107,9 +107,14 @@
   --color-panel-raised: #15151c;
 }
 
-/* Top-edge highlight that makes dark panels read as raised. */
+/* Top-edge highlight that makes dark panels read as raised. Goes through
+   Tailwind's inset-shadow slot so it stacks with ring-* and shadow-*. */
 @utility edge {
-  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.06);
+  --tw-inset-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.06);
+  box-shadow:
+    var(--tw-inset-shadow), var(--tw-inset-ring-shadow, 0 0 #0000),
+    var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000),
+    var(--tw-shadow, 0 0 #0000);
 }
 
 /* Faint ruled grid for hero backdrops; fades out from the top. */

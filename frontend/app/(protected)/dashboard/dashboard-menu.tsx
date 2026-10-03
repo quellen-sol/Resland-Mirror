@@ -71,7 +71,7 @@ export default function DashboardMenu({
       </SheetTrigger>
       <SheetContent
         side="right"
-        className="border-zinc-800 bg-zinc-950 text-zinc-100"
+        className="border-white/[.08] bg-card"
       >
         <SheetHeader>
           <SheetTitle className="text-zinc-100">Menu</SheetTitle>

@@ -165,7 +165,7 @@ export default function TailoredBoard({
 
   if (items.length === 0) {
     return (
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
           <Briefcase className="size-8 text-zinc-600" />
           <p className="text-sm text-zinc-400">
@@ -173,7 +173,7 @@ export default function TailoredBoard({
           </p>
           <Link
             href="/tailor"
-            className="text-sm text-purple-300 underline-offset-4 hover:underline"
+            className="text-sm text-brand-300 underline-offset-4 hover:underline"
           >
             Tailor a Resume
           </Link>
@@ -184,14 +184,14 @@ export default function TailoredBoard({
 
   return (
     <>
-      <Card className="border-zinc-800 bg-zinc-900/80 text-zinc-100">
+      <Card>
         <CardContent className="flex flex-col gap-4 pt-6">
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search by role or company…"
             aria-label="Search tailored resumes"
-            className="max-w-sm border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
+            className="max-w-sm border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
           />
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
@@ -213,7 +213,7 @@ export default function TailoredBoard({
                     <td className={cn(td, "font-medium text-zinc-100")}>
                       <Link
                         href={`/tailored/${item.id}`}
-                        className="hover:text-purple-300 hover:underline underline-offset-4"
+                        className="hover:text-brand-300 hover:underline underline-offset-4"
                       >
                         {item.role || "Tailored Resume"}
                       </Link>
@@ -282,7 +282,7 @@ export default function TailoredBoard({
           if (!open) setDeleteTarget(null);
         }}
       >
-        <DialogContent className="border-zinc-800 bg-zinc-900 text-zinc-100">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-zinc-100">
               Delete Tailored Resume?

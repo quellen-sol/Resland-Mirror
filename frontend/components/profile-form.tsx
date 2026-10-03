@@ -90,7 +90,7 @@ export const emptyProfileValues: ProfileFormValues = {
 };
 
 const inputCls =
-  "border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30";
+  "border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30";
 const labelCls = "text-zinc-300";
 
 function Field({
@@ -106,7 +106,7 @@ function Field({
     <div className="flex flex-col gap-1.5">
       <Label className={labelCls}>
         {label}
-        {required && <span className="text-purple-400"> *</span>}
+        {required && <span className="text-brand-400"> *</span>}
       </Label>
       {children}
     </div>
@@ -244,7 +244,7 @@ export default function ProfileForm({
     <Button
       onClick={() => onSubmit(values)}
       disabled={pending}
-      className="h-9 border-0 bg-gradient-to-r from-violet-600 to-purple-600 px-6 text-white shadow-lg shadow-purple-950/50 hover:from-violet-500 hover:to-purple-500"
+      className="h-9 px-6"
     >
       {pending ? (
         <>
@@ -260,7 +260,7 @@ export default function ProfileForm({
     <div className="flex flex-col gap-8">
       {/* Contact */}
       <section>
-        <h3 className="text-sm font-medium text-purple-300">Contact</h3>
+        <h3 className="text-sm font-medium text-brand-300">Contact</h3>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Full Name">
             <Input
@@ -297,7 +297,7 @@ export default function ProfileForm({
 
       {/* Social links */}
       <section>
-        <h3 className="text-sm font-medium text-purple-300">Links</h3>
+        <h3 className="text-sm font-medium text-brand-300">Links</h3>
         <div className="mt-3 flex flex-col gap-3">
           {values.socialLinks.map((link, i) => (
             <div key={i} className="flex items-end gap-2">
@@ -356,7 +356,7 @@ export default function ProfileForm({
 
       {/* Skills */}
       <section>
-        <h3 className="text-sm font-medium text-purple-300">Skills</h3>
+        <h3 className="text-sm font-medium text-brand-300">Skills</h3>
         <div className="mt-3">
           <SkillsEditor
             groups={values.skillGroups}
@@ -369,7 +369,7 @@ export default function ProfileForm({
 
       {/* Work experience */}
       <section>
-        <h3 className="text-sm font-medium text-purple-300">Work Experience</h3>
+        <h3 className="text-sm font-medium text-brand-300">Work Experience</h3>
         <div className="mt-3 flex flex-col gap-4">
           {values.experiences.map((exp, i) => (
             <div
@@ -528,7 +528,7 @@ export default function ProfileForm({
 
       {/* Education */}
       <section>
-        <h3 className="text-sm font-medium text-purple-300">Education</h3>
+        <h3 className="text-sm font-medium text-brand-300">Education</h3>
         <div className="mt-3 flex flex-col gap-4">
           {values.education.map((edu, i) => (
             <div
@@ -615,7 +615,7 @@ export default function ProfileForm({
 
       {/* Projects */}
       <section>
-        <h3 className="text-sm font-medium text-purple-300">Projects</h3>
+        <h3 className="text-sm font-medium text-brand-300">Projects</h3>
         <div className="mt-3 flex flex-col gap-4">
           {values.projects.map((proj, i) => (
             <div
