@@ -13,7 +13,7 @@ export default function NotFound() {
             href="/"
             className="inline-flex h-8 items-center rounded-lg bg-purple-600 px-2.5 text-sm font-medium text-white hover:bg-purple-500"
           >
-            Back home
+            Back Home
           </Link>
           <Link
             href="/dashboard"

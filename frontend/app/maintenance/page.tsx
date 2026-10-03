@@ -18,10 +18,10 @@ export default function MaintenancePage() {
           alt="Resland"
           width={64}
           height={64}
-          priority
+          preload
         />
         <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-          Down for maintenance
+          Down for Maintenance
         </h1>
         <p className="text-zinc-400">
           Resland is temporarily paused while we make some updates. Your data is
@@ -31,13 +31,13 @@ export default function MaintenancePage() {
           href="/auth/login?returnTo=%2Fdashboard"
           className="text-sm text-zinc-500 hover:text-zinc-300"
         >
-          Admin? Log in
+          Admin? Log In
         </Link>
         <Link
           href="/auth/logout"
           className="text-sm text-zinc-500 hover:text-zinc-300"
         >
-          Sign out
+          Sign Out
         </Link>
       </div>
     </main>

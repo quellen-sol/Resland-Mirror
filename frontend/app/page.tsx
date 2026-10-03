@@ -9,21 +9,21 @@ import SiteFooter from "@/components/site-footer";
 import { cn } from "cn";
 
 const steps = [
-  ["1", "Upload Your Resume", "Parsed into a structured profile."],
+  ["1", "Upload Your Resume", "We turn it into an organized, editable profile."],
   ["2", "Sharpen Every Bullet", "AI suggestions that ask you questions first."],
-  ["3", "Tailor to Any Job", "Paste a JD, get a reordered and rewritten resume."],
+  ["3", "Tailor to Any Job", "Paste the job description, get a reordered and rewritten resume."],
 ];
 const features = [
   ["AI-Powered Suggestions", "Turn vague experience into clear, specific impact."],
   ["Tailor to Every Role", "Match your resume to the language hiring teams use."],
   ["One Structured Profile", "Keep your experience, skills, and projects in one place."],
-  ["Bring Your Own Model", "Choose the model that fits your workflow."],
+  ["Choose Your AI Model", "Pick the AI model that fits your needs and budget."],
   ["Pay-As-You-Go Credits", "Pay only for what you use — no subscription."],
   ["Your Data Stays Yours", "Your resume is yours, and your profile stays private."],
 ];
 const faqs = [
   ["Is Resland a subscription?", "No. Resland uses pay-as-you-go credits, so you only pay for the AI work you choose to run."],
-  ["Can I use my own AI model?", "Yes. Choose from the available models when generating suggestions or tailoring a resume."],
+  ["Can I choose which AI model is used?", "Yes. Pick from our list of supported AI models when you ask for suggestions or tailor a resume — or just use the default."],
   ["Will Resland rewrite my resume automatically?", "Resland suggests changes and asks questions first. You stay in control of what gets accepted."],
   ["What happens to my resume data?", "Your profile is stored securely for your account and is not used as someone else’s resume."],
 ];
@@ -64,7 +64,7 @@ export default async function Home() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[600px] bg-[radial-gradient(ellipse_at_top,var(--color-purple-900)_0%,transparent_70%)] opacity-40" />
       <header className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5 sm:px-8">
         <Link href="/" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-          <Image src="/resland-logo.png" alt="Resland" width={32} height={32} priority className="rounded-lg" /> Resland
+          <Image src="/resland-logo.png" alt="Resland" width={32} height={32} preload className="rounded-lg" /> Resland
         </Link>
         <Link href="/auth/login?returnTo=/dashboard" className={cn(buttonVariants({ variant: "ghost" }), "text-zinc-300")}>Log In</Link>
       </header>

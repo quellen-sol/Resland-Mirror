@@ -32,6 +32,13 @@ function fmtDate(date: string | null) {
   });
 }
 
+// social_link.type values — show the brand name, not the raw enum.
+const SOCIAL_LINK_LABELS: Record<string, string> = {
+  LINKEDIN: "LinkedIn",
+  GITHUB: "GitHub",
+  WEBSITE: "Website",
+};
+
 function Empty({ text }: { text: string }) {
   return <p className="text-sm text-zinc-500">{text}</p>;
 }
@@ -146,7 +153,7 @@ export default async function DashboardPage() {
                     className="inline-flex items-center gap-1 text-sm text-purple-300 underline-offset-4 hover:underline"
                   >
                     <Link2 className="size-3.5" />
-                    {link.type.toLowerCase()}
+                    {SOCIAL_LINK_LABELS[link.type] ?? link.type.toLowerCase()}
                   </a>
                 ))}
               </div>

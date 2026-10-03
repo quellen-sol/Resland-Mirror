@@ -22,7 +22,7 @@ export function isApiUnreachable(error: unknown) {
 }
 
 const API_UNAVAILABLE_MESSAGE =
-  "The Resland API is unavailable right now. Please try again in a moment.";
+  "We can't reach Resland's servers right now. Please try again in a moment.";
 
 export function describeApiError(error: unknown): string {
   if (isApiUnreachable(error)) {

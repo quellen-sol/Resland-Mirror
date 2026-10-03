@@ -34,6 +34,21 @@ function fmtMoney(cents: number, currency: string) {
   });
 }
 
+// balance_purchase.status values — show words, not raw enum names.
+const PURCHASE_STATUS_LABELS: Record<string, string> = {
+  PENDING: "Pending",
+  COMPLETED: "Completed",
+  EXPIRED: "Expired",
+  REFUNDED: "Refunded",
+};
+
+function fmtStatus(status: string) {
+  return (
+    PURCHASE_STATUS_LABELS[status] ??
+    status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
+  );
+}
+
 function fmtDate(iso: string) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime())
@@ -283,7 +298,7 @@ export default function BillingClient({
                     <td className="py-2 text-zinc-300">
                       {fmtMoney(p.amount_cents, p.currency)}
                     </td>
-                    <td className="py-2 text-zinc-400">{p.status}</td>
+                    <td className="py-2 text-zinc-400">{fmtStatus(p.status)}</td>
                   </tr>
                 ))}
               </tbody>

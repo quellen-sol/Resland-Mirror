@@ -255,7 +255,7 @@ export default function TailoredEditor({
           </div>
           <details className="text-sm">
             <summary className="cursor-pointer text-zinc-500 hover:text-zinc-300">
-              Job description
+              Job Description
             </summary>
             <p className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/50 p-3 whitespace-pre-wrap text-zinc-400">
               {jobDescription}

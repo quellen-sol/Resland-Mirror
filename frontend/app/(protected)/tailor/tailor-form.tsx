@@ -302,7 +302,7 @@ export default function TailorForm({
         method: "POST",
       })) as { tailored_id: string };
       setSavedId(tailored_id);
-      toast.success("Saved to Tailored resumes", {
+      toast.success("Saved to Tailored Resumes", {
         action: {
           label: "Open",
           onClick: () => router.push(`/tailored/${tailored_id}`),
@@ -654,7 +654,7 @@ export default function TailorForm({
                     href={`/tailored/${savedId}`}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-purple-500/40 bg-purple-500/10 px-2.5 py-1.5 text-sm font-medium text-purple-200 hover:bg-purple-500/20 [&_svg]:size-4"
                   >
-                    <Check /> Saved — open it
+                    <Check /> Saved — Open It
                   </Link>
                 ) : (
                   <Button
@@ -663,7 +663,7 @@ export default function TailorForm({
                     className="border-0 bg-gradient-to-r from-violet-600 to-purple-600 text-white hover:from-violet-500 hover:to-purple-500"
                   >
                     {busy ? <Loader2 className="animate-spin" /> : <Bookmark />}{" "}
-                    Save to Tailored resumes
+                    Save to Tailored Resumes
                   </Button>
                 )}
                 <Button
@@ -691,7 +691,7 @@ export default function TailorForm({
                 onClick={reset}
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start over
+                Start Over
               </Button>
             </div>
           </CardContent>
@@ -710,7 +710,7 @@ export default function TailorForm({
                 onClick={reset}
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start over
+                Start Over
               </Button>
             </div>
           </CardContent>
@@ -728,7 +728,7 @@ export default function TailorForm({
               onClick={reset}
               className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
             >
-              Start over
+              Start Over
             </Button>
           </CardContent>
         </Card>
@@ -748,7 +748,7 @@ export default function TailorForm({
         <Card className="border-red-500/30 bg-zinc-900/80 text-zinc-100">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-red-400">
-              The agent finished but returned an unreadable result — try again.
+              We couldn&apos;t read the tailored result — try again.
             </p>
             <div>
               <Button
@@ -756,7 +756,7 @@ export default function TailorForm({
                 onClick={reset}
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start over
+                Start Over
               </Button>
             </div>
           </CardContent>

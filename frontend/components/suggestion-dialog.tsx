@@ -340,7 +340,7 @@ export default function SuggestionDialog({
           </DialogTitle>
           <DialogDescription className="text-zinc-400">
             {contextLabel ? `${contextLabel} — ` : ""}
-            The agent may ask a question or two before suggesting a rewrite.
+            The AI may ask you a question or two before suggesting a rewrite.
           </DialogDescription>
         </DialogHeader>
 
@@ -434,7 +434,7 @@ export default function SuggestionDialog({
                         void submitOwnPrompt();
                       }
                     }}
-                    placeholder="Tell the agent what to change…"
+                    placeholder="Tell the AI what to change…"
                     className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-purple-500 focus-visible:ring-purple-500/30"
                   />
                   <Button

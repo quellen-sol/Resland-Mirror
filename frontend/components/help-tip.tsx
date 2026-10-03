@@ -30,7 +30,7 @@ export default function HelpTip({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger
-        aria-label={`${title} — help`}
+        aria-label={`${title} — Help`}
         title="Help"
         className={cn(
           "inline-flex shrink-0 items-center justify-center rounded-full border border-zinc-700 p-1 text-zinc-400 transition-colors hover:border-purple-500/50 hover:text-purple-300",

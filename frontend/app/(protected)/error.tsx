@@ -13,7 +13,7 @@ export default function ProtectedError({
     <main className="flex min-h-full flex-1 items-center justify-center bg-zinc-950 px-6 py-24 text-center">
       <div className="flex max-w-md flex-col items-center gap-5">
         <h1 className="bg-gradient-to-r from-purple-300 to-violet-500 bg-clip-text text-3xl font-semibold text-transparent">
-          We couldn&apos;t load your data
+          We Couldn&apos;t Load Your Data
         </h1>
         <p className="text-zinc-400">
           The service may be having trouble. Try again or sign out and back in.
@@ -24,7 +24,7 @@ export default function ProtectedError({
             href="/auth/logout"
             className="inline-flex h-8 items-center rounded-lg border border-zinc-700 px-2.5 text-sm font-medium text-zinc-300 hover:bg-zinc-800"
           >
-            Sign out
+            Sign Out
           </Link>
         </div>
       </div>

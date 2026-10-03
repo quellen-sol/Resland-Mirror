@@ -80,7 +80,7 @@ export default function OnboardingFlow({
                   Upload a Resume
                 </h2>
                 <p className="mt-1 text-sm text-zinc-500">
-                  We&apos;ll parse your resume and fill in your profile for you.
+                  We&apos;ll read your resume and fill in your profile for you.
                 </p>
               </button>
 
@@ -147,7 +147,7 @@ export default function OnboardingFlow({
                   className="border-red-500/30 bg-red-500/10"
                 >
                   <CircleAlert />
-                  <AlertTitle>Couldn&apos;t save</AlertTitle>
+                  <AlertTitle>Couldn&apos;t Save</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
               )}

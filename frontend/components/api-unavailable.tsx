@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 
 export default function ApiUnavailable({
   onRetry,
-  message = "The Resland API is unavailable right now. Please try again in a moment.",
+  message = "We can't reach Resland's servers right now. Please try again in a moment.",
 }: {
   onRetry: () => void;
   message?: string;
@@ -14,7 +14,7 @@ export default function ApiUnavailable({
   return (
     <Alert className="border-amber-500/30 bg-amber-500/10 text-amber-100">
       <CloudOff className="text-amber-400" />
-      <AlertTitle>Can&apos;t reach the Resland API</AlertTitle>
+      <AlertTitle>Can&apos;t Reach Resland</AlertTitle>
       <AlertDescription className="flex flex-wrap items-center justify-between gap-3 text-amber-200">
         <span>{message}</span>
         <Button

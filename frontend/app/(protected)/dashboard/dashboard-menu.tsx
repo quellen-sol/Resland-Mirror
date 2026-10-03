@@ -60,7 +60,7 @@ export default function DashboardMenu({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger
-        aria-label="Open menu"
+        aria-label="Open Menu"
         title="Menu"
         className={cn(
           buttonVariants({ variant: "outline", size: "icon-sm" }),
