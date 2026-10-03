@@ -118,6 +118,22 @@ def _text(x, y, text, font="F1", size=11):
     return f"BT /{font} {size} Tf {x} {y} Td ({text}) Tj ET"
 
 
+def _circle(cx, cy, r, paint="f"):
+    """A circle from four Bézier arcs — how generators draw bullet dots."""
+    k = 0.5523 * r
+    return (
+        f"{cx + r} {cy} m "
+        f"{cx + r} {cy + k} {cx + k} {cy + r} {cx} {cy + r} c "
+        f"{cx - k} {cy + r} {cx - r} {cy + k} {cx - r} {cy} c "
+        f"{cx - r} {cy - k} {cx - k} {cy - r} {cx} {cy - r} c "
+        f"{cx + k} {cy - r} {cx + r} {cy - k} {cx + r} {cy} c {paint}"
+    )
+
+
+def _texts(ops):
+    return [line.text for line in pdfdoc.parse_pdf(_pdf_bytes(ops)).lines]
+
+
 def _resume_ops():
     """A one-page resume: name (bold, big), contact, a rule, then a
     section header + entry line — y measured from the bottom (PDF coords)."""
@@ -382,16 +398,84 @@ class ParsePdf(unittest.TestCase):
         self.assertIn("Jan 2020 - Present", line.text)
 
     def test_curve_dot_becomes_bullet_glyph(self):
-        """A tiny filled square right before the text on the same row is
-        a bullet dot — it becomes a '• ' prefix."""
+        """Tiny filled circles right before list lines are drawn bullets —
+        they become '• ' prefixes; the line without one stays plain."""
         ops = [
-            "63 640 3 3 re f",
+            _circle(66, 643, 1.5),
             _text(75, 640, "Did a thing"),
-            _text(75, 624, "Not a bullet"),
+            _circle(66, 627, 1.5),
+            _text(75, 624, "Did another thing"),
+            _text(75, 608, "Not a bullet"),
         ]
         doc = pdfdoc.parse_pdf(_pdf_bytes(ops))
-        self.assertEqual(doc.lines[0].text, "• Did a thing")
-        self.assertEqual(doc.lines[1].text, "Not a bullet")
+        self.assertEqual(
+            [l.text for l in doc.lines],
+            ["• Did a thing", "• Did another thing", "Not a bullet"],
+        )
+
+    def test_drawn_square_and_hollow_bullets_keep_their_shape(self):
+        ops = [
+            "63 640 3 3 re f",
+            _text(75, 640, "Square one"),
+            "63 624 3 3 re f",
+            _text(75, 624, "Square two"),
+            _circle(66, 595, 1.5, paint="S"),
+            _text(75, 592, "Hollow one"),
+            _circle(66, 579, 1.5, paint="S"),
+            _text(75, 576, "Hollow two"),
+        ]
+        texts = [l.text for l in pdfdoc.parse_pdf(_pdf_bytes(ops)).lines]
+        self.assertEqual(
+            texts,
+            ["▪ Square one", "▪ Square two", "○ Hollow one", "○ Hollow two"],
+        )
+
+    def test_lone_dot_marks_a_sentence_not_a_short_field(self):
+        """A one-item list still gets its bullet; a lone icon beside a
+        short field (a city) doesn't."""
+        ops = [
+            _circle(66, 643, 1.5),
+            _text(75, 640, "Shipped the billing rewrite two weeks early"),
+            _circle(66, 403, 2.5),
+            _text(75, 400, "Denver, CO"),
+        ]
+        texts = [l.text for l in pdfdoc.parse_pdf(_pdf_bytes(ops)).lines]
+        self.assertEqual(
+            texts,
+            ["• Shipped the billing rewrite two weeks early", "Denver, CO"],
+        )
+
+    def test_contact_icons_are_not_bullets(self):
+        """5pt icons stacked beside email/phone/location lines are dot-
+        shaped and repeat at one x, exactly like a list — the contact text
+        gives them away (issue: '• jane@x.com')."""
+        ops = []
+        for i, text in enumerate(
+            ["jane@x.com", "555-123-4567", "Denver, CO", "linkedin.com/in/jane"]
+        ):
+            y = 700 - i * 14
+            ops.append(_circle(66.5, y + 3, 2.5))
+            ops.append(_text(76, y, text))
+        texts = [l.text for l in pdfdoc.parse_pdf(_pdf_bytes(ops)).lines]
+        self.assertEqual(
+            texts,
+            ["jane@x.com", "555-123-4567", "Denver, CO", "linkedin.com/in/jane"],
+        )
+
+    def test_icon_shapes_that_arent_dots_are_ignored(self):
+        """Thin bars (contact separators) and 8pt icons aren't bullets."""
+        ops = [
+            "64 638 1 6 re f",
+            _text(75, 640, "Bar beside this line one"),
+            "64 622 1 6 re f",
+            _text(75, 624, "Bar beside this line two"),
+            "60 604 8 8 re f",
+            _text(75, 606, "Big icon beside this line"),
+            "60 588 8 8 re f",
+            _text(75, 590, "Big icon beside this one"),
+        ]
+        texts = [l.text for l in pdfdoc.parse_pdf(_pdf_bytes(ops)).lines]
+        self.assertFalse(any(t.startswith(("•", "▪")) for t in texts), texts)
 
     def test_winansi_code_127_reads_as_bullet(self):
         """Some generators write "•" as code 127 (WinAnsi maps unused codes

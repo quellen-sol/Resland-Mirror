@@ -4,6 +4,7 @@ for docx (`doc_parsers/docx.py`): raw text, block sequence, whitespace map,
 column counts. `capture_format_profile_pdf` in shared.docgen reads the same
 IR to build the resume's FormatProfile."""
 
+import bisect
 import io
 import re
 from collections import Counter
@@ -26,14 +27,32 @@ _ITALIC_WORDS = ("italic", "oblique", "slanted")
 _RULE_MIN_WIDTH_FRAC = 0.3
 _RULE_MAX_THICKNESS_PT = 2.0
 
-# A drawn bullet marker (small circle/square) is this big at most.
+# A drawn bullet marker is a small, roughly square shape (a ~3pt circle or
+# square) — icons are bigger or oddly proportioned, specks are smaller.
+_DOT_MIN_PT = 1.0
 _DOT_MAX_PT = 6.0
+_DOT_MAX_ASPECT = 1.5
 # ...and sits this close, horizontally, to the text it marks.
 _DOT_GAP_MAX_PT = 18.0
+# Bullets of one list share an x position (within this) and follow each
+# other down the page; a dot this many line heights below the previous one
+# starts a new list.
+_DOT_SAME_X_PT = 2.0
+_DOT_LIST_GAP_LINES = 4.0
+# A lone dot (a one-bullet list) counts only before sentence-length text;
+# a lone icon sits beside a short field ("Denver, CO").
+_LONE_BULLET_CHARS = 30
 # Fragments sharing a visual row join into one line; gaps under this get a
 # single space, wider gaps get four — so a right-floated date reads as a
 # gap, not as inline text.
 _ROW_JOIN_GAP_PT = 14.0
+_EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+_PHONE = re.compile(r"^\+?[\d\s().\-/]{7,}$")
+_URL = re.compile(
+    r"^(?:https?://|www\.)\S+$|^[\w.-]+\.(?:com|io|dev|me|org|net|co|app|ai|xyz)(?:/\S*)?$",
+    re.IGNORECASE,
+)
+_LEADING_LABEL = re.compile(r"^[A-Za-z][A-Za-z ]{0,15}:\s*")
 # WinAnsiEncoding maps unused codes (e.g. 127, which some generators emit
 # for "•") to the bullet; pdfminer leaves them as "(cid:127)".
 _WINANSI_BULLET_CID = "(cid:127)"
@@ -112,21 +131,42 @@ def _iter_text_lines(container):
             yield from _iter_text_lines(item)
 
 
+def _dot_glyph(item) -> str | None:
+    """The list marker a small shape stands for, or None when the shape
+    isn't dot-like (lines, slivers, icons bigger than a bullet)."""
+    lt = _layout()
+    if isinstance(item, lt.LTLine):
+        return None
+    w, h = item.x1 - item.x0, item.y1 - item.y0
+    if not (_DOT_MIN_PT <= w <= _DOT_MAX_PT and _DOT_MIN_PT <= h <= _DOT_MAX_PT):
+        return None
+    if max(w, h) / min(w, h) > _DOT_MAX_ASPECT:
+        return None
+    path = getattr(item, "original_path", None) or []
+    straight = isinstance(item, lt.LTRect) or (
+        bool(path) and all(seg[0] in ("m", "l", "h") for seg in path)
+    )
+    if getattr(item, "fill", True):
+        return "▪" if straight else "•"
+    if getattr(item, "stroke", False):
+        # Outline-only shapes: hollow bullets.
+        return "□" if straight else "○"
+    return None
+
+
+
 def _iter_dots(container):
-    """Tiny filled shapes (~3pt circles) — how bullet glyphs are typically
-    drawn in generated PDFs. They sit just left of a list line's text."""
+    """Small dot-like shapes — how bullet glyphs are typically drawn in
+    generated PDFs — as (shape, glyph) pairs."""
     lt = _layout()
     for item in container:
         if isinstance(item, lt.LTFigure):
             yield from _iter_dots(item)
         elif isinstance(item, lt.LTCurve):
-            # LTCurve covers LTLine and LTRect too — keep only dot-sized
-            # shapes (rules are wide, photo frames are big).
-            if (
-                item.x1 - item.x0 <= _DOT_MAX_PT
-                and item.y1 - item.y0 <= _DOT_MAX_PT
-            ):
-                yield item
+            glyph = _dot_glyph(item)
+            if glyph is not None:
+                yield item, glyph
+
 
 
 def _iter_rules(container, min_width: float):
@@ -258,19 +298,106 @@ def _row_rows(frags: list[_Frag]) -> list[list[_Frag]]:
     return rows
 
 
-def _attach_dot(frag: _Frag, dots: list[tuple[float, float, float]]) -> None:
-    """A bullet dot just left of the text becomes the line's '• ' glyph
-    prefix — the pdf analogue of a literal list marker in docx text.
-    `dots` are (x0, x1, cy) triples in top-down coords."""
+# ---------- drawn bullets ----------
+
+
+class _Dot:
+    __slots__ = ("cy", "frag", "glyph", "page", "x0", "x1")
+
+    def __init__(self, item, glyph: str, page_height: float, page: int):
+        self.x0 = item.x0
+        self.x1 = item.x1
+        self.cy = page_height - (item.y0 + item.y1) / 2
+        self.glyph = glyph
+        self.page = page
+        self.frag: _Frag | None = None
+
+
+
+def _contact_like(text: str) -> bool:
+    """An email, phone number, or bare URL/handle — what icons sit next to
+    in a contact block, never what a bullet list holds."""
+    body = _LEADING_LABEL.sub("", text.strip())
+    if _EMAIL.search(body):
+        return True
+    if _PHONE.match(body) and sum(c.isdigit() for c in body) >= 7:
+        return True
+    return bool(_URL.match(body))
+
+
+
+def _match_dots(dots: list[_Dot], frags: list[_Frag]) -> None:
+    """Pair each dot with the fragment that starts just right of it on the
+    same visual line — at most one dot per fragment, the closest wins."""
+    by_cy = sorted(frags, key=lambda f: f.cy)
+    centers = [f.cy for f in by_cy]
+    reach = max((f.height for f in frags), default=0.0)
+    best: dict[int, tuple[float, _Dot]] = {}
     for dot in dots:
-        if (
-            dot[1] <= frag.x0 + 1
-            and frag.x0 - dot[1] <= _DOT_GAP_MAX_PT
-            and abs(dot[2] - frag.cy) <= 3.0
-        ):
-            frag.prefix("•", dot[0])
-            dots.remove(dot)
-            return
+        lo = bisect.bisect_left(centers, dot.cy - reach)
+        hi = bisect.bisect_right(centers, dot.cy + reach)
+        choice: tuple[float, _Frag] | None = None
+        for frag in by_cy[lo:hi]:
+            gap = frag.x0 - dot.x1
+            if gap < -1 or gap > _DOT_GAP_MAX_PT:
+                continue
+            if abs(dot.cy - frag.cy) > max(2.0, frag.height * 0.35):
+                continue
+            if choice is None or gap < choice[0]:
+                choice = (gap, frag)
+        if choice is None:
+            continue
+        gap, frag = choice
+        held = best.get(id(frag))
+        if held is None or gap < held[0]:
+            if held is not None:
+                held[1].frag = None
+            dot.frag = frag
+            best[id(frag)] = (gap, dot)
+
+
+
+def _attach_bullets(dots: list[_Dot]) -> None:
+    """Turn drawn bullet dots into glyph prefixes ("• ", "▪ ", "○ ") — the
+    pdf analogue of a literal list marker in docx text. Icons beside contact lines look
+    exactly like bullets geometrically, so a dot only counts when it marks
+    a list: its run of same-x dots down the page holds at least two lines
+    that are mostly not contact info (email/phone/link), or — a one-item
+    list — it marks a sentence-length line. Contact-info lines never get a
+    bullet."""
+    matched = sorted(
+        (d for d in dots if d.frag is not None), key=lambda d: d.x0
+    )
+    groups: list[list[_Dot]] = []
+    for dot in matched:
+        if groups and dot.x0 - groups[-1][0].x0 <= _DOT_SAME_X_PT:
+            groups[-1].append(dot)
+        else:
+            groups.append([dot])
+    for group in groups:
+        group.sort(key=lambda d: (d.page, d.cy))
+        clusters: list[list[_Dot]] = []
+        for dot in group:
+            prev = clusters[-1][-1] if clusters else None
+            if (
+                prev is not None
+                and prev.page == dot.page
+                and dot.cy - prev.cy
+                <= _DOT_LIST_GAP_LINES * max(prev.frag.height, dot.frag.height)
+            ):
+                clusters[-1].append(dot)
+            else:
+                clusters.append([dot])
+        for cluster in clusters:
+            if len(cluster) < 2 and len(cluster[0].frag.text) < _LONE_BULLET_CHARS:
+                continue
+            contact = sum(_contact_like(d.frag.text) for d in cluster)
+            if contact * 2 >= len(cluster):
+                continue
+            for dot in cluster:
+                if not _contact_like(dot.frag.text):
+                    dot.frag.prefix(dot.glyph, dot.x0)
+
 
 
 def _merge_row(page_number: int, frags: list[_Frag]) -> PdfLine | None:
@@ -317,27 +444,37 @@ def parse_pdf(file_data: bytes) -> PdfDoc:
 
     lt = _layout()
     doc = PdfDoc()
+    staged: list[tuple[PdfPage, list[_Frag]]] = []
+    dots: list[_Dot] = []
     for page_layout in extract_pages(
         io.BytesIO(file_data), laparams=lt.LAParams(all_texts=True)
     ):
         page = PdfPage(
-            number=len(doc.pages), width=page_layout.width, height=page_layout.height
+            number=len(staged), width=page_layout.width, height=page_layout.height
         )
         frags = [
-            _Frag(item, page.height)
-            for item in _iter_text_lines(page_layout)
-        ]
-        dots = [
-            (
-                d.x0,
-                d.x1,
-                page.height - (d.y0 + d.y1) / 2,
+            frag
+            for frag in (
+                _Frag(item, page.height) for item in _iter_text_lines(page_layout)
             )
-            for d in _iter_dots(page_layout)
+            if not frag.empty
         ]
-        for frag in frags:
-            if not frag.empty:
-                _attach_dot(frag, dots)
+        page_dots = [
+            _Dot(item, glyph, page.height, page.number)
+            for item, glyph in _iter_dots(page_layout)
+        ]
+        _match_dots(page_dots, frags)
+        dots.extend(page_dots)
+        min_width = page.width * _RULE_MIN_WIDTH_FRAC
+        page.hrules = sorted(
+            round(page.height - (rule.y0 + rule.y1) / 2, 1)
+            for rule in _iter_rules(page_layout, min_width)
+        )
+        staged.append((page, frags))
+    # Bullet lists are recognized document-wide (a list continued on the
+    # next page shares its x with the first page's).
+    _attach_bullets(dots)
+    for page, frags in staged:
         # Merge fragments that share a visual row. On a genuine two-column
         # page the columns stay separate; everywhere else a title and its
         # right-floated dates (or a label and its value) read as one line.
@@ -376,11 +513,6 @@ def parse_pdf(file_data: bytes) -> PdfDoc:
             prev = line
         if page.lines:
             page.lines[-1].ends_page = True
-        min_width = page.width * _RULE_MIN_WIDTH_FRAC
-        page.hrules = sorted(
-            round(page.height - (rule.y0 + rule.y1) / 2, 1)
-            for rule in _iter_rules(page_layout, min_width)
-        )
         doc.pages.append(page)
     return doc
 
