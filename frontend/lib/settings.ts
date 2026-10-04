@@ -2,8 +2,10 @@ import { db } from "../prisma/db";
 
 // DB-backed kill switches toggled from /admin (site_settings row id=1).
 // Cached in-process so the proxy and server components don't hit Postgres
-// per request; writes via the /api/admin/settings route prime this cache so
-// the toggling deploy sees the change immediately.
+// per request. Keep the TTL short: the proxy is bundled separately from the
+// app and gets its own copy of this module, so primeSiteSettingsCache (called
+// by /api/admin/settings) never reaches it. The TTL is the only thing that
+// lets the proxy, and every other replica, see a toggle.
 export interface SiteSettings {
   maintenance_mode: boolean;
   payments_paused: boolean;
@@ -11,7 +13,7 @@ export interface SiteSettings {
 }
 
 const ROW_ID = 1;
-const TTL_MS = 600_000; // 10 minutes
+const TTL_MS = 5_000;
 const OFF: SiteSettings = {
   maintenance_mode: false,
   payments_paused: false,
@@ -61,6 +63,7 @@ export async function getSiteSettings(): Promise<SiteSettings> {
   }
 }
 
+// Only primes the calling bundle's copy (see the note at the top).
 export function primeSiteSettingsCache(value: SiteSettings) {
   cache = { value, expiresAt: Date.now() + TTL_MS };
 }

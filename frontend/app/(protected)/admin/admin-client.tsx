@@ -435,7 +435,7 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
               {
                 key: "maintenance_mode",
                 label: "Maintenance Mode",
-                desc: "Serve the 503 maintenance page to everyone but site admins. API requests get a 503; docs and the Stripe webhook stay up.",
+                desc: "Show a maintenance banner on the landing page and serve the 503 maintenance page for the rest of the app to everyone but site admins. API requests get a 503; docs and the Stripe webhook stay up.",
               },
               {
                 key: "payments_paused",
