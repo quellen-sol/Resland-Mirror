@@ -20,7 +20,7 @@ export const topic: DsaTopic = {
     {
       type: "diagram",
       text: "       |----------------- 39 ------------------|\n       |------- 22 --------|------- 17 --------|\n       |-- 13 ---|--- 9 ---|--- 9 ---|--- 8 ---|\nvalue    5    8    6    3    2    7    2    6\nindex    0    1    2    3    4    5    6    7",
-      caption: "A segment tree over 8 values: each bar stores the sum of the indexes under it. The sum of indexes 2 to 5 is two stored bars, 9 + 9 = 18, without touching the leaves.",
+      caption: "A segment tree over 8 values: each bar stores the sum of the values under it. The sum over indexes 2 to 5 is two stored bars, 9 + 9 = 18, without touching the leaves.",
     },
     {
       type: "p",
@@ -168,7 +168,7 @@ export const topic: DsaTopic = {
         },
         {
           type: "tip",
-          text: "Merge sort solves this in O(n log n) too. When two sorted halves merge, every right-half element placed ahead of a left-half element is smaller than it and came after it in the array. So as each left element is placed, add the number of right-half elements already placed to its count.",
+          text: "Merge sort solves this in O(n log n) too. When two sorted halves merge and ties take from the left, every right-half element placed ahead of a left-half element is smaller than it and came after it in the array. So as each left element is placed, add the number of right-half elements already placed to its count.",
         },
       ],
       time: "O(n log n)",

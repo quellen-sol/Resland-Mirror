@@ -11,7 +11,7 @@ export const topic: DsaTopic = {
   overview: [
     {
       type: "p",
-      text: "Plenty of array problems have an obvious O(n²) answer: try every pair. Two pointers gets the same answer in O(n) by keeping two indices and moving one of them each step, so the pair of positions you're looking at only ever moves forward.",
+      text: "Plenty of array problems have an obvious O(n²) answer: try every pair. Two pointers gets the same answer in O(n) by keeping two indices and moving one of them each step, and neither index ever moves back.",
     },
     {
       type: "p",

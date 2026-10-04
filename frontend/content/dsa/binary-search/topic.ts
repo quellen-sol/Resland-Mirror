@@ -64,7 +64,7 @@ export const topic: DsaTopic = {
         items: [
           "If `nums[mid] < target`, then `mid` and everything left of it are too small, so set `lo = mid + 1`.",
           "Otherwise `mid` might be the answer. Keep it in range with `hi = mid`.",
-          "When `lo == hi`, one index is left, and it's the answer.",
+          "When `lo == hi`, the range is empty and `lo` is the answer: the first index that passed, or `nums.length` if none did.",
         ],
       },
       {

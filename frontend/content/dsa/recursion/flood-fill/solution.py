@@ -1,3 +1,10 @@
+import sys
+
+# A 50 x 50 region recurses up to 2,500 calls deep, past Python's default
+# limit of 1,000 frames.
+sys.setrecursionlimit(10_000)
+
+
 def flood_fill(image: list[list[int]], sr: int, sc: int, color: int) -> list[list[int]]:
     """Repaints the pixel at (sr, sc) and every pixel connected to it, up, down,
     left or right, that has the same original color."""

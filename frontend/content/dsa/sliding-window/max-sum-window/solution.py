@@ -1,6 +1,8 @@
 def max_sum_window(nums: list[int], k: int) -> int:
     """Largest sum of any `k` consecutive elements of `nums` (1 <= k <= len(nums))."""
-    window_sum = sum(nums[:k])  # The first window, summed directly.
+    window_sum = 0
+    for i in range(k):
+        window_sum += nums[i]  # The first window, summed directly.
     best = window_sum  # Not 0: every window's sum could be negative.
     for right in range(k, len(nums)):
         # Slide one step: nums[right] enters and nums[right - k] leaves.

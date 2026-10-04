@@ -114,7 +114,7 @@ export const topic: DsaTopic = {
       statement: [
         {
           type: "p",
-          text: "Given strings `s` and `t`, return the shortest substring of `s` that contains every character of `t`, counting repeats: if `t` has two `a`s, the window needs two `a`s. Return an empty string if no such window exists.",
+          text: "Given strings `s` and `t`, return the shortest substring of `s` that contains every character of `t`, counting repeats: if `t` has two `a`s, the window needs two `a`s. Return an empty string if no such window exists. Neither string is empty.",
         },
         {
           type: "p",

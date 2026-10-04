@@ -103,7 +103,7 @@ export const topic: DsaTopic = {
           text: "A third option sits in between: sort the array and compare neighbors, since equal values end up next to each other. That's O(n log n) time and needs little extra memory if you're allowed to sort in place.",
         },
       ],
-      time: "O(n²) by pairs, O(n) with a set",
+      time: "O(n²) by pairs, O(n) average with a set",
       space: "O(1) by pairs, O(n) with a set",
       link: {
         label: "LeetCode 217",

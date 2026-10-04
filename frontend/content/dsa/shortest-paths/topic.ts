@@ -37,7 +37,7 @@ export const topic: DsaTopic = {
     },
     {
       type: "p",
-      text: "**Bellman-Ford** drops the greedy step and simply relaxes every edge, V - 1 times over. After round `i`, every distance is at least as good as the best path with `i` edges or fewer. Without negative cycles, a shortest path never repeats a node, so it has at most V - 1 edges, and V - 1 rounds are enough. If one more round still improves something, there's a negative cycle, and \"shortest\" stops meaning anything for nodes that cycle can reach. Stopping after `k` rounds instead gives the cheapest path that uses at most `k` edges, which is how Cheapest Flights Within K Stops works below.",
+      text: "**Bellman-Ford** drops the greedy step and simply relaxes every edge, V - 1 times over. After round `i`, every distance is at least as good as the best path with `i` edges or fewer. Without negative cycles, a shortest path never repeats a node, so it has at most V - 1 edges, and V - 1 rounds are enough. If one more round still improves something, there's a negative cycle, and \"shortest\" stops meaning anything for nodes that cycle can reach. Stopping after `k` rounds instead gives the cheapest path that uses at most `k` edges, but only if each round reads the distances from the round before. Relaxing in place can chain several edges in one round, which is why Cheapest Flights Within K Stops below works on a copy.",
     },
   ],
   signals: [

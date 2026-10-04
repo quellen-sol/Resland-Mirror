@@ -26,7 +26,7 @@ export const topic: DsaTopic = {
       type: "list",
       items: [
         "**Grid paths.** A cell is entered from above or from the left, so `dp[r][c]` combines `up` and `left`: a sum to count paths, a minimum for the cheapest path. Unique Paths and Minimum Path Sum.",
-        "**Two strings.** Compare the last characters of the two prefixes. A match usually moves along the diagonal, and a mismatch drops a character from one side (`up` or `left`). Longest Common Subsequence and Edit Distance.",
+        "**Two strings.** Compare the last characters of the two prefixes. A match usually moves along the diagonal, and a mismatch drops a character from one side (`up` or `left`) or, in Edit Distance, replaces one (`diagonal`). Longest Common Subsequence and Edit Distance.",
         "**Intervals.** `dp[i][j]` covers the substring from `i` to `j` and reads shorter intervals inside it, so you fill by increasing length instead of row by row. Longest Palindromic Subsequence is the classic.",
       ],
     },
@@ -65,7 +65,7 @@ export const topic: DsaTopic = {
       },
       {
         type: "tip",
-        text: "Each row only reads the row above, so one array is enough: `row[c] += row[c - 1]`, where `row[c]` still holds the value from above when you add to it. There's also a closed form. Every path is m - 1 moves down and n - 1 moves right in some order, so the answer is C(m + n - 2, m - 1).",
+        text: "Each row only reads itself and the row above, so one array is enough: `row[c] += row[c - 1]`, where `row[c]` still holds the value from above and `row[c - 1]` already holds the new value to its left. There's also a closed form. Every path is m - 1 moves down and n - 1 moves right in some order, so the answer is C(m + n - 2, m - 1).",
       },
     ],
     time: "O(m · n)",
@@ -93,7 +93,7 @@ export const topic: DsaTopic = {
         },
         {
           type: "p",
-          text: "Look at the last character of each prefix. If they match, that character can end the common subsequence, and the rest comes from both shorter prefixes: `dp[i - 1][j - 1] + 1`. If they don't match, at least one of the two isn't in the answer, so drop one or the other and keep the better result: `max(dp[i - 1][j], dp[i][j - 1])`.",
+          text: "Look at the last character of each prefix. If they match, that character can end the common subsequence, and the rest comes from both shorter prefixes: `dp[i - 1][j - 1] + 1`. Taking the match is always safe, because dropping one character from a prefix lowers its LCS by at most 1, so skipping a matched pair can't do better. If they don't match, at least one of the two isn't in the answer, so drop one or the other and keep the better result: `max(dp[i - 1][j], dp[i][j - 1])`.",
         },
         {
           type: "diagram",
@@ -102,7 +102,7 @@ export const topic: DsaTopic = {
         },
         {
           type: "p",
-          text: "There are (m + 1)(n + 1) cells and each takes O(1), so time and space are both O(m · n). Each row reads only the row above it, so two rows bring the space down to O(min(m, n)) if you put the shorter string along the columns.",
+          text: "There are (m + 1)(n + 1) cells and each takes O(1), so time and space are both O(m · n). Each row reads only itself and the row above it, so two rows bring the space down to O(min(m, n)) if you put the shorter string along the columns.",
         },
         {
           type: "tip",

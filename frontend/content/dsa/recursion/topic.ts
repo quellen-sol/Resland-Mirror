@@ -31,7 +31,7 @@ export const topic: DsaTopic = {
       items: [
         "**One call on a slightly smaller input.** Factorial, summing a list, walking a linked list. The stack grows as deep as the input is long.",
         "**One call on half the input.** Fast exponentiation and [binary search](/dsa/binary-search). Only O(log n) levels deep.",
-        "**Several calls per level.** Flood fill, [tree traversals](/dsa/binary-trees) and [backtracking](/dsa/backtracking). The total work is the size of the whole call tree, which can be exponential when branches repeat each other. Caching those repeats is how [dynamic programming](/dsa/dp-1d) starts.",
+        "**Several calls per level.** Flood fill, [tree traversals](/dsa/binary-trees) and [backtracking](/dsa/backtracking). The total work is the size of the whole call tree. That's linear when each node or cell is handled once, as in flood fill. It's exponential when the tree branches at every level: backtracking does that on purpose to try every combination, and naive Fibonacci does it by accident, because its branches repeat each other. Caching those repeats is how [dynamic programming](/dsa/dp-1d) starts.",
       ],
     },
   ],
@@ -75,7 +75,7 @@ export const topic: DsaTopic = {
       statement: [
         {
           type: "p",
-          text: "Write a function that raises a floating-point number `x` to an integer power `n`, without the language's built-in power function. The exponent can be negative, and it can be anywhere in the 32-bit range, so multiplying `x` by itself `n` times is far too slow.",
+          text: "Write a function that raises a floating-point number `x` to an integer power `n`, without the language's built-in power function. The exponent can be negative, and it can be anywhere in the 32-bit range, so multiplying `x` by itself `n` times is far too slow. You can assume `x` isn't 0 when `n` is negative, and that the answer stays between -10^4 and 10^4.",
         },
         {
           type: "p",
@@ -133,7 +133,7 @@ export const topic: DsaTopic = {
         },
         {
           type: "tip",
-          text: "Every pixel is painted at most once, so the time is O(m · n) for an `m` by `n` image. The recursion can get as deep as the region is large, which on a big grid can blow past Python's default limit of 1,000 frames. In that case switch to an explicit stack, as in [Graph Traversal](/dsa/graph-traversal).",
+          text: "Every pixel is painted at most once, so the time is O(m · n) for an `m` by `n` image. The recursion can get as deep as the region is large. LeetCode allows a 50 by 50 image, so a one-color image goes 2,500 calls deep, past Python's default limit of 1,000 frames. The Python version raises the limit; an explicit stack, as in [Graph Traversal](/dsa/graph-traversal), avoids the problem in any language.",
         },
       ],
       time: "O(m · n)",

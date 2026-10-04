@@ -36,7 +36,7 @@ export const topic: DsaTopic = {
         "**Merge.** Sort by start and keep extending the current block while the next interval overlaps it. That's the template below.",
         "**Insert.** When the list is already sorted and overlap-free, skip the sort: copy what comes before the new interval, absorb what overlaps it, copy what comes after. That's O(n).",
         "**Count overlaps.** Sort the start times and end times separately and sweep through them in time order. The most intervals active at once answers meeting rooms, car pooling and similar questions.",
-        "**Keep the most.** To keep as many non-overlapping intervals as possible, sort by end and keep taking the one that finishes first. That's a [greedy](/dsa/greedy) choice.",
+        "**Keep the most.** To keep as many non-overlapping intervals as possible, sort by end and keep taking the next one that starts after the last one you kept ends. Finishing as early as possible leaves the most room for the rest, which is a [greedy](/dsa/greedy) choice.",
       ],
     },
   ],

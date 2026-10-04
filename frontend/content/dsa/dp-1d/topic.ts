@@ -61,7 +61,7 @@ export const topic: DsaTopic = {
     explanation: [
       {
         type: "p",
-        text: "Count the distinct ways to climb `n` stairs when each move is 1 or 2 steps (LeetCode 70). The state is `ways(i)`, the number of ways to reach step `i`, and the recurrence is `ways(i) = ways(i - 1) + ways(i - 2)` with `ways(0) = ways(1) = 1`. The file computes it three ways, from most direct to most compact:",
+        text: "Count the distinct ways to climb `n` stairs when each move is 1 or 2 steps (LeetCode 70). The state is `ways(i)`, the number of ways to reach step `i`, and the recurrence is `ways(i) = ways(i - 1) + ways(i - 2)` with `ways(0) = ways(1) = 1`. LeetCode caps `n` at 45, the last value whose answer fits in a 32-bit int. The file computes it three ways, from most direct to most compact:",
       },
       {
         type: "list",

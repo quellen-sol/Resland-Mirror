@@ -141,7 +141,7 @@ export const topic: DsaTopic = {
         },
         {
           type: "p",
-          text: "Run the search one frontier at a time. Every orange the current frontier rots goes into the next frontier, and each pass is one minute. Count the fresh oranges up front and subtract as they rot. If the frontier runs dry while some are still fresh, those oranges are walled off from every rotten one, so the answer is `-1`. The loop also stops as soon as nothing fresh is left, which makes a grid with no fresh oranges take `0` minutes.",
+          text: "Run the search one frontier at a time. Every orange the current frontier rots goes into the next frontier, and each pass is one minute. Count the fresh oranges up front and subtract as they rot. If the frontier runs dry while some are still fresh, those oranges are walled off from every rotten one, so the answer is `-1`. The loop also stops as soon as nothing fresh is left, which makes a grid with no fresh oranges take `0` minutes. Like Number of Islands, it marks progress by rewriting the grid in place, so copy the grid first if the caller still needs it.",
         },
         {
           type: "p",

@@ -8,7 +8,7 @@ public class Solution {
         // need.get(c) is how many more copies of c the window has to take in.
         // It goes negative when the window holds spares.
         Map<Character, Integer> need = new HashMap<>();
-        for (char c : t.toCharArray()) need.merge(c, 1, Integer::sum);
+        for (int i = 0; i < t.length(); i++) need.merge(t.charAt(i), 1, Integer::sum);
         int missing = t.length(); // Characters of t the window still lacks.
         int bestStart = 0;
         int bestLength = s.length() + 1; // Longer than any real window.

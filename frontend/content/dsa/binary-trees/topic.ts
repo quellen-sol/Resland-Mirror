@@ -70,7 +70,7 @@ export const topic: DsaTopic = {
       },
     ],
     time: "O(n) each",
-    space: "O(h) recursion, O(w) queue",
+    space: "O(n) for the output; O(h) recursion and an O(w) queue on top",
   },
   problems: [
     {

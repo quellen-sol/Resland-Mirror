@@ -174,7 +174,7 @@ export const topic: DsaTopic = {
       statement: [
         {
           type: "p",
-          text: "Place `n` queens on an `n x n` chessboard so that no two share a row, a column or a diagonal. Return every such arrangement, each as a list of row strings where `Q` is a queen and `.` is an empty square.",
+          text: "Place `n` queens on an `n x n` chessboard so that no two share a row, a column or a diagonal. Return every such arrangement, each as a list of row strings where `Q` is a queen and `.` is an empty square. `n` is at least 1.",
         },
         {
           type: "p",

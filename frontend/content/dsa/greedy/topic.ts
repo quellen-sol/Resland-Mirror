@@ -19,7 +19,7 @@ export const topic: DsaTopic = {
     },
     {
       type: "p",
-      text: "For example, to fit the most non-overlapping meetings into one room, keep taking the meeting that ends first. Whatever meeting an optimal schedule starts with, you can swap in the earliest-ending one instead. It ends no later, so it can't run into any meeting the schedule had after it. The [Intervals](/dsa/intervals) topic uses the same rule.",
+      text: "For example, to fit the most non-overlapping meetings into one room, keep taking the meeting that ends first among those that don't clash with the ones you've already taken. Whatever meeting an optimal schedule starts with, you can swap in the earliest-ending one instead. It ends no later, so it can't run into any meeting the schedule had after it. The [Intervals](/dsa/intervals) topic uses the same rule.",
     },
     {
       type: "p",

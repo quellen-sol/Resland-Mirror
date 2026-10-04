@@ -28,7 +28,7 @@ export const topic: DsaTopic = {
     },
     {
       type: "p",
-      text: "The other approach is **DFS**. Run a DFS from every unvisited node and append each node to a list once everything it points to is finished (post-order). Reversing that list gives a topological order, because a node always finishes after all the nodes it points to. To detect cycles, track three states per node: unvisited, on the current path, and done. Reaching a node that's still on the current path means you've found a cycle. Course Schedule below works through this version.",
+      text: "The other approach is **DFS**. Run a DFS from every unvisited node and append each node to a list once everything it points to is finished (post-order). Reversing that list gives a topological order, because a node always finishes after all the nodes it points to. To detect cycles, track three states per node: unvisited, on the current path, and done. Reaching a node that's still on the current path means you've found a cycle. Course Schedule below uses those three states to find a cycle.",
     },
     {
       type: "tip",
@@ -154,7 +154,7 @@ export const topic: DsaTopic = {
     },
   ],
   pitfalls: [
-    "Reversing the edges. In the course problems, `[a, b]` means `b` comes first, so the edge is `b -> a`. Get it backwards and Kahn's puts every course before its own prerequisites. A cycle check still passes by luck, since flipping every edge keeps every cycle.",
+    "Reversing the edges. In the course problems, `[a, b]` means `b` comes first, so the edge is `b -> a`. Get it backwards and Kahn's puts every course before its own prerequisites. A cycle check still gives the right answer, because flipping every edge keeps every cycle, so the mistake can hide until you need the order itself.",
     "Skipping the length check after Kahn's. On a graph with a cycle it quietly returns a partial order instead of failing.",
     "Using a single `seen` flag for DFS cycle detection on a directed graph. A node reached twice by different paths, like the bottom of a diamond, looks like a cycle when it isn't one.",
     "Starting the DFS only from node 0, or only from nodes with no prerequisites. A cycle can sit where none of those starts reach, so start from every unvisited node.",

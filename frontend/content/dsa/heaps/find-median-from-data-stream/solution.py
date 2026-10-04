@@ -5,7 +5,7 @@ class MedianFinder:
     """Running median of a stream, kept in two heaps that split it in half."""
 
     def __init__(self) -> None:
-        # heapq only makes min-heaps, so low stores negated values.
+        # Before Python 3.14, heapq only makes min-heaps, so low stores negated values.
         self.low: list[int] = []  # Max-heap of the smaller half.
         self.high: list[int] = []  # Min-heap of the larger half.
 
