@@ -123,8 +123,14 @@ async def answer_suggestion(
     if session.status != "WAITING_FOR_INPUT":
         raise HTTPException(status_code=409, detail="Session is not awaiting input")
 
+    # Keep any options already shown — a reply asking for more that ends
+    # without a resubmit leaves them as the ones to apply.
     await db.update_sugg_session(
-        pg_conn, session_id, status="PROCESSING", pending_question=None, result=None
+        pg_conn,
+        session_id,
+        status="PROCESSING",
+        pending_question=None,
+        result=session.result,
     )
     # Commit before publishing — the pooled connection otherwise commits at
     # teardown and could overwrite the dispatcher's result write.
@@ -159,7 +165,11 @@ async def retry_suggestion(
     await require_balance(pg_conn, user_id)
 
     await db.update_sugg_session(
-        pg_conn, session_id, status="PROCESSING", pending_question=None, result=None
+        pg_conn,
+        session_id,
+        status="PROCESSING",
+        pending_question=None,
+        result=session.result,
     )
     # Commit before publishing — the pooled connection otherwise commits at
     # teardown and could overwrite the dispatcher's result write.
@@ -174,8 +184,55 @@ async def retry_suggestion(
     return {"ok": True}
 
 
+def _options_by_bullet(result: list[dict]) -> dict[int, list[str]]:
+    """bullet_id -> options from a stored result: a JSON array of
+    {bullet_id, options}. Sessions from before options existed stored a
+    single {bullet_id, suggestion} — that reads as one option."""
+    options: dict[int, list[str]] = {}
+    for entry in result:
+        if "options" in entry:
+            options[entry["bullet_id"]] = list(entry["options"])
+        else:
+            options[entry["bullet_id"]] = [entry["suggestion"]]
+    return options
+
+
+def _chosen_updates(
+    options: dict[int, list[str]], choices: list[model.AcceptChoice]
+) -> list[tuple[str, int]]:
+    """(new text, bullet_id) per choice; 400 on any choice the session
+    didn't offer, before anything is written."""
+    if not choices:
+        raise HTTPException(status_code=400, detail="Pick at least one option")
+    updates: list[tuple[str, int]] = []
+    seen: set[int] = set()
+    for choice in choices:
+        offered = options.get(choice.bullet_id)
+        if offered is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No suggestion for bullet {choice.bullet_id}",
+            )
+        if choice.bullet_id in seen:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Bullet {choice.bullet_id} was chosen more than once",
+            )
+        seen.add(choice.bullet_id)
+        if choice.option >= len(offered):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Bullet {choice.bullet_id} has no option {choice.option}",
+            )
+        updates.append((offered[choice.option], choice.bullet_id))
+    return updates
+
+
 async def accept_suggestion(
-    user_id: str, session_id: str, pg_conn: PgConnection
+    user_id: str,
+    session_id: str,
+    pg_conn: PgConnection,
+    req: model.AcceptSuggestionRequest | None = None,
 ) -> dict:
     session = await db.get_sugg_session(
         pg_conn=pg_conn, session_id=session_id, user_id=user_id
@@ -187,18 +244,25 @@ async def accept_suggestion(
     if not result or not isinstance(result, str) or result == "":
         raise HTTPException(status_code=500, detail="No result to accept")
 
-    # Results are stored as a JSON array of {bullet_id, suggestion}.
-    result_parsed: list[dict] = json.loads(result)
+    options = _options_by_bullet(json.loads(result))
+    if req is None:
+        # Clients from before options existed send no body.
+        choices = [
+            model.AcceptChoice(bullet_id=bullet_id, option=0) for bullet_id in options
+        ]
+    else:
+        choices = req.choices
+    updates = _chosen_updates(options, choices)
 
     async with pg_conn.transaction(), pg_conn.cursor() as cursor:
-        for sugg in result_parsed:
+        for text, bullet_id in updates:
             await cursor.execute(
                 """
                     UPDATE user_base_experience_bullet
                     SET bullet = %s
                     WHERE id = %s AND user_experience_id = %s
                     """,
-                (sugg["suggestion"], sugg["bullet_id"], session.experience_id),
+                (text, bullet_id, session.experience_id),
             )
 
     await db.delete_sugg_session(pg_conn, session_id, user_id)

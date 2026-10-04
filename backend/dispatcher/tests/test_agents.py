@@ -17,7 +17,7 @@ import docx
 from langchain.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from dispatcher.agents import docx_parser, suggestions, tailor
+from dispatcher.agents import docx_parser, suggestions, tailor, writing
 
 
 class FakeChatModel:
@@ -163,6 +163,15 @@ def _last_tool_msg(model):
     return None
 
 
+def _opts(bullet_id=7, options=("a", "b", "c")):
+    """submit/verify args: one bullet with its rewrite options."""
+    return {
+        "suggestions": {
+            "suggestions": [{"bullet_id": bullet_id, "options": list(options)}]
+        }
+    }
+
+
 class SuggestionAgent(unittest.TestCase):
     def setUp(self):
         self.saver = InMemorySaver()
@@ -192,34 +201,54 @@ class SuggestionAgent(unittest.TestCase):
             )
         return outcome, model_cls.return_value
 
-    def test_completed_flow_submits_and_counts_usage(self):
+    def test_submit_waits_for_review_with_options(self):
         outcome, model = self._run(
             [
                 tc("get_user_bullet_points", {}),
-                tc(
-                    "verify_final_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "Did x"}]}},
-                    tc_id="tc-2",
-                ),
-                tc(
-                    "submit_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "Did x"}]}},
-                    tc_id="tc-3",
-                ),
+                tc("verify_final_suggestions", _opts(), tc_id="tc-2"),
+                tc("submit_suggestions", _opts(), tc_id="tc-3"),
             ]
         )
+        # Submitting pauses on the review interrupt: the options ride along
+        # so the runner stores them while the user picks one or asks for more.
+        self.assertEqual(outcome.status, "waiting")
+        self.assertEqual(outcome.question, suggestions.REVIEW_PROMPT)
+        self.assertEqual(outcome.result.suggestions[0].options, ["a", "b", "c"])
+        # The model isn't called again after a successful submit.
+        self.assertEqual(len(model.calls), 3)
+
+    def test_reply_to_review_resumes_and_resubmits(self):
+        self._run([tc("submit_suggestions", _opts())])
+        outcome, model = self._run(
+            [tc("submit_suggestions", _opts(options=("d", "e", "f")))],
+            answer="shorter please",
+        )
+        self.assertEqual(outcome.status, "waiting")
+        self.assertEqual(outcome.result.suggestions[0].options, ["d", "e", "f"])
+        # The reply reaches the model as a user message with the earlier
+        # options still in context, so it can avoid repeating them.
+        reply = model.calls[0][-1]
+        self.assertEqual(reply.type, "human")
+        self.assertEqual(reply.content, "shorter please")
+        earlier = [
+            m
+            for m in model.calls[0]
+            if getattr(m, "type", None) == "ai" and m.tool_calls
+        ]
+        self.assertEqual(earlier[0].tool_calls[0]["name"], "submit_suggestions")
+
+    def test_reply_without_resubmit_completes_with_no_new_result(self):
+        self._run([tc("submit_suggestions", _opts())])
+        outcome, _ = self._run([ai("Glad they work for you.")], answer="thanks")
+        # No fresh submit: the runner keeps the stored options and completes.
         self.assertEqual(outcome.status, "completed")
-        self.assertEqual(outcome.result.suggestions[0].suggestion, "Did x")
+        self.assertIsNone(outcome.result)
 
     def test_bullet_points_tool_returns_experience_rows(self):
         _, model = self._run(
             [
                 tc("get_user_bullet_points", {}),
-                tc(
-                    "submit_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "x"}]}},
-                    tc_id="tc-2",
-                ),
+                tc("submit_suggestions", _opts(), tc_id="tc-2"),
             ]
         )
         tool_msg = model.calls[1][-1]
@@ -235,21 +264,18 @@ class SuggestionAgent(unittest.TestCase):
         )
         self.assertEqual(outcome.status, "waiting")
         self.assertEqual(outcome.question, "How many engineers?")
+        self.assertIsNone(outcome.result)
 
     def test_answer_resumes_interrupt(self):
         # First run ends waiting on a question; the answer resumes the
         # same checkpoint (shared saver) and the tool returns it.
         self._run([tc("ask_clarifying_question", {"question": "Team size?"})])
         outcome, model = self._run(
-            [
-                tc(
-                    "submit_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "x"}]}},
-                )
-            ],
+            [tc("submit_suggestions", _opts())],
             answer="5 engineers",
         )
-        self.assertEqual(outcome.status, "completed")
+        self.assertEqual(outcome.status, "waiting")
+        self.assertIsNotNone(outcome.result)
         resumed_msg = model.calls[0][-1]
         self.assertEqual(resumed_msg.content, "5 engineers")
 
@@ -273,15 +299,8 @@ class SuggestionAgent(unittest.TestCase):
 
         # Retry with no answer: the pending node resumes in place instead of
         # a duplicate kickoff message being injected.
-        outcome, model = self._run(
-            [
-                tc(
-                    "submit_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "x"}]}},
-                )
-            ]
-        )
-        self.assertEqual(outcome.status, "completed")
+        outcome, model = self._run([tc("submit_suggestions", _opts())])
+        self.assertEqual(outcome.status, "waiting")
         humans = [
             m
             for m in model.calls[0]
@@ -293,14 +312,7 @@ class SuggestionAgent(unittest.TestCase):
     def test_answer_on_finished_run_hits_empty_input_fallback(self):
         # Command(resume) on a checkpoint with no pending interrupt raises
         # EmptyInputError — the code falls back to invoke(None).
-        self._run(
-            [
-                tc(
-                    "submit_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "x"}]}},
-                )
-            ]
-        )
+        self._run([ai("done")])
         outcome, _ = self._run([], answer="late answer")
         self.assertEqual(outcome.status, "completed")
 
@@ -311,7 +323,7 @@ class SuggestionAgent(unittest.TestCase):
                 tc("get_user_bullet_points", {}, in_tok=10, out_tok=5, cost=0.001),
                 tc(
                     "submit_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "x"}]}},
+                    _opts(),
                     in_tok=20,
                     out_tok=8,
                     cost=0.002,
@@ -334,45 +346,67 @@ class SuggestionAgent(unittest.TestCase):
         self._run(
             [
                 msg,
-                tc(
-                    "submit_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "x"}]}},
-                    tc_id="tc-2",
-                    gen="gen-2",
-                ),
+                tc("submit_suggestions", _opts(), tc_id="tc-2", gen="gen-2"),
             ],
             usage=usage,
         )
         self.assertFalse(usage["all_costed"])
         self.assertEqual(usage["generation_ids"], ["gen-9", "gen-2"])
 
-    def test_verify_rejects_unknown_bullet_id(self):
-        _, model = self._run(
-            [
-                tc(
-                    "verify_final_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 999, "suggestion": "x"}]}},
-                ),
-                tc(
-                    "submit_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "x"}]}},
-                    tc_id="tc-2",
-                ),
-            ]
-        )
-        self.assertIn("Invalid bullet id (999)", _last_tool_msg(model).content)
+    def _verify_feedback(self, args):
+        _, model = self._run([tc("verify_final_suggestions", args), ai("done")])
+        return _last_tool_msg(model).content
 
-    def test_verify_accepts_valid_ids(self):
-        _, model = self._run(
+    def test_verify_rejects_unknown_bullet_id(self):
+        msg = self._verify_feedback(_opts(bullet_id=999))
+        self.assertIn("Invalid bullet id (999)", msg)
+
+    def test_verify_requires_a_bullet(self):
+        msg = self._verify_feedback({"suggestions": {"suggestions": []}})
+        self.assertIn("at least one bullet", msg)
+
+    def test_verify_rejects_duplicate_bullet(self):
+        entry = {"bullet_id": 7, "options": ["a", "b", "c"]}
+        msg = self._verify_feedback({"suggestions": {"suggestions": [entry, entry]}})
+        self.assertIn("Duplicate bullet id (7)", msg)
+
+    def test_verify_requires_three_options(self):
+        msg = self._verify_feedback(_opts(options=("a", "b")))
+        self.assertIn("exactly 3 options", msg)
+
+    def test_verify_rejects_blank_option(self):
+        msg = self._verify_feedback(_opts(options=("a", "  ", "c")))
+        self.assertIn("blank option", msg)
+
+    def test_verify_rejects_repeated_options(self):
+        msg = self._verify_feedback(_opts(options=("Built x.", "built x", "c")))
+        self.assertIn("distinct", msg)
+
+    def test_verify_accepts_valid_options(self):
+        msg = self._verify_feedback(_opts())
+        self.assertIn("valid", msg)
+        self.assertNotIn("Invalid", msg)
+
+    def test_system_prompt_carries_shared_writing_rules(self):
+        _, model = self._run([ai("done")])
+        system = model.calls[0][0]
+        self.assertEqual(system.type, "system")
+        self.assertIn(writing.BULLET_WRITING_RULES, system.content)
+
+    def test_submit_rejects_invalid_options_and_keeps_going(self):
+        # A bad submit is bounced back to the model instead of being stored;
+        # the corrected resubmit is what reaches the user.
+        outcome, model = self._run(
             [
-                tc(
-                    "verify_final_suggestions",
-                    {"suggestions": {"suggestions": [{"bullet_id": 7, "suggestion": "x"}]}},
-                ),
-                ai("done"),
+                tc("submit_suggestions", _opts(options=("only one",))),
+                tc("submit_suggestions", _opts(), tc_id="tc-2"),
             ]
         )
-        self.assertIn("bullet ids are valid", _last_tool_msg(model).content)
+        bounced = model.calls[1][-1]
+        self.assertIn("Not submitted", bounced.content)
+        self.assertIn("exactly 3 options", bounced.content)
+        self.assertEqual(outcome.status, "waiting")
+        self.assertEqual(outcome.result.suggestions[0].options, ["a", "b", "c"])
 
 
 class TailorAgent(unittest.TestCase):
@@ -447,6 +481,12 @@ class TailorAgent(unittest.TestCase):
         self.assertEqual(outcome.status, "completed")
         self.assertIsNone(outcome.result)
         self.assertEqual(model.calls[0][-1].content, "done")
+
+    def test_system_prompt_carries_shared_writing_rules(self):
+        _, model = self._run([ai("done")])
+        system = model.calls[0][0]
+        self.assertEqual(system.type, "system")
+        self.assertIn(writing.BULLET_WRITING_RULES, system.content)
 
     def test_tools_hand_back_job_description_and_profile(self):
         _, model = self._run(

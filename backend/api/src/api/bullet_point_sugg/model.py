@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class StartSuggestionRequest(BaseModel):
@@ -11,6 +11,17 @@ class StartSuggestionRequest(BaseModel):
 
 class AnswerRequest(BaseModel):
     text: str
+
+
+class AcceptChoice(BaseModel):
+    bullet_id: int
+    # Index into that bullet's suggested options.
+    option: int = Field(ge=0)
+
+
+class AcceptSuggestionRequest(BaseModel):
+    # Bullets left out keep their current text.
+    choices: list[AcceptChoice]
 
 
 class StartSuggestionResponse(BaseModel):
