@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { ArrowRight, Plus } from "lucide-react";
 import { auth0 } from "@/lib/auth0";
 import { getUser } from "@/lib/db";
+import { getSiteSettings } from "@/lib/settings";
 import Backdrop from "@/components/backdrop";
 import SiteFooter from "@/components/site-footer";
 import HowItWorks from "@/components/landing/how-it-works";
@@ -50,6 +51,7 @@ const eyebrow = "font-mono text-xs tracking-wider text-brand-400 uppercase";
 const h2 = "text-4xl font-semibold tracking-[-0.03em]";
 
 export default async function Home() {
+  const { maintenance_mode } = await getSiteSettings();
   let session: Awaited<ReturnType<typeof auth0.getSession>> = null;
   let lookupFailed = false;
   let signedInTarget: string | null = null;
@@ -57,7 +59,8 @@ export default async function Home() {
     session = await auth0.getSession();
     if (session) {
       const user = await getUser();
-      if (user) signedInTarget = user.has_onboarded ? "/dashboard" : "/onboarding";
+      // Admins can always view the landing page.
+      if (user && !user.site_admin) signedInTarget = user.has_onboarded ? "/dashboard" : "/onboarding";
     }
   } catch {
     lookupFailed = true;
@@ -83,6 +86,13 @@ export default async function Home() {
   return (
     <div className="relative flex flex-1 flex-col overflow-x-clip">
       <Backdrop variant="hero" />
+
+      {maintenance_mode && (
+        <p className="relative border-b border-red-800/60 bg-red-950/60 px-6 py-2.5 text-center text-sm text-red-200">
+          Resland is down for maintenance, so the app is unavailable for now. Your data is safe. Check
+          back soon.
+        </p>
+      )}
 
       <header className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
         <Link href="/" className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
