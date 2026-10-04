@@ -49,11 +49,11 @@ const SECTIONS: {
     faqs: [
       [
         "What does the sparkle icon do?",
-        "The sparkle next to a bullet or a job asks Resland for a suggestion. It may ask you a question or two first, then proposes a rewrite you can accept or dismiss. You can also use Ask for Changes to say what you want in your own words.",
+        "The sparkle next to a bullet or a job asks Resland for a suggestion. It first asks a few questions about the work, like the scale, the result, or who used it, then writes three options for each bullet. Pick one and accept it, or use More Options to get three new ones, with or without saying what to change.",
       ],
       [
         "How do I tailor my resume to a job?",
-        "Open Tailor Resume from the dashboard menu and paste the job description. Resland reorders and rewrites your bullets to fit it. Results aren't saved on their own, so click Save to Tailored Resumes to keep one. You can edit and export it later from your Tailored Resumes board.",
+        "Open Tailor Resume from the dashboard menu and paste the job description. Resland asks a few questions about the experience that matters most for the role, then reorders and rewrites your bullets to fit it. Results aren't saved on their own, so click Save to Tailored Resumes to keep one. You can edit and export it later from your Tailored Resumes board.",
       ],
       [
         "Can I copy a bullet point?",

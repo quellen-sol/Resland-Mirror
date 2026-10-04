@@ -7,6 +7,7 @@ from shared.pg import get_pg_client
 from ..agents.suggestions import build_and_invoke_agent
 from ..env_vars import PG_URL, SUGGESTIONS_MODEL
 from .db_ops import (
+    complete_suggestion,
     default_model_spec,
     fetch_suggestion_rows,
     record_token_usage,
@@ -79,13 +80,15 @@ class SuggestionsRunner(LocalThreadJobRunner):
                         return
 
                     if outcome.status == "waiting":
-                        set_suggestion_question(pg_conn, session_id, outcome.question)
-                    else:
-                        if not outcome.result:
-                            raise RunnerError(
-                                "Agent finished without submitting suggestions"
-                            )
+                        set_suggestion_question(
+                            pg_conn, session_id, outcome.question, outcome.result
+                        )
+                    elif outcome.result:
                         set_suggestion_result(pg_conn, session_id, outcome.result)
+                    elif not complete_suggestion(pg_conn, session_id):
+                        raise RunnerError(
+                            "Agent finished without submitting suggestions"
+                        )
                 finally:
                     if (
                         user_id

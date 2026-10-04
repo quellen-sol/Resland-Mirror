@@ -245,6 +245,7 @@ export default async function DashboardPage() {
                           .map((b) => b.bullet)
                           .join("\n") || undefined
                       }
+                      bullets={bulletsFor(exp.id)}
                     />
                   </span>
                 </div>

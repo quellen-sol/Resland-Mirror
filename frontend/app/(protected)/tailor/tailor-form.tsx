@@ -488,21 +488,24 @@ export default function TailorForm({
             {waiting && !tailored && (
               <Card className="ring-brand-500/30">
                 <CardContent className="flex flex-col gap-3 pt-6">
-                  <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 p-3 text-sm text-brand-200">
+                  <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 p-3 text-sm whitespace-pre-wrap text-brand-200">
                     {run.pending_question}
                   </div>
-                  <div className="flex gap-2">
-                    <Input
+                  {/* Questions come in numbered batches — leave room to
+                      answer each on its own line. */}
+                  <div className="flex items-end gap-2">
+                    <Textarea
                       value={answer}
                       onChange={(e) => setAnswer(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") {
+                        if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
                           void sendAnswer();
                         }
                       }}
-                      placeholder="Your answer…"
-                      className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
+                      rows={4}
+                      placeholder="Your answers… (Shift+Enter for a new line)"
+                      className="min-h-24 border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
                     />
                     <Button
                       onClick={sendAnswer}
@@ -616,7 +619,7 @@ export default function TailorForm({
             {waiting && tailored && (
               <Card className="ring-brand-500/30">
                 <CardContent className="flex flex-col gap-3 pt-6">
-                  <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 p-3 text-sm text-brand-200">
+                  <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 p-3 text-sm whitespace-pre-wrap text-brand-200">
                     {run.pending_question}
                   </div>
                   <div className="flex gap-2">

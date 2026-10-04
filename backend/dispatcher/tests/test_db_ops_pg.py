@@ -202,7 +202,9 @@ class DbOpsPg(unittest.TestCase):
             self.conn,
             "s1",
             SuggestionsResult(
-                suggestions=[BulletSuggestion(bullet_id=3, suggestion="rewrote it")]
+                suggestions=[
+                    BulletSuggestion(bullet_id=3, options=["one", "two", "three"])
+                ]
             ),
         )
         row = self.conn.execute(
@@ -213,8 +215,59 @@ class DbOpsPg(unittest.TestCase):
         self.assertIsNone(row[1])
         self.assertEqual(
             json.loads(row[2]),
-            [{"bullet_id": 3, "suggestion": "rewrote it"}],
+            [{"bullet_id": 3, "options": ["one", "two", "three"]}],
         )
+
+    def test_set_suggestion_question_can_store_options(self):
+        self._user()
+        exp = self._experience()
+        self._suggestion("s1", "u1", exp)
+        result = SuggestionsResult(
+            suggestions=[BulletSuggestion(bullet_id=3, options=["a", "b", "c"])]
+        )
+        db_ops.set_suggestion_question(self.conn, "s1", "Pick one", result)
+        row = self.conn.execute(
+            "SELECT pending_question, status, result FROM user_suggestion"
+            " WHERE id='s1'"
+        ).fetchone()
+        self.assertEqual(row[0], "Pick one")
+        self.assertEqual(row[1], "WAITING_FOR_INPUT")
+        self.assertEqual(json.loads(row[2])[0]["options"], ["a", "b", "c"])
+
+        # A clarifying question mid-revision keeps the options on screen.
+        db_ops.set_suggestion_question(self.conn, "s1", "Which metric?")
+        row = self.conn.execute(
+            "SELECT pending_question, result FROM user_suggestion WHERE id='s1'"
+        ).fetchone()
+        self.assertEqual(row[0], "Which metric?")
+        self.assertEqual(json.loads(row[1])[0]["options"], ["a", "b", "c"])
+
+    def test_complete_suggestion_requires_result(self):
+        self._user()
+        exp = self._experience()
+        self._suggestion("s1", "u1", exp)
+        self.assertFalse(db_ops.complete_suggestion(self.conn, "s1"))
+        status = self.conn.execute(
+            "SELECT status FROM user_suggestion WHERE id='s1'"
+        ).fetchone()[0]
+        self.assertEqual(status, "PROCESSING")
+
+        db_ops.set_suggestion_question(
+            self.conn,
+            "s1",
+            "Pick one",
+            SuggestionsResult(
+                suggestions=[BulletSuggestion(bullet_id=3, options=["a", "b", "c"])]
+            ),
+        )
+        self.assertTrue(db_ops.complete_suggestion(self.conn, "s1"))
+        row = self.conn.execute(
+            "SELECT status, pending_question, result FROM user_suggestion"
+            " WHERE id='s1'"
+        ).fetchone()
+        self.assertEqual(row[0], "COMPLETED")
+        self.assertIsNone(row[1])
+        self.assertIsNotNone(row[2])
 
     def test_set_suggestion_failed_marks_failed(self):
         self._user()

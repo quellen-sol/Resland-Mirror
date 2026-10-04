@@ -238,7 +238,15 @@ class ResumeRunnerTask(unittest.TestCase):
 
 
 class SuggestionsRunnerTask(unittest.TestCase):
-    def _run(self, job_data, rows=None, outcome=None, agent_exc=None, agent_fn=None):
+    def _run(
+        self,
+        job_data,
+        rows=None,
+        outcome=None,
+        agent_exc=None,
+        agent_fn=None,
+        complete_ret=True,
+    ):
         conn = MagicMock()
         agent = MagicMock()
         if agent_exc is not None:
@@ -255,10 +263,14 @@ class SuggestionsRunnerTask(unittest.TestCase):
             patch.object(suggestions, "set_suggestion_question") as set_q,
             patch.object(suggestions, "set_suggestion_result") as set_r,
             patch.object(suggestions, "set_suggestion_failed") as set_f,
+            patch.object(
+                suggestions, "complete_suggestion", return_value=complete_ret
+            ) as complete,
             patch.object(suggestions, "record_token_usage") as record,
         ):
             handle = suggestions.SuggestionsRunner(job_data).run()
             status = _poll_until(handle, "COMPLETED")
+        self.complete = complete
         return status, agent, set_q, set_r, record, set_f
 
     def test_empty_job_data_fails(self):
@@ -289,11 +301,33 @@ class SuggestionsRunnerTask(unittest.TestCase):
         self.assertEqual(status, "COMPLETED")
         set_q.assert_called_once()
         self.assertEqual(set_q.call_args.args[2], "Team size?")
+        self.assertIsNone(set_q.call_args.args[3])
+        set_r.assert_not_called()
+
+    def test_review_wait_stores_options_with_question(self):
+        # A submit pauses on the review interrupt — the options are stored
+        # alongside the prompt so the user can pick one or ask for more.
+        result = sugg_agents.SuggestionsResult(
+            suggestions=[
+                sugg_agents.BulletSuggestion(bullet_id=7, options=["a", "b", "c"])
+            ]
+        )
+        outcome = sugg_agents.SuggestionRunOutcome(
+            status="waiting", question="Pick one", result=result
+        )
+        status, _, set_q, set_r, _, _ = self._run(
+            {"session_id": "s1"}, rows=[_sugg_row()], outcome=outcome
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.assertEqual(set_q.call_args.args[2], "Pick one")
+        self.assertIs(set_q.call_args.args[3], result)
         set_r.assert_not_called()
 
     def test_completed_outcome_sets_result(self):
         result = sugg_agents.SuggestionsResult(
-            suggestions=[sugg_agents.BulletSuggestion(bullet_id=7, suggestion="x")]
+            suggestions=[
+                sugg_agents.BulletSuggestion(bullet_id=7, options=["a", "b", "c"])
+            ]
         )
         outcome = sugg_agents.SuggestionRunOutcome(status="completed", result=result)
         status, _, _, set_r, _, _ = self._run(
@@ -301,10 +335,28 @@ class SuggestionsRunnerTask(unittest.TestCase):
         )
         self.assertEqual(status, "COMPLETED")
         set_r.assert_called_once()
+        self.complete.assert_not_called()
 
-    def test_completed_without_result_fails(self):
+    def test_completed_without_new_result_keeps_stored_options(self):
+        # The user replied to the review without asking for changes — the
+        # agent ends without resubmitting and the stored options stand.
         outcome = sugg_agents.SuggestionRunOutcome(status="completed", result=None)
-        status, *_ = self._run({"session_id": "s1"}, rows=[_sugg_row()], outcome=outcome)
+        status, _, _, set_r, _, _ = self._run(
+            {"session_id": "s1"}, rows=[_sugg_row()], outcome=outcome
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.complete.assert_called_once()
+        self.assertEqual(self.complete.call_args.args[1], "s1")
+        set_r.assert_not_called()
+
+    def test_completed_without_any_result_fails(self):
+        outcome = sugg_agents.SuggestionRunOutcome(status="completed", result=None)
+        status, *_ = self._run(
+            {"session_id": "s1"},
+            rows=[_sugg_row()],
+            outcome=outcome,
+            complete_ret=False,
+        )
         self.assertEqual(status, "FAILED")
 
     def test_agent_crash_marks_session_failed_for_retry(self):

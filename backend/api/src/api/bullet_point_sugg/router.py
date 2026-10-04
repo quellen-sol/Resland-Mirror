@@ -60,10 +60,13 @@ async def retry_suggestion(
 
 @router.post("/suggestions/{session_id}/accept")
 async def accept_suggestion(
-    user_id: Auth0UserId, session_id: str, pg_conn: PgConnection
+    user_id: Auth0UserId,
+    session_id: str,
+    pg_conn: PgConnection,
+    req: model.AcceptSuggestionRequest | None = None,
 ):
     return await service.accept_suggestion(
-        user_id=user_id, session_id=session_id, pg_conn=pg_conn
+        user_id=user_id, session_id=session_id, pg_conn=pg_conn, req=req
     )
 
 
