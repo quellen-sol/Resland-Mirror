@@ -431,3 +431,18 @@ model BalancePurchase {
   @@map("balance_purchase")
   @@index([user_id])
 }
+
+// DSA study center topics a user has marked as studied — a row means
+// studied, un-marking deletes it. `topic` is a slug from content/dsa; the
+// topics live in code, so there's no FK and stale slugs are ignored on read.
+model UserDsaProgress {
+  id         Int      @id @default(autoincrement())
+  user_id    String
+  user       User     @relation(fields: [user_id], references: [auth0_id])
+  topic      String
+  created_at DateTime @default(now())
+
+  @@map("user_dsa_progress")
+  @@unique([user_id, topic])
+  @@index([user_id])
+}

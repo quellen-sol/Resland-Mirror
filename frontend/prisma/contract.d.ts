@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'4dbd015ad3e021f63ef04bfa31778f34a218409bd517c766541be7427453a580'>;
+  StorageHashBase<'fbcfb6d73d6292fc83fe93d684ca06b76cc186f9582c456695cad477992ccb40'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -343,6 +343,12 @@ export type FieldOutputTypes = {
       readonly category: CodecTypes['pg/text@1']['output'] | null;
       readonly sort_order: CodecTypes['pg/int4@1']['output'];
     };
+    readonly UserDsaProgress: {
+      readonly id: CodecTypes['pg/int4@1']['output'];
+      readonly user_id: CodecTypes['pg/text@1']['output'];
+      readonly topic: CodecTypes['pg/text@1']['output'];
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+    };
     readonly UserGeneratedResume: {
       readonly user_id: CodecTypes['pg/text@1']['output'];
       readonly template: CodecTypes['pg/text@1']['output'];
@@ -543,6 +549,12 @@ export type FieldInputTypes = {
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly category: CodecTypes['pg/text@1']['input'] | null;
       readonly sort_order: CodecTypes['pg/int4@1']['input'];
+    };
+    readonly UserDsaProgress: {
+      readonly id: CodecTypes['pg/int4@1']['input'];
+      readonly user_id: CodecTypes['pg/text@1']['input'];
+      readonly topic: CodecTypes['pg/text@1']['input'];
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
     readonly UserGeneratedResume: {
       readonly user_id: CodecTypes['pg/text@1']['input'];
@@ -745,6 +757,12 @@ export type StorageColumnTypes = {
       readonly sort_order: CodecTypes['pg/int4@1']['output'];
       readonly user_id: CodecTypes['pg/text@1']['output'];
     };
+    readonly user_dsa_progress: {
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly id: CodecTypes['pg/int4@1']['output'];
+      readonly topic: CodecTypes['pg/text@1']['output'];
+      readonly user_id: CodecTypes['pg/text@1']['output'];
+    };
     readonly user_generated_resume: {
       readonly generated_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
       readonly s3_key: CodecTypes['pg/text@1']['output'];
@@ -944,6 +962,12 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/int4@1']['input'];
       readonly name: CodecTypes['pg/text@1']['input'];
       readonly sort_order: CodecTypes['pg/int4@1']['input'];
+      readonly user_id: CodecTypes['pg/text@1']['input'];
+    };
+    readonly user_dsa_progress: {
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly id: CodecTypes['pg/int4@1']['input'];
+      readonly topic: CodecTypes['pg/text@1']['input'];
       readonly user_id: CodecTypes['pg/text@1']['input'];
     };
     readonly user_generated_resume: {
@@ -1822,6 +1846,59 @@ type ContractBase = Omit<
                 },
               ];
             };
+            readonly user_dsa_progress: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'function';
+                    readonly expression: 'autoincrement()';
+                  };
+                };
+                readonly user_id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly topic: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly created_at: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [{ readonly columns: readonly ['user_id', 'topic'] }];
+              indexes: readonly [
+                {
+                  readonly name: 'user_dsa_progress_user_id_idx_6c952402';
+                  readonly prefix: 'user_dsa_progress_user_id_idx';
+                  readonly columns: readonly ['user_id'];
+                  readonly unique: false;
+                },
+              ];
+              foreignKeys: readonly [
+                {
+                  readonly source: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'user_dsa_progress';
+                    readonly columns: readonly ['user_id'];
+                  };
+                  readonly target: {
+                    readonly namespaceId: 'public' & NamespaceId;
+                    readonly tableName: 'user';
+                    readonly columns: readonly ['auth0_id'];
+                  };
+                },
+              ];
+            };
             readonly user_generated_resume: {
               columns: {
                 readonly user_id: {
@@ -2648,6 +2725,10 @@ type ContractBase = Omit<
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'BalancePurchase';
     };
+    readonly user_dsa_progress: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'UserDsaProgress';
+    };
   };
   readonly domain: {
     readonly namespaces: {
@@ -3273,6 +3354,49 @@ type ContractBase = Omit<
                 readonly name: { readonly column: 'name' };
                 readonly category: { readonly column: 'category' };
                 readonly sort_order: { readonly column: 'sort_order' };
+              };
+            };
+          };
+          readonly UserDsaProgress: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly user_id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly topic: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly created_at: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+            };
+            readonly relations: {
+              readonly user: {
+                readonly to: { readonly namespace: 'public' & NamespaceId; readonly model: 'User' };
+                readonly cardinality: 'N:1';
+                readonly on: {
+                  readonly localFields: readonly ['user_id'];
+                  readonly targetFields: readonly ['auth0_id'];
+                };
+              };
+            };
+            readonly storage: {
+              readonly table: 'user_dsa_progress';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly user_id: { readonly column: 'user_id' };
+                readonly topic: { readonly column: 'topic' };
+                readonly created_at: { readonly column: 'created_at' };
               };
             };
           };
