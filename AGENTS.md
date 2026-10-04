@@ -109,6 +109,11 @@ cd frontend           && pnpm test          # node --test (explicit file list in
   glob.
 - Lint with `pnpm lint` (eslint-config-next). There is **no** `typecheck` script — run
   `npx tsc --noEmit` from `frontend/` and report the result in the PR.
+- Public pages build their metadata with `pageMetadata()` from `frontend/lib/seo.ts`. Next merges
+  metadata shallowly, so a page that sets `openGraph` by hand drops the share image and anything
+  that only sets `title` inherits the home page's share tags. New public pages also go in
+  `app/sitemap.ts`, and a new dynamic app route with a per-user id (like `/tailored/[id]`) goes in
+  `ID_ROUTES` in `frontend/lib/traffic.ts` so the id stays out of the `page_view` log.
 - The public DSA study center (`/dsa`) is content in `frontend/content/dsa` — read its README
   before adding or editing a topic. Each example is a runnable program in five languages;
   `pnpm test:dsa-examples` runs them all (needs `node`, `python3`, `go`, `dotnet` 10 and `java`
@@ -149,6 +154,9 @@ step 4 gets sent back.
 ## Conventions
 
 - **Never commit to `master` directly.** Branch, push, open a PR; the human owner merges.
+- **Open the PR without asking.** When a change is done and verified, commit, push the branch and
+  open the PR straight away; the owner reviews and merges there. This doesn't extend to deploys
+  (see below).
 - Branch naming: `fix/<issue>-slug`, `feat/<issue>-slug`, `docs/<issue>-slug`, or the Devin agent
   convention `devin/<epoch>-slug`. Keep one issue per branch.
 - Commit messages: imperative subject, body explains *why*. Reference the issue (`Refs #63`).
