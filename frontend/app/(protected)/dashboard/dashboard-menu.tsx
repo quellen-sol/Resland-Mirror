@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   CircleHelp,
   Files,
+  GraduationCap,
   LogOut,
   Menu,
   Network,
@@ -35,6 +36,7 @@ const LINK_ICONS: Partial<Record<DashboardMenuItemKey, LucideIcon>> = {
   tailor: Sparkles,
   tailored: Files,
   "system-design": Network,
+  dsa: GraduationCap,
   admin: ShieldCheck,
   "edit-profile": PenLine,
   billing: Zap,

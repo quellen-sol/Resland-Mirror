@@ -12,6 +12,7 @@ export interface FooterLink {
 const LEGAL_LINKS: FooterLink[] = [];
 
 const HELP_LINK: FooterLink = { href: "/help", label: "Help & FAQ" };
+const DSA_LINK: FooterLink = { href: "/dsa", label: "DSA Study Center" };
 
 export default function SiteFooter({
   links = [],
@@ -31,7 +32,7 @@ export default function SiteFooter({
           © {new Date().getFullYear()} Quellen Ventures LLC
         </div>
         <nav className="flex flex-wrap gap-x-4 gap-y-2">
-          {[...links, HELP_LINK, ...LEGAL_LINKS].map((link) => (
+          {[...links, DSA_LINK, HELP_LINK, ...LEGAL_LINKS].map((link) => (
             <Link
               key={link.href}
               href={link.href}
