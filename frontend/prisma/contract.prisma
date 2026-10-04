@@ -446,3 +446,36 @@ model UserDsaProgress {
   @@unique([user_id, topic])
   @@index([user_id])
 }
+
+// Where a visit came from, decided on its first page. Later pages in the same
+// visit are INTERNAL.
+enum TrafficSource {
+  SEARCH
+  AI
+  SOCIAL
+  REFERRAL
+  DIRECT
+  INTERNAL
+}
+
+// First-party traffic log behind /admin's Traffic panel: one row per page
+// load or client-side navigation. Anonymous by design, with no IP, user agent
+// or user id. `visit_id` is a random per-tab id kept in sessionStorage, so a
+// visit's pages group together without a cookie.
+model PageView {
+  id           Int           @id @default(autoincrement())
+  visit_id     String
+  // Route path with ids masked, e.g. /tailored/[id] (see lib/traffic.ts).
+  path         String
+  // The page this tab was on before; null on a visit's first page.
+  prev_path    String?
+  source       TrafficSource
+  // "google", "chatgpt", "reddit", or the referrer host. Null for DIRECT and
+  // INTERNAL.
+  source_name  String?
+  utm_campaign String?
+  created_at   DateTime      @default(now())
+
+  @@map("page_view")
+  @@index([created_at])
+}

@@ -12,6 +12,10 @@
       "model": "ModelPricing",
       "namespace": "public"
     },
+    "page_view": {
+      "model": "PageView",
+      "namespace": "public"
+    },
     "site_settings": {
       "model": "SiteSettings",
       "namespace": "public"
@@ -279,6 +283,35 @@
               }
             ]
           },
+          "TrafficSource": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "SEARCH",
+                "value": "SEARCH"
+              },
+              {
+                "name": "AI",
+                "value": "AI"
+              },
+              {
+                "name": "SOCIAL",
+                "value": "SOCIAL"
+              },
+              {
+                "name": "REFERRAL",
+                "value": "REFERRAL"
+              },
+              {
+                "name": "DIRECT",
+                "value": "DIRECT"
+              },
+              {
+                "name": "INTERNAL",
+                "value": "INTERNAL"
+              }
+            ]
+          },
           "UsageJobKind": {
             "codecId": "pg/text@1",
             "members": [
@@ -490,6 +523,103 @@
               },
               "namespaceId": "public",
               "table": "model_pricing"
+            }
+          },
+          "PageView": {
+            "fields": {
+              "created_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "path": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "prev_path": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "source": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "TrafficSource",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "source_name": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "utm_campaign": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "visit_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {},
+            "storage": {
+              "fields": {
+                "created_at": {
+                  "column": "created_at"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "path": {
+                  "column": "path"
+                },
+                "prev_path": {
+                  "column": "prev_path"
+                },
+                "source": {
+                  "column": "source"
+                },
+                "source_name": {
+                  "column": "source_name"
+                },
+                "utm_campaign": {
+                  "column": "utm_campaign"
+                },
+                "visit_id": {
+                  "column": "visit_id"
+                }
+              },
+              "namespaceId": "public",
+              "table": "page_view"
             }
           },
           "SiteSettings": {
@@ -2670,6 +2800,88 @@
               },
               "uniques": []
             },
+            "page_view": {
+              "checks": [
+                {
+                  "expression": "\"source\" IN ('SEARCH', 'AI', 'SOCIAL', 'REFERRAL', 'DIRECT', 'INTERNAL')",
+                  "name": "page_view_source_check_c4100b70",
+                  "prefix": "page_view_source_check"
+                }
+              ],
+              "columns": {
+                "created_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "expression": "autoincrement()",
+                    "kind": "function"
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "path": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "prev_path": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "source": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "TrafficSource",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "source_name": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "utm_campaign": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
+                "visit_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [],
+              "indexes": [
+                {
+                  "columns": [
+                    "created_at"
+                  ],
+                  "name": "page_view_created_at_idx_225d8c0f",
+                  "prefix": "page_view_created_at_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "site_settings": {
               "columns": {
                 "id": {
@@ -4558,6 +4770,17 @@
                 "FAILED"
               ]
             },
+            "TrafficSource": {
+              "kind": "valueSet",
+              "values": [
+                "SEARCH",
+                "AI",
+                "SOCIAL",
+                "REFERRAL",
+                "DIRECT",
+                "INTERNAL"
+              ]
+            },
             "UsageJobKind": {
               "kind": "valueSet",
               "values": [
@@ -4572,7 +4795,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "fbcfb6d73d6292fc83fe93d684ca06b76cc186f9582c456695cad477992ccb40"
+    "storageHash": "b8efd6dafa6fc9099e70e37bcab76c6104321edfc9b4844bebdb9e14ac5c518d"
   },
   "capabilities": {
     "postgres": {

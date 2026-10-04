@@ -1,0 +1,80 @@
+[
+  {
+    "id": "table.page_view",
+    "label": "Create table \"page_view\"",
+    "summary": "Creates table \"page_view\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "page_view"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"page_view\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"page_view\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"page_view\"",
+        "sql": "CREATE TABLE \"public\".\"page_view\" (\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" SERIAL NOT NULL,\n  \"path\" text NOT NULL,\n  \"prev_path\" text,\n  \"source\" text NOT NULL,\n  \"source_name\" text,\n  \"utm_campaign\" text,\n  \"visit_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"page_view_source_check_c4100b70\" CHECK (\"source\" IN ('SEARCH', 'AI', 'SOCIAL', 'REFERRAL', 'DIRECT', 'INTERNAL'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"page_view\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"page_view\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.page_view.page_view_created_at_idx_225d8c0f",
+    "label": "Create index \"page_view_created_at_idx_225d8c0f\" on \"page_view\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "page_view_created_at_idx_225d8c0f",
+        "table": "page_view"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"page_view_created_at_idx_225d8c0f\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"page_view_created_at_idx_225d8c0f\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"page_view_created_at_idx_225d8c0f\"",
+        "sql": "CREATE INDEX \"page_view_created_at_idx_225d8c0f\" ON \"public\".\"page_view\" (\"created_at\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"page_view_created_at_idx_225d8c0f\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"page_view_created_at_idx_225d8c0f\""
+        ]
+      }
+    ]
+  }
+]
