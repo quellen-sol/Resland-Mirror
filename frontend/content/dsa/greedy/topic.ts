@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "greedy",
   title: "Greedy Algorithms",
+  seoTitle: "Greedy Algorithms Explained: Jump Game and Gas Station",
   category: "techniques",
   level: "INTERMEDIATE",
   summary:

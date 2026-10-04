@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import type { Viewport } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
+import PageViewTracker from "@/components/page-view-tracker";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/seo";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,45 +16,34 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Defaults for pages that don't build their own with pageMetadata()
+// (lib/seo.ts). Nothing here may name a page: no canonical, no og:url, and
+// no twitter title or image, or every page that inherits them shares as the
+// home page. The share image comes from app/opengraph-image.tsx.
 export const metadata: Metadata = {
-  metadataBase: new URL("https://resland.org"),
+  metadataBase: new URL(SITE_URL),
   title: {
-    default: "Resland — AI Resume Tailoring",
+    default: "Resland: AI Resume Tailoring for Software Engineers",
     template: "%s · Resland",
   },
-  description:
-    "Resland rewrites your resume for each job you apply to, and asks you for the details instead of making them up.",
+  description: SITE_DESCRIPTION,
   keywords: [
-    "resume tailoring",
-    "AI resume builder",
-    "resume optimization",
-    "job applications",
+    "software engineer resume",
+    "tailor resume to job description",
+    "AI resume tailoring",
+    "resume bullet points",
+    "system design interview practice",
+    "DSA study guide",
+    "coding interview prep",
   ],
-  applicationName: "Resland",
-  alternates: { canonical: "/" },
+  applicationName: SITE_NAME,
   openGraph: {
     type: "website",
-    url: "https://resland.org",
-    siteName: "Resland",
-    title: "Resland — AI Resume Tailoring",
-    description:
-      "Resland rewrites your resume for each job you apply to, and asks you for the details instead of making them up.",
-    images: [
-      {
-        url: "/resland-logo.png",
-        width: 1254,
-        height: 1254,
-        alt: "Resland logo",
-      },
-    ],
+    siteName: SITE_NAME,
+    title: "Resland: AI Resume Tailoring for Software Engineers",
+    description: SITE_DESCRIPTION,
   },
-  twitter: {
-    card: "summary_large_image",
-    title: "Resland — AI Resume Tailoring",
-    description:
-      "Resland rewrites your resume for each job you apply to, and asks you for the details instead of making them up.",
-    images: ["/resland-logo.png"],
-  },
+  twitter: { card: "summary_large_image" },
   icons: {
     icon: [
       { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
@@ -62,6 +53,14 @@ export const metadata: Metadata = {
   },
   manifest: "/manifest.webmanifest",
   robots: { index: true, follow: true },
+  // Search Console / Bing Webmaster Tools ownership tags. Optional: a DNS
+  // TXT record verifies the domain without them.
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION,
+    other: process.env.BING_SITE_VERIFICATION
+      ? { "msvalidate.01": process.env.BING_SITE_VERIFICATION }
+      : undefined,
+  },
 };
 
 export const viewport: Viewport = {
@@ -75,7 +74,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col">
+        {children}
+        <PageViewTracker />
+      </body>
     </html>
   );
 }

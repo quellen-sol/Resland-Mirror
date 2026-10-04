@@ -273,11 +273,11 @@
 
 /* DSA study center: data-dsa-lang on the [data-dsa-root] wrapper (set
    before paint by app/dsa/layout.tsx) picks which language's code panel and
-   tab are showing. No attribute yet means the default, TypeScript. */
+   tab are showing. No attribute yet means the default, Python. */
 [data-dsa-panel] {
   display: none;
 }
-[data-dsa-root]:not([data-dsa-lang]) [data-dsa-panel="typescript"],
+[data-dsa-root]:not([data-dsa-lang]) [data-dsa-panel="python"],
 [data-dsa-lang="typescript"] [data-dsa-panel="typescript"],
 [data-dsa-lang="python"] [data-dsa-panel="python"],
 [data-dsa-lang="go"] [data-dsa-panel="go"],
@@ -285,7 +285,7 @@
 [data-dsa-lang="java"] [data-dsa-panel="java"] {
   display: block;
 }
-[data-dsa-root]:not([data-dsa-lang]) [data-dsa-tab="typescript"],
+[data-dsa-root]:not([data-dsa-lang]) [data-dsa-tab="python"],
 [data-dsa-lang="typescript"] [data-dsa-tab="typescript"],
 [data-dsa-lang="python"] [data-dsa-tab="python"],
 [data-dsa-lang="go"] [data-dsa-tab="go"],

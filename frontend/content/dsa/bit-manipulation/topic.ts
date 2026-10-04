@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "bit-manipulation",
   title: "Bit Manipulation",
+  seoTitle: "Bit Manipulation Tricks for Coding Interviews",
   category: "techniques",
   level: "INTERMEDIATE",
   summary:

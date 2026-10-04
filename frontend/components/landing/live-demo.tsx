@@ -92,7 +92,7 @@ export default function LiveDemo() {
       <figure className="relative rounded-[20px] bg-gradient-to-b from-white/15 via-white/5 to-white/[.02] p-px">
         <figcaption className="sr-only">
           Resland asks “{DEMO_SCRIPT.question}” You answer “{DEMO_SCRIPT.answer}”
-          and it suggests: {DEMO_SCRIPT.suggestion}
+          and it writes three options: {DEMO_SCRIPT.options.join(" ")}
         </figcaption>
         <div
           ref={rootRef}
@@ -161,22 +161,40 @@ export default function LiveDemo() {
               </div>
             </Step>
 
-            <Step
-              on={frame.suggestionVisible}
-              className="rounded-xl border border-emerald-400/20 bg-emerald-400/[.06] p-3.5"
-            >
-              <p className="font-mono text-[11px] tracking-wider text-emerald-300/80 uppercase">
-                Suggested
-              </p>
-              <p
-                className={cn(
-                  "mt-1.5 leading-6 text-emerald-100",
-                  frame.typing === "suggestion" && "typing-caret",
-                )}
-              >
-                {frame.suggestion}
-              </p>
-            </Step>
+            <div className="space-y-2">
+              {DEMO_SCRIPT.options.map((option, i) => {
+                const picked = frame.picked === i;
+                return (
+                  <Step
+                    key={option}
+                    on={frame.optionsShown > i}
+                    className={cn(
+                      "rounded-xl border px-3.5 py-2.5 transition-colors duration-300",
+                      picked
+                        ? "border-emerald-400/40 bg-emerald-400/[.08]"
+                        : "border-white/[.08] bg-black/20",
+                    )}
+                  >
+                    <p
+                      className={cn(
+                        "font-mono text-[11px] tracking-wider uppercase",
+                        picked ? "text-emerald-300/90" : "text-zinc-500",
+                      )}
+                    >
+                      Option {i + 1}
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-1 leading-6",
+                        picked ? "text-emerald-100" : "text-zinc-300",
+                      )}
+                    >
+                      {option}
+                    </p>
+                  </Step>
+                );
+              })}
+            </div>
 
             <Step on={frame.actionsVisible} className="flex gap-2">
               <span
@@ -188,7 +206,7 @@ export default function LiveDemo() {
                 <Check className="size-4" /> Accept
               </span>
               <span className="inline-flex h-8 items-center rounded-lg border border-white/10 px-3 text-zinc-300">
-                Ask for Changes
+                More Options
               </span>
             </Step>
           </div>

@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "dp-knapsack",
   title: "Dynamic Programming: Knapsack & Subsequences",
+  seoTitle: "Knapsack DP and Longest Increasing Subsequence",
   category: "dp",
   level: "ADVANCED",
   summary:

@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "topological-sort",
   title: "Topological Sort",
+  seoTitle: "Topological Sort: Kahn's Algorithm and Course Schedule",
   category: "graphs",
   level: "INTERMEDIATE",
   summary:

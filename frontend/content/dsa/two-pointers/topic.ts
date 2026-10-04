@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "two-pointers",
   title: "Two Pointers",
+  seoTitle: "Two Pointers Technique: Template and Interview Problems",
   category: "techniques",
   level: "BEGINNER",
   summary:

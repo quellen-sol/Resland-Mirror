@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "sliding-window",
   title: "Sliding Window",
+  seoTitle: "Sliding Window Technique: Template and Examples",
   category: "techniques",
   level: "INTERMEDIATE",
   summary:

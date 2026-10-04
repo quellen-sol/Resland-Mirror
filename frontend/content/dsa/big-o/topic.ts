@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "big-o",
   title: "Big-O & Complexity",
+  seoTitle: "Big-O Notation Explained: Time and Space Complexity",
   category: "foundations",
   level: "BEGINNER",
   summary:

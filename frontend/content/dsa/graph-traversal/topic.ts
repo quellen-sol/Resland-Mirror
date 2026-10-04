@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "graph-traversal",
   title: "Graphs: BFS & DFS",
+  seoTitle: "BFS vs DFS: Graph Traversal with Code Examples",
   category: "graphs",
   level: "INTERMEDIATE",
   summary:

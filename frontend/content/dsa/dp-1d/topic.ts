@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "dp-1d",
   title: "Dynamic Programming: 1D",
+  seoTitle: "Dynamic Programming for Beginners: 1D DP Patterns",
   category: "dp",
   level: "INTERMEDIATE",
   summary:

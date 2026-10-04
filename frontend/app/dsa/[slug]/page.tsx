@@ -5,10 +5,15 @@ import { ArrowLeft, ArrowRight, ExternalLink } from "lucide-react";
 import { DSA_TOPICS } from "@/content/dsa/index.ts";
 import {
   DSA_CATEGORIES,
+  DSA_LANGUAGE_NAMES,
   DSA_LEVEL_LABELS,
+  topicDependents,
+  topicMetaDescription,
   topicNeighbors,
   type DsaTopic,
 } from "@/lib/dsa";
+import { absoluteUrl, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
+import JsonLd from "@/components/json-ld";
 import { ComplexityNote, DifficultyBadge, LevelBadge } from "../badges";
 import CodeBlock from "../code-block";
 import { Blocks, Inline } from "../prose";
@@ -32,14 +37,14 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const topic = findTopic((await params).slug);
   if (!topic) return {};
-  const title = `${topic.title} · DSA Study Center`;
-  const url = `/dsa/${topic.slug}`;
-  return {
-    title,
-    description: topic.summary,
-    alternates: { canonical: url },
-    openGraph: { type: "article", title, description: topic.summary, url },
-  };
+  return pageMetadata({
+    title: topic.seoTitle,
+    description: topicMetaDescription(topic),
+    path: `/dsa/${topic.slug}`,
+    type: "article",
+    // ./opengraph-image.tsx renders the topic's own card.
+    ownImage: true,
+  });
 }
 
 const SECTIONS = [
@@ -87,17 +92,27 @@ export default async function TopicPage({
     .map(findTopic)
     .filter((t): t is DsaTopic => t !== undefined);
   const { prev, next } = topicNeighbors(DSA_TOPICS, topic.slug);
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "LearningResource",
-    name: topic.title,
-    description: topic.summary,
-    url: `https://resland.org/dsa/${topic.slug}`,
-    learningResourceType: "Tutorial",
-    educationalLevel: DSA_LEVEL_LABELS[topic.level],
-    inLanguage: "en",
-    isPartOf: { "@type": "WebSite", name: "Resland", url: "https://resland.org" },
-  };
+  const dependents = topicDependents(DSA_TOPICS, topic.slug);
+  const path = `/dsa/${topic.slug}`;
+  const jsonLd = [
+    {
+      "@context": "https://schema.org",
+      "@type": "LearningResource",
+      name: topic.seoTitle,
+      description: topic.summary,
+      url: absoluteUrl(path),
+      learningResourceType: "Tutorial",
+      educationalLevel: DSA_LEVEL_LABELS[topic.level],
+      teaches: topic.title,
+      inLanguage: "en",
+      isPartOf: { "@type": "WebSite", name: "Resland", url: absoluteUrl("/") },
+    },
+    breadcrumbJsonLd([
+      { name: "Resland", path: "/" },
+      { name: "DSA Study Center", path: "/dsa" },
+      { name: topic.title, path },
+    ]),
+  ];
 
   return (
     <article className="flex flex-col gap-14">
@@ -109,7 +124,9 @@ export default async function TopicPage({
           <span aria-hidden className="px-2 text-zinc-700">
             /
           </span>
-          <span>{category.title}</span>
+          <Link href={`/dsa#${category.id}`} className="hover:text-zinc-300">
+            {category.title}
+          </Link>
         </nav>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <h1 className="text-4xl font-semibold tracking-[-0.03em]">{topic.title}</h1>
@@ -148,6 +165,18 @@ export default async function TopicPage({
               className="rounded-md border border-white/[.08] px-2 py-1 text-xs text-zinc-400 hover:border-white/20 hover:text-zinc-200"
             >
               {title}
+            </a>
+          ))}
+        </nav>
+        <nav aria-label="Worked problems" className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          <span className="text-zinc-500">Worked problems:</span>
+          {topic.problems.map((problem) => (
+            <a
+              key={problem.id}
+              href={`#${problem.id}`}
+              className="text-zinc-400 underline-offset-4 hover:text-zinc-200 hover:underline"
+            >
+              {problem.title}
             </a>
           ))}
         </nav>
@@ -202,6 +231,10 @@ export default async function TopicPage({
       </Section>
 
       <Section id="problems">
+        <p className="-mt-2 text-sm text-zinc-500">
+          Each solution is a complete program in {DSA_LANGUAGE_NAMES}, run and
+          checked against its expected output.
+        </p>
         <div className="flex flex-col gap-12">
           {topic.problems.map((problem) => (
             <div key={problem.id} id={problem.id} className="flex scroll-mt-6 flex-col gap-5">
@@ -270,6 +303,22 @@ export default async function TopicPage({
           <p className="text-sm text-zinc-400">Done with {topic.title}?</p>
           <MarkStudiedButton slug={topic.slug} />
         </div>
+        {dependents.length > 0 && (
+          <p className="text-sm text-zinc-500">
+            Builds on this:{" "}
+            {dependents.map((d, i) => (
+              <span key={d.slug}>
+                {i > 0 && ", "}
+                <Link
+                  href={`/dsa/${d.slug}`}
+                  className="text-zinc-300 underline-offset-4 hover:text-white hover:underline"
+                >
+                  {d.title}
+                </Link>
+              </span>
+            ))}
+          </p>
+        )}
         <nav aria-label="Topics" className="grid gap-3 sm:grid-cols-2">
           {prev ? (
             <Link
@@ -298,12 +347,37 @@ export default async function TopicPage({
         </nav>
       </footer>
 
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
-        }}
-      />
+      <aside
+        aria-labelledby="interview-cta"
+        className="edge flex flex-col gap-3 rounded-2xl border border-white/[.08] bg-card p-6 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div>
+          <h2 id="interview-cta" className="font-medium text-zinc-100">
+            Interview coming up?
+          </h2>
+          <p className="mt-1 max-w-xl text-sm leading-6 text-zinc-400">
+            Resland tailors your resume to the job posting without making
+            anything up, and runs mock system design interviews with an AI
+            interviewer.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Link
+            href="/"
+            className="inline-flex h-9 items-center rounded-lg bg-white px-3.5 text-sm font-medium text-zinc-950 hover:bg-zinc-200"
+          >
+            Tailor your resume
+          </Link>
+          <Link
+            href="/#prep"
+            className="inline-flex h-9 items-center rounded-lg border border-white/10 px-3.5 text-sm text-zinc-300 hover:bg-white/5"
+          >
+            Practice system design
+          </Link>
+        </div>
+      </aside>
+
+      <JsonLd data={jsonLd} />
     </article>
   );
 }

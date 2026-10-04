@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "monotonic-stack",
   title: "Monotonic Stack",
+  seoTitle: "Monotonic Stack: Next Greater Element and Histogram",
   category: "linear",
   level: "INTERMEDIATE",
   summary:

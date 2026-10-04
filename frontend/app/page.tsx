@@ -1,11 +1,16 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowRight, Plus } from "lucide-react";
+import { DSA_TOPICS } from "@/content/dsa/index.ts";
 import { auth0 } from "@/lib/auth0";
 import { getUser } from "@/lib/db";
+import { DSA_LANGUAGE_NAMES } from "@/lib/dsa";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, faqJsonLd, pageMetadata } from "@/lib/seo";
 import { getSiteSettings } from "@/lib/settings";
 import Backdrop from "@/components/backdrop";
+import JsonLd from "@/components/json-ld";
 import SiteFooter from "@/components/site-footer";
 import HowItWorks from "@/components/landing/how-it-works";
 import LiveDemo from "@/components/landing/live-demo";
@@ -20,17 +25,38 @@ const PACKS = [
   { name: "Pro", pay: 20, get: 25 },
 ];
 
+export const metadata: Metadata = pageMetadata({
+  title: { absolute: "Resland: AI Resume Tailoring for Software Engineers" },
+  description: SITE_DESCRIPTION,
+  path: "/",
+  // app/opengraph-image.tsx sits in this folder.
+  ownImage: true,
+});
+
 const QUESTION_CHIPS = [
-  "How many people?",
-  "What changed after?",
-  "Roughly how much?",
-  "Who used it?",
+  "How many requests a day?",
+  "What got faster?",
+  "How many services?",
+  "Who depended on it?",
 ];
 
-const faqs = [
+// From the System Design Mock's practice bank
+// (backend/shared/src/shared/system_design/bank.json).
+const MOCK_PROBLEMS = ["URL Shortener", "Rate Limiter", "Chat Messaging", "Payment System"];
+
+// Popular study center topics to link from the landing page.
+const FEATURED_TOPICS = ["sliding-window", "binary-search", "graph-traversal", "dp-1d"].map(
+  (slug) => DSA_TOPICS.find((t) => t.slug === slug)!,
+);
+
+const faqs: [string, string][] = [
   [
     "Will it change my resume without asking?",
-    "No. Every suggestion is a proposal. You can accept it, ask for something different, or throw it out.",
+    "No. Resland writes three options for each bullet and changes nothing until you pick one. You can also ask for more options or keep what you had.",
+  ],
+  [
+    "Is Resland only for software engineers?",
+    "It's built for them: the questions it asks, the examples and the interview prep all assume engineering work. Tailoring and bullet suggestions work on any resume, though, so it's just as useful outside software.",
   ],
   [
     "Which AI model does it use?",
@@ -70,17 +96,36 @@ export default async function Home() {
   if (signedInTarget) redirect(signedInTarget);
   const primaryHref = lookupFailed || session ? "/dashboard" : "/auth/login?screen_hint=signup";
   const primaryLabel = lookupFailed || session ? "Go to Dashboard" : "Get Started";
+  const mockHref = session ? "/system-design" : "/auth/login?screen_hint=signup&returnTo=%2Fsystem-design";
   const jsonLd = [
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
-      name: "Resland",
-      url: "https://resland.org",
+      name: SITE_NAME,
+      url: SITE_URL,
+      description: SITE_DESCRIPTION,
       applicationCategory: "BusinessApplication",
       operatingSystem: "Web",
-      offers: { "@type": "Offer", priceCurrency: "USD", price: "0", description: "Pay-as-you-go credits" },
+      audience: { "@type": "Audience", audienceType: "Software engineers" },
+      offers: {
+        "@type": "AggregateOffer",
+        priceCurrency: "USD",
+        lowPrice: String(Math.min(...PACKS.map((p) => p.pay))),
+        highPrice: String(Math.max(...PACKS.map((p) => p.pay))),
+        offerCount: PACKS.length,
+        description: "Pay-as-you-go balance packs. No subscription.",
+      },
     },
-    { "@context": "https://schema.org", "@type": "WebSite", name: "Resland", url: "https://resland.org" },
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: SITE_NAME,
+      legalName: "Quellen Ventures LLC",
+      url: SITE_URL,
+      logo: `${SITE_URL}/resland-logo.png`,
+    },
+    { "@context": "https://schema.org", "@type": "WebSite", name: SITE_NAME, url: SITE_URL },
+    faqJsonLd(faqs),
   ];
 
   return (
@@ -88,10 +133,15 @@ export default async function Home() {
       <Backdrop variant="hero" />
 
       {maintenance_mode && (
-        <p className="relative border-b border-red-800/60 bg-red-950/60 px-6 py-2.5 text-center text-sm text-red-200">
+        // data-nosnippet keeps this out of search results if a crawler visits
+        // mid-maintenance. Google only honors it on div, span and section.
+        <div
+          data-nosnippet
+          className="relative border-b border-red-800/60 bg-red-950/60 px-6 py-2.5 text-center text-sm text-red-200"
+        >
           Resland is down for maintenance, so the app is unavailable for now. Your data is safe. Check
           back soon.
-        </p>
+        </div>
       )}
 
       <header className="relative mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-5">
@@ -100,6 +150,7 @@ export default async function Home() {
         </Link>
         <nav aria-label="Sections" className="hidden items-center gap-8 text-sm text-zinc-400 md:flex">
           <a href="#how" className="hover:text-zinc-100">How it works</a>
+          <a href="#prep" className="hover:text-zinc-100">Interview prep</a>
           <a href="#pricing" className="hover:text-zinc-100">Pricing</a>
           <a href="#faq" className="hover:text-zinc-100">FAQ</a>
           <Link href="/dsa" className="hover:text-zinc-100">DSA Study Center</Link>
@@ -118,13 +169,15 @@ export default async function Home() {
         {/* Hero */}
         <section className="mx-auto grid max-w-6xl items-center gap-14 px-6 pt-16 pb-12 lg:grid-cols-2 lg:pt-24">
           <div>
+            <p className={`rise mb-5 ${eyebrow}`}>For software engineers</p>
             <h1 className="text-[44px] leading-[0.98] font-semibold tracking-[-0.045em] sm:text-[62px]">
               <span className="rise block text-balance">A resume for every job.</span>
               <span className="rise block text-zinc-500 [animation-delay:.12s]">Nothing made up.</span>
             </h1>
             <p className="rise mt-7 max-w-md text-[17px] leading-7 text-zinc-400 [animation-delay:.24s]">
-              Paste a job posting and Resland reorders and rewrites your experience to fit it. When a
-              bullet is vague, it asks you for the details instead of guessing.
+              Paste a job posting and Resland tailors your resume to it, leading each bullet with what
+              the role cares about most. When a bullet is vague, it asks for the real numbers instead of
+              guessing.
             </p>
             <div className="rise mt-9 flex flex-wrap gap-3 [animation-delay:.36s]">
               <Link
@@ -161,13 +214,15 @@ export default async function Home() {
         {/* What you get */}
         <Reveal aria-labelledby="features-heading" className="mx-auto max-w-6xl px-6 pt-32">
           <h2 id="features-heading" className={`max-w-xl ${h2}`}>
-            Built for people applying to more than one job.
+            Built for engineers applying to more than one job.
           </h2>
           <div className="mt-12 grid gap-4 md:grid-cols-3">
             <Spotlight className={`${card} p-6 md:col-span-2`}>
               <h3 className="font-medium">It asks before it writes</h3>
               <p className="mt-1.5 max-w-md text-sm leading-6 text-zinc-400">
                 When a bullet needs a number or an outcome, Resland asks you for it instead of guessing.
+                Then it writes three options for each bullet: one leading with the result, one with the
+                hard problem, one with the scale and ownership.
               </p>
               <div className="mt-6 flex flex-wrap gap-2 text-sm">
                 {QUESTION_CHIPS.map((q) => (
@@ -212,6 +267,65 @@ export default async function Home() {
           </div>
         </Reveal>
 
+        {/* Interview prep */}
+        <Reveal id="prep" aria-labelledby="prep-heading" className="mx-auto max-w-6xl scroll-mt-8 px-6 pt-32">
+          <p className={eyebrow}>Interview prep</p>
+          <h2 id="prep-heading" className={`mt-3 max-w-xl ${h2}`}>
+            Then get ready for the interview.
+          </h2>
+          <div className="mt-12 grid gap-4 md:grid-cols-2">
+            <Spotlight className={`${card} flex flex-col p-6`}>
+              <h3 className="font-medium">System Design Mock</h3>
+              <p className="mt-1.5 text-sm leading-6 text-zinc-400">
+                Practice a system design interview with an AI interviewer. Clarify the requirements,
+                estimate the scale, draw your design on a whiteboard, then defend it in a deep dive.
+                You&apos;re scored on each part for the level you pick, with a letter grade and a hire
+                signal at the end.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2 text-sm">
+                {MOCK_PROBLEMS.map((problem) => (
+                  <span key={problem} className="rounded-full border border-white/10 px-3 py-1 text-zinc-300">
+                    {problem}
+                  </span>
+                ))}
+                <span className="px-1 py-1 text-zinc-500">or one written from a job you tailored for</span>
+              </div>
+              <Link
+                href={mockHref}
+                className="mt-auto inline-flex items-center gap-1.5 pt-6 text-sm font-medium text-brand-300 hover:text-brand-200"
+              >
+                Start a mock interview <ArrowRight className="size-4" />
+              </Link>
+            </Spotlight>
+            <Spotlight className={`${card} flex flex-col p-6`}>
+              <h3 className="font-medium">DSA Study Center</h3>
+              <p className="mt-1.5 text-sm leading-6 text-zinc-400">
+                Free, no account needed. {DSA_TOPICS.length} data structures and algorithms topics
+                for coding interviews, from Big-O to dynamic programming, with classic problems worked
+                step by step in {DSA_LANGUAGE_NAMES}.
+              </p>
+              <ul className="mt-5 flex flex-wrap gap-2 text-sm">
+                {FEATURED_TOPICS.map((topic) => (
+                  <li key={topic.slug}>
+                    <Link
+                      href={`/dsa/${topic.slug}`}
+                      className="inline-block rounded-full border border-white/10 px-3 py-1 text-zinc-300 hover:border-brand-400/40 hover:text-white"
+                    >
+                      {topic.title}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href="/dsa"
+                className="mt-auto inline-flex items-center gap-1.5 pt-6 text-sm font-medium text-brand-300 hover:text-brand-200"
+              >
+                Browse all {DSA_TOPICS.length} topics <ArrowRight className="size-4" />
+              </Link>
+            </Spotlight>
+          </div>
+        </Reveal>
+
         {/* Pricing */}
         <Reveal id="pricing" aria-labelledby="pricing-heading" className="mx-auto max-w-6xl scroll-mt-8 px-6 pt-32">
           <Spotlight className="edge grid items-center gap-10 rounded-3xl border border-white/[.08] bg-card p-8 sm:p-12 md:grid-cols-[1.2fr_1fr]">
@@ -221,8 +335,9 @@ export default async function Home() {
                 Pay for what you use.
               </h2>
               <p className="mt-4 max-w-md leading-7 text-zinc-400">
-                There&apos;s no subscription. Add balance when you need it, and each suggestion or
-                tailoring run takes a little from it. Bigger packs come with bonus balance.
+                There&apos;s no subscription. Add balance when you need it, and each suggestion,
+                tailoring run or mock interview takes a little from it. Bigger packs come with bonus
+                balance.
               </p>
             </div>
             <div className="rounded-2xl border border-white/[.08] bg-black/30 p-6">
@@ -306,7 +421,7 @@ export default async function Home() {
           { href: "/auth/login?screen_hint=signup", label: "Sign Up" },
         ]}
       />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <JsonLd data={jsonLd} />
     </div>
   );
 }

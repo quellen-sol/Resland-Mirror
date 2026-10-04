@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "binary-trees",
   title: "Binary Trees",
+  seoTitle: "Binary Tree Traversals and Interview Problems",
   category: "trees",
   level: "BEGINNER",
   summary:

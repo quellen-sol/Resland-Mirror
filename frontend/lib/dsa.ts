@@ -12,16 +12,27 @@ export interface DsaLanguageInfo {
   file: string;
 }
 
-// Tab order on every code block.
+// Tab order on every code block. Python leads: it's the language most
+// candidates interview in.
 export const DSA_LANGUAGES: readonly DsaLanguageInfo[] = [
-  { id: "typescript", label: "TypeScript", file: "solution.ts" },
   { id: "python", label: "Python", file: "solution.py" },
+  { id: "typescript", label: "TypeScript", file: "solution.ts" },
   { id: "go", label: "Go", file: "solution.go" },
   { id: "csharp", label: "C#", file: "Solution.cs" },
   { id: "java", label: "Java", file: "Solution.java" },
 ];
 
-export const DEFAULT_DSA_LANGUAGE: DsaLanguage = "typescript";
+export const DEFAULT_DSA_LANGUAGE: DsaLanguage = "python";
+
+/** "A, B and C". */
+function joinWithAnd(items: readonly string[]): string {
+  return items.length < 2
+    ? (items[0] ?? "")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** "Python, TypeScript, Go, C# and Java", for copy. */
+export const DSA_LANGUAGE_NAMES = joinWithAnd(DSA_LANGUAGES.map((l) => l.label));
 
 /** localStorage key and <html> data attribute for the chosen language. */
 export const DSA_LANGUAGE_STORAGE_KEY = "resland.dsa.language";
@@ -127,6 +138,10 @@ export interface DsaPracticeLink {
 export interface DsaTopic {
   slug: string;
   title: string;
+  /** The page's <title>, worded the way people search for the topic, e.g.
+   *  "Sliding Window Technique: Template and Interview Problems". At most 55
+   *  characters so " · Resland" still fits. */
+  seoTitle: string;
   category: DsaCategoryId;
   level: DsaLevel;
   /** One sentence — topic cards and the meta description. */
@@ -198,6 +213,33 @@ export function topicNeighbors<T extends Placed>(
   return { prev: ordered[i - 1] ?? null, next: ordered[i + 1] ?? null };
 }
 
+/** Topics that list `slug` as a prerequisite, in study order. */
+export function topicDependents<T extends Placed & Pick<DsaTopic, "prerequisites">>(
+  topics: readonly T[],
+  slug: string,
+): T[] {
+  return orderTopics(topics.filter((t) => t.prerequisites.includes(slug)));
+}
+
+// ---------------------------------------------------------------------------
+// Search metadata
+
+export const META_DESCRIPTION_MAX = 160;
+
+/** The topic summary, plus as many of its worked problems as fit in
+ *  META_DESCRIPTION_MAX: "… Worked problems: Two Sum and Group Anagrams." */
+export function topicMetaDescription(
+  topic: Pick<DsaTopic, "summary" | "problems">,
+): string {
+  const titles = topic.problems.map((p) => p.title);
+  for (let n = titles.length; n > 0; n--) {
+    const list = joinWithAnd(titles.slice(0, n));
+    const text = `${topic.summary} Worked ${n === 1 ? "problem" : "problems"}: ${list}.`;
+    if (text.length <= META_DESCRIPTION_MAX) return text;
+  }
+  return topic.summary;
+}
+
 // ---------------------------------------------------------------------------
 // Inline markup
 
@@ -224,6 +266,13 @@ export function parseInline(text: string): InlineToken[] {
   }
   if (last < text.length) tokens.push({ type: "text", text: text.slice(last) });
   return tokens;
+}
+
+/** Prose with its markup removed, for meta tags and structured data. */
+export function toPlainText(text: string): string {
+  return parseInline(text)
+    .map((token) => token.text)
+    .join("");
 }
 
 // ---------------------------------------------------------------------------

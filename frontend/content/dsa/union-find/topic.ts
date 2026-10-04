@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "union-find",
   title: "Union-Find",
+  seoTitle: "Union-Find (Disjoint Set Union) Explained, with Code",
   category: "graphs",
   level: "INTERMEDIATE",
   summary:

@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "heaps",
   title: "Heaps & Priority Queues",
+  seoTitle: "Heaps and Priority Queues: Top K and Running Median",
   category: "trees",
   level: "INTERMEDIATE",
   summary:

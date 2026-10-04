@@ -40,7 +40,8 @@ toolchain isn't on PATH. Say so if you skipped one.
 
 `topic.ts` exports `topic: DsaTopic`. The fields:
 
-- **summary**: one sentence, at most 160 characters. It's the card blurb and the meta description.
+- **seoTitle**: the page's `<title>`, worded the way people search for the topic and at most 55 characters, e.g. "Sliding Window Technique: Template and Examples". It must say more than `title`.
+- **summary**: one sentence, at most 160 characters. It's the card blurb and the start of the meta description, which adds the worked problems' names when they fit.
 - **prerequisites**: slugs of topics worth reading first. They must exist.
 - **overview**: 2 to 6 blocks covering what the idea is, why it works and the common shapes it takes. Include a `diagram` if a picture helps.
 - **signals**: 3 to 5 clues in a problem statement that point at this topic.

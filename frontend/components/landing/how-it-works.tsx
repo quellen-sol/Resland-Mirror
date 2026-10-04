@@ -29,11 +29,11 @@ const STEPS = [
   },
   {
     title: "Answer a few questions",
-    body: "Resland asks what you did and what came of it, then suggests a rewrite.",
+    body: "Resland asks what you built and what came of it, then writes three options for each bullet.",
   },
   {
     title: "Tailor it to a job",
-    body: "Paste the posting, then save the tailored version and export it.",
+    body: "Paste the posting. Resland leads with what it values most, and you save and export the result.",
   },
 ];
 
@@ -98,8 +98,13 @@ function AnswerPanel() {
         </div>
       </div>
       <div className="rounded-xl border border-emerald-400/20 bg-emerald-400/[.06] p-3.5 text-emerald-100">
-        Built the new checkout flow, used by about 12,000 customers in its first
-        month.
+        <p className="font-mono text-[11px] tracking-wider text-emerald-300/80 uppercase">
+          Option 1 of 3
+        </p>
+        <p className="mt-1">
+          Built the new checkout flow, used by about 12,000 customers in its
+          first month.
+        </p>
       </div>
     </div>
   );
