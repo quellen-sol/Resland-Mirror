@@ -1,0 +1,6 @@
+1 0
+13 4 14
+12 2 4 false
+16 1 16 true
+7 3 1 false
+0 0 0 false

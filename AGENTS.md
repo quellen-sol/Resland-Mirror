@@ -109,6 +109,11 @@ cd frontend           && pnpm test          # node --test (explicit file list in
   glob.
 - Lint with `pnpm lint` (eslint-config-next). There is **no** `typecheck` script — run
   `npx tsc --noEmit` from `frontend/` and report the result in the PR.
+- The public DSA study center (`/dsa`) is content in `frontend/content/dsa` — read its README
+  before adding or editing a topic. Each example is a runnable program in five languages;
+  `pnpm test:dsa-examples` runs them all (needs `node`, `python3`, `go`, `dotnet` 10 and `java`
+  on PATH, and skips a missing toolchain) and `pnpm test:dsa-links` checks the LeetCode links.
+  Neither is part of `pnpm test`, so run them when you touch `content/dsa`.
 
 ## CI (`pull_request` → master)
 
