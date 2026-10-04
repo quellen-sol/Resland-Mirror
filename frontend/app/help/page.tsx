@@ -87,6 +87,23 @@ const SECTIONS: {
     ],
   },
   {
+    title: "DSA Study Center",
+    faqs: [
+      [
+        "What is the DSA Study Center?",
+        "A free guide to data structures and algorithms. Each topic explains how the idea works, how to spot it in an interview question, and walks through classic problems with code in TypeScript, Python, Go, C# and Java. You don't need an account to read it.",
+      ],
+      [
+        "How do I track what I've studied?",
+        "Sign in and use Mark as Studied at the top or bottom of a topic. Your progress is saved to your account, so it follows you to other devices, and the study center's home page shows how far along you are.",
+      ],
+      [
+        "Can I change the code language?",
+        "Yes. Pick a language on any code sample or on the study center's home page. Every sample switches with it, and your browser remembers the choice.",
+      ],
+    ],
+  },
+  {
     title: "Billing & Credits",
     faqs: [
       [

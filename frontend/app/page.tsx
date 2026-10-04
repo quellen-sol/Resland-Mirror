@@ -102,6 +102,7 @@ export default async function Home() {
           <a href="#how" className="hover:text-zinc-100">How it works</a>
           <a href="#pricing" className="hover:text-zinc-100">Pricing</a>
           <a href="#faq" className="hover:text-zinc-100">FAQ</a>
+          <Link href="/dsa" className="hover:text-zinc-100">DSA Study Center</Link>
         </nav>
         <div className="flex items-center gap-1">
           <Link href="/auth/login?returnTo=/dashboard" className="rounded-lg px-3 py-1.5 text-sm text-zinc-300 hover:bg-white/5 hover:text-white">
