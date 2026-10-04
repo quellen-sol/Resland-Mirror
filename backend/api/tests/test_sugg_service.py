@@ -9,10 +9,13 @@ import unittest
 from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 from shared.amqp import BULLET_SUGG_EXCHANGE_NAME
 
-from api.bullet_point_sugg import db, model, service
+from api.auth import require_auth0_id
+from api.bullet_point_sugg import db, model, router, service
+from api.deps import get_pg_conn
 
 from .helpers import _Amqp, _Pg, _Result
 
@@ -232,6 +235,22 @@ class AnswerSuggestion(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["answer"], "5 engineers")
         self.assertEqual(body["session_id"], "s1")
 
+    async def test_answer_to_review_keeps_options(self):
+        # Asking for more options mustn't wipe the current ones — if the
+        # agent ends without resubmitting, they're still what gets applied.
+        stored = json.dumps([{"bullet_id": 1, "options": ["a", "b", "c"]}])
+        pg = _Pg(
+            [
+                _Result(fetchone=_row(status="WAITING_FOR_INPUT", result=stored)),
+                _Result(),
+            ]
+        )
+        await service.answer_suggestion(
+            "u1", "s1", model.AnswerRequest(text="shorter"), pg, _Amqp()
+        )
+        params = next(p for q, p in pg.queries if "UPDATE user_suggestion" in q)
+        self.assertEqual(params, ("PROCESSING", None, stored, "s1"))
+
 
 class RetrySuggestion(unittest.IsolatedAsyncioTestCase):
     async def test_missing_404(self):
@@ -273,6 +292,14 @@ class RetrySuggestion(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(body["answer"])
         self.assertIsNone(body["prompt"])
 
+    async def test_retry_keeps_options(self):
+        stored = json.dumps([{"bullet_id": 1, "options": ["a", "b", "c"]}])
+        pg = _Pg([_Result(fetchone=_row(status="FAILED", result=stored)), _Result()])
+        with patch.object(service, "require_balance", new=AsyncMock()):
+            await service.retry_suggestion("u1", "s1", pg, _Amqp())
+        params = next(p for q, p in pg.queries if "UPDATE user_suggestion" in q)
+        self.assertEqual(params, ("PROCESSING", None, stored, "s1"))
+
     async def test_retry_gates_on_balance(self):
         pg = _Pg([_Result(fetchone=_row(status="FAILED")), _Result()])
         amqp = _Amqp()
@@ -291,41 +318,127 @@ class RetrySuggestion(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(amqp.publisher.published, [])
 
 
+def _accept_req(*pairs):
+    return model.AcceptSuggestionRequest(
+        choices=[model.AcceptChoice(bullet_id=b, option=o) for b, o in pairs]
+    )
+
+
+_OPTIONS = json.dumps(
+    [
+        {"bullet_id": 1, "options": ["1a", "1b", "1c"]},
+        {"bullet_id": 2, "options": ["2a", "2b", "2c"]},
+    ]
+)
+
+
 class AcceptSuggestion(unittest.IsolatedAsyncioTestCase):
+    def _pg(self, result=_OPTIONS):
+        row = _row(status="WAITING_FOR_INPUT", result=result, experience_id=5)
+        return _Pg([_Result(fetchone=row)])
+
+    @staticmethod
+    def _updates(pg):
+        return [p for q, p in pg.queries if "UPDATE user_base_experience_bullet" in q]
+
     async def test_missing_404(self):
         with self.assertRaises(HTTPException) as ctx:
-            await service.accept_suggestion("u1", "s1", _Pg([[]]))
+            await service.accept_suggestion("u1", "s1", _Pg([[]]), _accept_req())
         self.assertEqual(ctx.exception.status_code, 404)
 
     async def test_no_result_500(self):
         pg = _Pg([_Result(fetchone=_row(result=None))])
         with self.assertRaises(HTTPException) as ctx:
-            await service.accept_suggestion("u1", "s1", pg)
+            await service.accept_suggestion("u1", "s1", pg, _accept_req((1, 0)))
         self.assertEqual(ctx.exception.status_code, 500)
 
-    async def test_applies_suggestions_and_cleans_up(self):
-        result = json.dumps(
-            [
-                {"bullet_id": 1, "suggestion": "new one"},
-                {"bullet_id": 2, "suggestion": "new two"},
-            ]
+    async def test_applies_chosen_options_and_cleans_up(self):
+        pg = self._pg()
+        out = await service.accept_suggestion(
+            "u1", "s1", pg, _accept_req((1, 2), (2, 0))
         )
-        row = _row(status="COMPLETED", result=result, experience_id=5)
-        pg = _Pg([_Result(fetchone=row)])
-        out = await service.accept_suggestion("u1", "s1", pg)
         self.assertEqual(out, {"ok": True})
-        updates = [
-            (q, p)
-            for q, p in pg.queries
-            if "UPDATE user_base_experience_bullet" in q
-        ]
-        self.assertEqual(len(updates), 2)
-        self.assertEqual(updates[0][1], ("new one", 1, 5))
+        self.assertEqual(self._updates(pg), [("1c", 1, 5), ("2a", 2, 5)])
         # Session row + langgraph checkpoint tables are all deleted.
         deletes = [q for q, _ in pg.queries if "DELETE FROM" in q]
         self.assertTrue(any("user_suggestion" in q for q in deletes))
         for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
             self.assertTrue(any(table in q for q in deletes), table)
+
+    async def test_bullets_left_out_keep_their_text(self):
+        pg = self._pg()
+        await service.accept_suggestion("u1", "s1", pg, _accept_req((2, 1)))
+        self.assertEqual(self._updates(pg), [("2b", 2, 5)])
+
+    async def test_no_body_applies_first_option_of_each_bullet(self):
+        # Clients from before options existed POST without a body.
+        pg = self._pg()
+        await service.accept_suggestion("u1", "s1", pg, None)
+        self.assertEqual(self._updates(pg), [("1a", 1, 5), ("2a", 2, 5)])
+
+    async def test_legacy_single_suggestion_result_still_applies(self):
+        legacy = json.dumps([{"bullet_id": 1, "suggestion": "old style"}])
+        pg = self._pg(legacy)
+        await service.accept_suggestion("u1", "s1", pg, _accept_req((1, 0)))
+        self.assertEqual(self._updates(pg), [("old style", 1, 5)])
+
+    async def test_invalid_choices_400_and_write_nothing(self):
+        cases = {
+            "empty": _accept_req(),
+            "unknown bullet": _accept_req((9, 0)),
+            "option out of range": _accept_req((1, 3)),
+            "duplicate bullet": _accept_req((1, 0), (1, 1)),
+        }
+        for label, req in cases.items():
+            with self.subTest(label):
+                pg = self._pg()
+                with self.assertRaises(HTTPException) as ctx:
+                    await service.accept_suggestion("u1", "s1", pg, req)
+                self.assertEqual(ctx.exception.status_code, 400)
+                self.assertEqual(self._updates(pg), [])
+                self.assertFalse(any("DELETE FROM" in q for q, _ in pg.queries))
+
+    def test_negative_option_rejected_by_model(self):
+        with self.assertRaises(ValueError):
+            model.AcceptChoice(bullet_id=1, option=-1)
+
+
+class AcceptRoute(unittest.TestCase):
+    """The accept body is optional on the wire: pre-options clients POST
+    with no body at all."""
+
+    def setUp(self):
+        app = FastAPI()
+        app.include_router(router.router)
+        app.dependency_overrides[require_auth0_id] = lambda: "u1"
+        app.dependency_overrides[get_pg_conn] = lambda: None
+        self.client = TestClient(app)
+        self.accept = AsyncMock(return_value={"ok": True})
+        patcher = patch.object(service, "accept_suggestion", new=self.accept)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_no_body_passes_none(self):
+        resp = self.client.post("/bullets/suggestions/s1/accept")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(self.accept.call_args.kwargs["req"])
+
+    def test_choices_are_parsed(self):
+        resp = self.client.post(
+            "/bullets/suggestions/s1/accept",
+            json={"choices": [{"bullet_id": 3, "option": 1}]},
+        )
+        self.assertEqual(resp.status_code, 200)
+        req = self.accept.call_args.kwargs["req"]
+        self.assertEqual(req.choices, [model.AcceptChoice(bullet_id=3, option=1)])
+
+    def test_negative_option_422(self):
+        resp = self.client.post(
+            "/bullets/suggestions/s1/accept",
+            json={"choices": [{"bullet_id": 3, "option": -1}]},
+        )
+        self.assertEqual(resp.status_code, 422)
+        self.accept.assert_not_called()
 
 
 class DismissSuggestion(unittest.IsolatedAsyncioTestCase):

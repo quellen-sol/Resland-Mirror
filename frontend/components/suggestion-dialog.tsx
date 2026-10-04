@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,7 @@ import {
   isInsufficientBalance,
 } from "@/lib/api";
 import ApiUnavailable from "@/components/api-unavailable";
+import { moreOptionsMessage, parseSuggestionResult } from "@/lib/suggestions";
 
 const POLL_INTERVAL_MS = 3000;
 const SESSION_TIMEOUT_MS = 5 * 60 * 1000;
@@ -44,11 +45,22 @@ interface SuggestionSession {
   result?: string | null;
 }
 
+/** Picked option index per bullet, tied to the result it was picked from
+ *  so a fresh set of options starts with nothing selected. */
+interface Picks {
+  result: string | null | undefined;
+  byBullet: Record<number, number>;
+}
+
+const fieldClass =
+  "border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30";
+
 export default function SuggestionDialog({
   accessToken,
   experienceId,
   bulletId,
   targetText,
+  bullets,
   contextLabel,
   variant = "button",
 }: {
@@ -58,6 +70,9 @@ export default function SuggestionDialog({
   bulletId?: number;
   /** The current text the suggestion would replace — shown for comparison. */
   targetText?: string;
+  /** The experience's current bullets, so each set of options can show the
+   *  bullet it would replace. */
+  bullets?: { id: number; bullet: string }[];
   /** Job label shown in the header, e.g. "Engineer · Acme". */
   contextLabel?: string;
   /** "icon" for per-bullet rows, "button" for the experience-level action. */
@@ -68,8 +83,7 @@ export default function SuggestionDialog({
   const [model, setModel] = useState("");
   const [session, setSession] = useState<SuggestionSession | null>(null);
   const [answer, setAnswer] = useState("");
-  const [ownPrompt, setOwnPrompt] = useState("");
-  const [promptMode, setPromptMode] = useState(false);
+  const [picks, setPicks] = useState<Picks>({ result: null, byBullet: {} });
   const [busy, setBusy] = useState(false);
   const finishedRef = useRef(false);
   const startedAtRef = useRef<number>(0);
@@ -97,9 +111,8 @@ export default function SuggestionDialog({
     }
   }
 
-  /** POST a fresh session (optionally seeded with the user's own prompt)
-   *  and prime local state for polling. */
-  async function launch(prompt?: string, closeOnError = true) {
+  /** POST a fresh session and prime local state for polling. */
+  async function launch() {
     if (!apiBaseUrl || busy) return;
     setBusy(true);
     finishedRef.current = false;
@@ -112,7 +125,6 @@ export default function SuggestionDialog({
           experience_id: experienceId,
           bullet_id: bulletId ?? null,
           model: model || null,
-          prompt: prompt || null,
         }),
       })) as { session_id: string };
       try {
@@ -126,7 +138,7 @@ export default function SuggestionDialog({
       }
     } catch (error) {
       reportStartError(error);
-      if (closeOnError) setOpen(false);
+      setOpen(false);
     } finally {
       setBusy(false);
     }
@@ -155,23 +167,6 @@ export default function SuggestionDialog({
     } finally {
       setBusy(false);
     }
-  }
-
-  /** Discard the current suggestion and relaunch with the user's own prompt. */
-  async function submitOwnPrompt() {
-    const text = ownPrompt.trim();
-    if (!text || busy) return;
-    finishedRef.current = true;
-    if (session) {
-      await apiFetch(`/suggestions/${session.session_id}/dismiss`, {
-        method: "POST",
-      }).catch(() => {});
-    }
-    setSession(null);
-    setAnswer("");
-    setOwnPrompt("");
-    setPromptMode(false);
-    await launch(text, false);
   }
 
   useEffect(() => {
@@ -221,9 +216,10 @@ export default function SuggestionDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, session?.session_id, session?.status]);
 
-  async function sendAnswer() {
-    const text = answer.trim();
-    if (!text || !session) return;
+  /** Reply to the agent: an answer to its question, or — once options are
+   *  showing — direction for a fresh set of three. */
+  async function sendAnswer(text: string) {
+    if (!text || !session || busy) return;
     setBusy(true);
     try {
       await apiFetch(`/suggestions/${session.session_id}/answer`, {
@@ -244,17 +240,27 @@ export default function SuggestionDialog({
   }
 
   async function accept() {
-    if (!session) return;
+    const choices = Object.entries(pickedByBullet).map(([id, option]) => ({
+      bullet_id: Number(id),
+      option,
+    }));
+    if (!session || choices.length === 0) return;
     setBusy(true);
     finishedRef.current = true;
     try {
       await apiFetch(`/suggestions/${session.session_id}/accept`, {
         method: "POST",
+        body: JSON.stringify({ choices }),
       });
-      toast.success("Suggestion applied");
+      toast.success(
+        choices.length === 1
+          ? "Suggestion applied"
+          : `${choices.length} bullets updated`,
+      );
       setOpen(false);
       router.refresh();
     } catch (error) {
+      finishedRef.current = false;
       toast.error("Couldn't apply suggestion", {
         description: describeApiError(error),
       });
@@ -285,21 +291,36 @@ export default function SuggestionDialog({
     consecutiveFailuresRef.current = 0;
   }
 
-  // Result is a JSON array of {bullet_id, suggestion} produced by the agent.
-  const suggestions = useMemo(() => {
-    if (!session?.result) return [];
-    try {
-      const parsed = JSON.parse(session.result);
-      return Array.isArray(parsed)
-        ? (parsed as { bullet_id: number; suggestion: string }[])
-        : [];
-    } catch {
-      return [];
-    }
-  }, [session]);
+  const options = useMemo(
+    () => parseSuggestionResult(session?.result),
+    [session?.result],
+  );
+  const pickedByBullet =
+    picks.result === session?.result ? picks.byBullet : {};
+  const pickedCount = Object.keys(pickedByBullet).length;
 
+  /** Select an option for its bullet; selecting it again deselects it. */
+  function togglePick(bullet: number, option: number) {
+    const byBullet = { ...pickedByBullet };
+    if (byBullet[bullet] === option) delete byBullet[bullet];
+    else byBullet[bullet] = option;
+    setPicks({ result: session?.result, byBullet });
+  }
+
+  function currentText(id: number) {
+    return (
+      bullets?.find((b) => b.id === id)?.bullet ??
+      (id === bulletId ? targetText : undefined)
+    );
+  }
+
+  const processing =
+    session?.status === "PENDING" || session?.status === "PROCESSING";
   const waiting = session?.status === "WAITING_FOR_INPUT";
-  const done = session?.status === "COMPLETED";
+  // Options stay pickable while the agent waits for a reply to them.
+  const reviewing =
+    options.length > 0 && (waiting || session?.status === "COMPLETED");
+  const asking = waiting && !reviewing;
   const failed = session?.status === "FAILED";
   const timedOut = session?.status === "TIMED_OUT";
   const gone = session?.status === "GONE";
@@ -339,8 +360,8 @@ export default function SuggestionDialog({
             {bulletId ? "Improve This Bullet" : "Improve This Experience"}
           </DialogTitle>
           <DialogDescription className="text-zinc-400">
-            {contextLabel ? `${contextLabel}. ` : ""}             Resland may
-            ask you a question or two before it suggests a rewrite.
+            {contextLabel ? `${contextLabel}. ` : ""}Resland asks about the
+            work behind your bullets, then writes three options to pick from.
           </DialogDescription>
         </DialogHeader>
 
@@ -363,7 +384,8 @@ export default function SuggestionDialog({
             </div>
           )}
 
-          {targetText && (
+          {/* Experience-wide options show each bullet's current text inline. */}
+          {targetText && !(reviewing && !bulletId) && (
             <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
               <p className="text-xs font-medium tracking-wide text-zinc-500 uppercase">
                 {bulletId ? "Your Bullet Point" : "Your Current Bullets"}
@@ -374,100 +396,132 @@ export default function SuggestionDialog({
             </div>
           )}
 
-          {(session?.status === "PENDING" ||
-            session?.status === "PROCESSING") && (
+          {processing && (
             <div className="flex items-center gap-2 text-sm text-zinc-400">
               <Loader2 className="size-4 animate-spin text-brand-400" />
-              Thinking…
+              {options.length > 0 ? "Writing new options…" : "Thinking…"}
+            </div>
+          )}
+
+          {reviewing && (
+            <div className="flex flex-col gap-4">
+              {options.map((b) => {
+                const current = bulletId ? undefined : currentText(b.bullet_id);
+                return (
+                  <div key={b.bullet_id} className="flex flex-col gap-2">
+                    {current && (
+                      <p className="text-xs text-zinc-500">
+                        <span className="font-medium tracking-wide uppercase">
+                          Current:
+                        </span>{" "}
+                        {current}
+                      </p>
+                    )}
+                    <div role="radiogroup" className="flex flex-col gap-2">
+                      {b.options.map((text, i) => {
+                        const picked = pickedByBullet[b.bullet_id] === i;
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            role="radio"
+                            aria-checked={picked}
+                            onClick={() => togglePick(b.bullet_id, i)}
+                            disabled={busy}
+                            className={cn(
+                              "flex flex-col gap-1 rounded-lg border p-3 text-left text-sm transition-colors",
+                              picked
+                                ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-100"
+                                : "border-zinc-800 bg-zinc-950/50 text-zinc-300 hover:border-zinc-600",
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                "text-xs font-medium tracking-wide uppercase",
+                                picked ? "text-emerald-400" : "text-zinc-500",
+                              )}
+                            >
+                              Option {i + 1}
+                            </span>
+                            <span className="whitespace-pre-wrap">{text}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
           {waiting && (
             <div className="flex flex-col gap-3">
-              <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 p-3 text-sm text-brand-200">
+              <div className="rounded-lg border border-brand-500/30 bg-brand-500/10 p-3 text-sm whitespace-pre-wrap text-brand-200">
                 {session.pending_question}
               </div>
-              <div className="flex gap-2">
-                <Input
+              <div className="flex items-end gap-2">
+                <Textarea
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      void sendAnswer();
+                      void sendAnswer(
+                        asking ? answer.trim() : moreOptionsMessage(answer),
+                      );
                     }
                   }}
-                  placeholder="Your answer…"
-                  className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
+                  rows={asking ? 3 : 1}
+                  placeholder={
+                    asking
+                      ? "Your answer… (Shift+Enter for a new line)"
+                      : "What should change? (optional)"
+                  }
+                  className={cn(asking ? "min-h-20" : "min-h-9", fieldClass)}
                 />
-                <Button
-                  onClick={sendAnswer}
-                  disabled={busy || !answer.trim()}
-                >
-                  <Send />
-                </Button>
+                {asking ? (
+                  <Button
+                    onClick={() => sendAnswer(answer.trim())}
+                    disabled={busy || !answer.trim()}
+                  >
+                    <Send />
+                  </Button>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => sendAnswer(moreOptionsMessage(answer))}
+                    disabled={busy}
+                    className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+                  >
+                    {answer.trim() ? <Send /> : <Sparkles />} More Options
+                  </Button>
+                )}
               </div>
             </div>
           )}
 
-          {done && (
-            <div className="flex flex-col gap-3">
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
-                <p className="text-xs font-medium tracking-wide text-emerald-400 uppercase">
-                  Suggested
-                </p>
-                <ul className="mt-1 list-disc space-y-1 pl-4 text-sm whitespace-pre-wrap text-emerald-100">
-                  {suggestions.map((s) => (
-                    <li key={s.bullet_id}>{s.suggestion}</li>
-                  ))}
-                </ul>
-              </div>
-              {promptMode && (
-                <div className="flex gap-2">
-                  <Input
-                    value={ownPrompt}
-                    onChange={(e) => setOwnPrompt(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void submitOwnPrompt();
-                      }
-                    }}
-                    placeholder="Tell Resland what to change…"
-                    className="border-zinc-700 bg-zinc-950/50 text-zinc-200 placeholder:text-zinc-600 focus-visible:border-brand-500 focus-visible:ring-brand-500/30"
-                  />
-                  <Button
-                    onClick={submitOwnPrompt}
-                    disabled={busy || !ownPrompt.trim()}
-                  >
-                    <Send />
-                  </Button>
-                </div>
-              )}
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  onClick={dismiss}
-                  disabled={busy}
-                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setPromptMode((v) => !v)}
-                  disabled={busy}
-                  className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
-                >
-                  Ask for Changes
-                </Button>
-                <Button
-                  onClick={accept}
-                  disabled={busy}
-                >
-                  {busy ? <Loader2 className="animate-spin" /> : "Accept"}
-                </Button>
-              </div>
+          {reviewing && (
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={dismiss}
+                disabled={busy}
+                className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={accept}
+                disabled={busy || pickedCount === 0}
+              >
+                {busy ? (
+                  <Loader2 className="animate-spin" />
+                ) : pickedCount > 1 ? (
+                  `Accept ${pickedCount}`
+                ) : (
+                  "Accept"
+                )}
+              </Button>
             </div>
           )}
 

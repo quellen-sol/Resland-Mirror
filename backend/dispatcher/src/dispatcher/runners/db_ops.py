@@ -230,24 +230,50 @@ def fetch_suggestion_rows(
         ).fetchall()
 
 
+def _suggestions_json(result: SuggestionsResult) -> str:
+    return json.dumps([asdict(s) for s in result.suggestions])
+
+
 def set_suggestion_question(
-    pg_client: Connection, session_id: str, question: str | None
+    pg_client: Connection,
+    session_id: str,
+    question: str | None,
+    result: SuggestionsResult | None = None,
 ):
+    # `result` is set when the review interrupt fired — the options are
+    # pickable while the session waits for the user's reply.
+    payload = _suggestions_json(result) if result else None
     with pg_client.transaction():
         pg_client.execute(
             """
             UPDATE user_suggestion
-            SET pending_question = %s, status = 'WAITING_FOR_INPUT'
+            SET pending_question = %s, status = 'WAITING_FOR_INPUT',
+                result = COALESCE(%s, result)
             WHERE id = %s
             """,
-            (question, session_id),
+            (question, payload, session_id),
         )
+
+
+def complete_suggestion(pg_client: Connection, session_id: str) -> bool:
+    """Mark the session finished — only valid once options exist (the agent
+    can end without resubmitting when the user replies that they're happy)."""
+    with pg_client.transaction():
+        res = pg_client.execute(
+            """
+            UPDATE user_suggestion
+            SET status = 'COMPLETED', pending_question = NULL
+            WHERE id = %s AND result IS NOT NULL
+            """,
+            (session_id,),
+        )
+        return res.rowcount > 0
 
 
 def set_suggestion_result(
     pg_client: Connection, session_id: str, result: SuggestionsResult
 ):
-    payload = json.dumps([asdict(s) for s in result.suggestions])
+    payload = _suggestions_json(result)
     with pg_client.transaction():
         pg_client.execute(
             """
