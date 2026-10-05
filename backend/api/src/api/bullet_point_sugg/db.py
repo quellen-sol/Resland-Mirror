@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from psycopg.rows import class_row
+from shared.checkpoints import CHECKPOINT_TABLES
 
 from ..deps import PgConnection
 
@@ -95,7 +96,7 @@ async def delete_inactive_sugg_sessions(
         )
         ids = [row[0] for row in await res.fetchall()]
         for session_id in ids:
-            for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+            for table in CHECKPOINT_TABLES:
                 await cursor.execute(
                     f"DELETE FROM {table} WHERE thread_id = %s",
                     (session_id,),
@@ -112,7 +113,7 @@ async def delete_sugg_session(
         )
         # The dispatcher's langgraph checkpointer keys conversation state on
         # thread_id = session_id — drop it with the session.
-        for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+        for table in CHECKPOINT_TABLES:
             await cursor.execute(
                 f"DELETE FROM {table} WHERE thread_id = %s",
                 (session_id,),

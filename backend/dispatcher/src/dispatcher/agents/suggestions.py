@@ -18,6 +18,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from psycopg.rows import dict_row
 from pydantic import BaseModel
+from shared.checkpoints import CHECKPOINT_CONN_OPTIONS
 from shared.pg import get_pg_client
 
 from ..env_vars import PG_URL
@@ -300,7 +301,9 @@ def build_and_invoke_agent(
     )
 
     # PostgresSaver uses pipeline mode, which requires autocommit.
-    with get_pg_client(PG_URL, row_factory=dict_row) as conn:
+    with get_pg_client(
+        PG_URL, row_factory=dict_row, options=CHECKPOINT_CONN_OPTIONS
+    ) as conn:
         checkpointer = PostgresSaver(conn)
         agent = agent_builder.compile(checkpointer=checkpointer)
 

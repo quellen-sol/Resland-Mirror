@@ -2,12 +2,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from psycopg.rows import class_row
+from shared.checkpoints import CHECKPOINT_TABLES
 
 from ..deps import PgConnection
-
-# The dispatcher's langgraph checkpointer keys the interviewer thread on
-# thread_id = session id. The tables only exist once a dispatcher has run.
-_CHECKPOINT_TABLES = ("checkpoints", "checkpoint_blobs", "checkpoint_writes")
 
 
 @dataclass
@@ -248,7 +245,9 @@ async def delete_session(conn: PgConnection, session_id: str, user_id: str) -> N
         await cursor.execute(
             "DELETE FROM user_system_design_session WHERE id = %s", (session_id,)
         )
-        for table in _CHECKPOINT_TABLES:
+        # The dispatcher's langgraph checkpointer keys the interviewer thread on
+        # thread_id = session id. The tables only exist once a dispatcher has run.
+        for table in CHECKPOINT_TABLES:
             res = await cursor.execute("SELECT to_regclass(%s)", (table,))
             exists = await res.fetchone()
             if exists and exists[0]:

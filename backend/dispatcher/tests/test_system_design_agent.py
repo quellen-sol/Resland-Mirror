@@ -14,6 +14,7 @@ from unittest.mock import patch
 from dispatcher.agents import system_design as sd
 from langchain.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from shared.checkpoints import CHECKPOINT_CONN_OPTIONS
 from shared.system_design.bank import (
     Clarification,
     InterviewBrief,
@@ -284,8 +285,8 @@ class BuildTurnMessage(unittest.TestCase):
 class _GraphTest(unittest.TestCase):
     def setUp(self):
         self.saver = InMemorySaver()
-        self.pg_patch, self.saver_patch = _patch_infra(sd, self.saver)
-        self.pg_patch.start()
+        self.saver_patch, self.pg_patch = _patch_infra(sd, self.saver)
+        self.pg = self.pg_patch.start()
         self.saver_patch.start()
         self.addCleanup(self.pg_patch.stop)
         self.addCleanup(self.saver_patch.stop)
@@ -319,6 +320,12 @@ class InterviewTurn(_GraphTest):
         self.assertEqual(
             [m.content for m in shown[1:]],
             [sd.INTERVIEW_KICKOFF, "Opening", "How many users?"],
+        )
+
+    def test_checkpointer_connects_to_its_schema(self):
+        self.turn([ai("About 100M a month.")])
+        self.assertEqual(
+            self.pg.call_args.kwargs["options"], CHECKPOINT_CONN_OPTIONS
         )
 
     def test_later_turns_keep_history_without_reseeding(self):

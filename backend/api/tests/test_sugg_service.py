@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from shared.amqp import BULLET_SUGG_EXCHANGE_NAME
+from shared.checkpoints import CHECKPOINT_TABLES
 
 from api.auth import require_auth0_id
 from api.bullet_point_sugg import db, model, router, service
@@ -172,7 +173,7 @@ class StartSuggestion(unittest.IsolatedAsyncioTestCase):
         ckpt_deletes = [
             q
             for q in texts
-            if "DELETE FROM checkpoint" in q
+            if "DELETE FROM langgraph.checkpoint" in q
         ]
         self.assertEqual(len(ckpt_deletes), 3)
 
@@ -362,8 +363,8 @@ class AcceptSuggestion(unittest.IsolatedAsyncioTestCase):
         # Session row + langgraph checkpoint tables are all deleted.
         deletes = [q for q, _ in pg.queries if "DELETE FROM" in q]
         self.assertTrue(any("user_suggestion" in q for q in deletes))
-        for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
-            self.assertTrue(any(table in q for q in deletes), table)
+        for table in CHECKPOINT_TABLES:
+            self.assertTrue(any(f"DELETE FROM {table} " in q for q in deletes), table)
 
     async def test_bullets_left_out_keep_their_text(self):
         pg = self._pg()
@@ -449,6 +450,9 @@ class DismissSuggestion(unittest.IsolatedAsyncioTestCase):
         deletes = [(q, p) for q, p in pg.queries if "DELETE FROM" in q]
         self.assertEqual(len(deletes), 4)
         self.assertEqual(deletes[0][1], ("s1", "u1"))  # session row
+        self.assertEqual(
+            [q.split()[2] for q, _ in deletes[1:]], list(CHECKPOINT_TABLES)
+        )
         for _, params in deletes[1:]:
             self.assertEqual(params, ("s1",))  # checkpoint tables
 

@@ -34,6 +34,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import END, START, StateGraph
 from psycopg.rows import dict_row
 from pydantic import BaseModel, Field
+from shared.checkpoints import CHECKPOINT_CONN_OPTIONS
 from shared.pg import get_pg_client
 from shared.system_design.bank import InterviewBrief
 from shared.system_design.diagram import (
@@ -619,7 +620,9 @@ def run_interview_turn(
     builder.add_conditional_edges("llm_call", should_continue, ["tool_node", END])
     builder.add_edge("tool_node", "llm_call")
 
-    with get_pg_client(PG_URL, row_factory=dict_row) as conn:
+    with get_pg_client(
+        PG_URL, row_factory=dict_row, options=CHECKPOINT_CONN_OPTIONS
+    ) as conn:
         agent = builder.compile(checkpointer=PostgresSaver(conn))
         config: RunnableConfig = {"configurable": {"thread_id": session_id}}
         snapshot = agent.get_state(config)

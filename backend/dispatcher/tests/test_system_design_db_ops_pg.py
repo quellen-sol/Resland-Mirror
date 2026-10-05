@@ -12,6 +12,7 @@ import unittest
 
 import psycopg
 from dispatcher.agents.system_design import GradeReport
+from dispatcher.pg import do_pg_setup
 from dispatcher.runners import db_ops
 from shared.testing import destructive_db_ok
 
@@ -177,14 +178,13 @@ class SystemDesignDbOps(unittest.TestCase):
         self.assertEqual(row["last_turn_id"], "t9")
 
     def test_complete_drops_the_interviewer_thread(self):
-        from langgraph.checkpoint.postgres import PostgresSaver
-
-        PostgresSaver(self.conn).setup()
+        do_pg_setup(TEST_PG_URL)
         self._session(phase="FEEDBACK")
         for sid in ("s1", "other"):
             self.conn.execute(
-                "INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id,"
-                " checkpoint, metadata) VALUES (%s, '', 'c1', '{}', '{}')",
+                "INSERT INTO langgraph.checkpoints (thread_id, checkpoint_ns,"
+                " checkpoint_id, checkpoint, metadata)"
+                " VALUES (%s, '', 'c1', '{}', '{}')",
                 (sid,),
             )
         report = GradeReport(
@@ -200,10 +200,11 @@ class SystemDesignDbOps(unittest.TestCase):
         )
         db_ops.complete_system_design_session(self.conn, "s1", report, None)
         threads = self.conn.execute(
-            "SELECT thread_id FROM checkpoints WHERE thread_id IN ('s1', 'other')"
+            "SELECT thread_id FROM langgraph.checkpoints"
+            " WHERE thread_id IN ('s1', 'other')"
         ).fetchall()
         self.assertEqual(threads, [("other",)])
-        self.conn.execute("DELETE FROM checkpoints WHERE thread_id = 'other'")
+        self.conn.execute("DELETE FROM langgraph.checkpoints WHERE thread_id = 'other'")
 
     def test_notice_hands_back_a_retry(self):
         self._session()
