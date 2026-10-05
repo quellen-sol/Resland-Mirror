@@ -6,6 +6,7 @@ from dataclasses import asdict
 from openrouter import OpenRouter, errors
 from psycopg import Connection
 from psycopg.rows import class_row
+from shared.checkpoints import CHECKPOINT_TABLES
 from shared.docgen import FormatProfile
 
 from ..agents.docx_parser import UserDocxProfile
@@ -593,7 +594,7 @@ def complete_system_design_session(
         )
         # A graded interview takes no more turns, and its transcript lives in
         # system_design_message — the interviewer thread is dead weight.
-        for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+        for table in CHECKPOINT_TABLES:
             exists = pg_client.execute(
                 "SELECT to_regclass(%s)", (table,)
             ).fetchone()

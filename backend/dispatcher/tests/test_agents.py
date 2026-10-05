@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 import docx
 from langchain.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from shared.checkpoints import CHECKPOINT_CONN_OPTIONS
 
 from dispatcher.agents import docx_parser, suggestions, tailor, writing
 
@@ -175,8 +176,8 @@ def _opts(bullet_id=7, options=("a", "b", "c")):
 class SuggestionAgent(unittest.TestCase):
     def setUp(self):
         self.saver = InMemorySaver()
-        self.pg_patch, self.saver_patch = _patch_infra(suggestions, self.saver)
-        self.pg_patch.start()
+        self.saver_patch, self.pg_patch = _patch_infra(suggestions, self.saver)
+        self.pg = self.pg_patch.start()
         self.saver_patch.start()
         self.addCleanup(self.pg_patch.stop)
         self.addCleanup(self.saver_patch.stop)
@@ -309,6 +310,12 @@ class SuggestionAgent(unittest.TestCase):
         self.assertEqual(len(humans), 1)
         self.assertIn("get_user_bullet_points", humans[0].content)
 
+    def test_checkpointer_connects_to_its_schema(self):
+        self._run([ai("done")])
+        self.assertEqual(
+            self.pg.call_args.kwargs["options"], CHECKPOINT_CONN_OPTIONS
+        )
+
     def test_answer_on_finished_run_hits_empty_input_fallback(self):
         # Command(resume) on a checkpoint with no pending interrupt raises
         # EmptyInputError — the code falls back to invoke(None).
@@ -412,8 +419,8 @@ class SuggestionAgent(unittest.TestCase):
 class TailorAgent(unittest.TestCase):
     def setUp(self):
         self.saver = InMemorySaver()
-        self.pg_patch, self.saver_patch = _patch_infra(tailor, self.saver)
-        self.pg_patch.start()
+        self.saver_patch, self.pg_patch = _patch_infra(tailor, self.saver)
+        self.pg = self.pg_patch.start()
         self.saver_patch.start()
         self.addCleanup(self.pg_patch.stop)
         self.addCleanup(self.saver_patch.stop)
@@ -487,6 +494,12 @@ class TailorAgent(unittest.TestCase):
         system = model.calls[0][0]
         self.assertEqual(system.type, "system")
         self.assertIn(writing.BULLET_WRITING_RULES, system.content)
+
+    def test_checkpointer_connects_to_its_schema(self):
+        self._run([ai("done")])
+        self.assertEqual(
+            self.pg.call_args.kwargs["options"], CHECKPOINT_CONN_OPTIONS
+        )
 
     def test_tools_hand_back_job_description_and_profile(self):
         _, model = self._run(

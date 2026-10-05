@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 from shared.amqp import TAILOR_EXCHANGE_NAME
+from shared.checkpoints import CHECKPOINT_TABLES
 
 from api.tailor import db, model, service
 
@@ -216,6 +217,9 @@ class DismissTailor(unittest.IsolatedAsyncioTestCase):
         deletes = [(q, p) for q, p in pg.queries if "DELETE FROM" in q]
         self.assertEqual(len(deletes), 4)
         self.assertEqual(deletes[0][1], ("r1", "u1"))  # run row
+        self.assertEqual(
+            [q.split()[2] for q, _ in deletes[1:]], list(CHECKPOINT_TABLES)
+        )
         for _, params in deletes[1:]:
             self.assertEqual(params, ("r1",))  # checkpoint tables
 

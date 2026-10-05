@@ -29,6 +29,10 @@ docs/                 Design docs (billing plan, UX specs)
 - **RabbitMQ topology is declared by the dispatcher on startup** (exchanges, durable queues,
   `#` topic bindings, DLX args) — no need to start the API first.
 - Job dataclasses live in `backend/shared` (`AmqpResumeJob`, `AmqpSuggestionJob`, `AmqpTailorJob`).
+- **LangGraph checkpointer tables live in the `langgraph` Postgres schema**, not `public`, created by
+  the dispatcher on startup (`dispatcher.pg.do_pg_setup`). `prisma db update` only reads the schemas
+  the contract declares and drops tables there that it doesn't model, so keep them out of `public`
+  and out of the contract. Raw SQL goes through `shared.checkpoints.CHECKPOINT_TABLES`.
 - `token_usage` is an append-only ledger, one row per job (`@@unique([job_kind, job_id])`), recording
   `model` + charged `amount_cents`; billing/admin aggregates read from it.
 

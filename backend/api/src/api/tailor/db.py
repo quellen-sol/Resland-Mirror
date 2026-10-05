@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from psycopg.rows import class_row
+from shared.checkpoints import CHECKPOINT_TABLES
 
 from ..deps import PgConnection
 
@@ -110,7 +111,7 @@ async def clear_completed_tailor_runs(conn: PgConnection, user_id: str) -> None:
         )
         run_ids = [row[0] for row in await res.fetchall()]
         for run_id in run_ids:
-            for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+            for table in CHECKPOINT_TABLES:
                 await cursor.execute(
                     f"DELETE FROM {table} WHERE thread_id = %s",
                     (run_id,),
@@ -125,7 +126,7 @@ async def delete_tailor_run(conn: PgConnection, run_id: str, user_id: str) -> No
         )
         # The dispatcher's langgraph checkpointer keys conversation state on
         # thread_id = run_id — drop it with the run.
-        for table in ("checkpoints", "checkpoint_blobs", "checkpoint_writes"):
+        for table in CHECKPOINT_TABLES:
             await cursor.execute(
                 f"DELETE FROM {table} WHERE thread_id = %s",
                 (run_id,),
