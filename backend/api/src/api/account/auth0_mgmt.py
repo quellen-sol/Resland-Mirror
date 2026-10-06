@@ -6,10 +6,13 @@ cached in-process until shortly before it expires — Auth0's free plan caps how
 many machine-to-machine tokens a tenant can mint a month.
 """
 
+import time
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
 import httpx
+import jwt
 
 from ..env_vars import (
     AUTH0_DOMAIN,
@@ -52,9 +55,35 @@ class Auth0NotReady(Auth0ManagementError):
     rejected, or the token lacks a scope we need."""
 
 
+@dataclass(frozen=True)
+class _Token:
+    value: str
+    scopes: frozenset[str]
+    expires_at: float  # time.monotonic()
+
+
+# (domain, client_id) -> token. Process-wide, so every client built from the
+# same env shares one token until it's near expiry.
+_TOKENS: dict[tuple[str, str], _Token] = {}
+
+
 def clear_token_cache() -> None:
     """Forget cached tokens (tests; a rotated secret)."""
-    raise NotImplementedError
+    _TOKENS.clear()
+
+
+def _granted_scopes(body: dict, token: str) -> frozenset[str]:
+    """Scopes from the token response, or from the token itself when the
+    response leaves them out. Only read, never trusted for auth: Auth0
+    enforces them on every call; this just lets us fail before erasing."""
+    scope = body.get("scope")
+    if not isinstance(scope, str):
+        try:
+            claims = jwt.decode(token, options={"verify_signature": False})
+        except jwt.PyJWTError:
+            claims = {}
+        scope = claims.get("scope") or ""
+    return frozenset(scope.split())
 
 
 class Auth0Management:
@@ -81,7 +110,14 @@ class Auth0Management:
             transport=self._transport,
         )
 
-    async def _token(self, client: httpx.AsyncClient) -> str:
+    @property
+    def _cache_key(self) -> tuple[str, str]:
+        return (self.domain, self.client_id)
+
+    async def _token(self, client: httpx.AsyncClient) -> _Token:
+        cached = _TOKENS.get(self._cache_key)
+        if cached and time.monotonic() < cached.expires_at - TOKEN_REFRESH_MARGIN_S:
+            return cached
         res = await client.post(
             "/oauth/token",
             json={
@@ -96,28 +132,51 @@ class Auth0Management:
                 f"token request failed: {res.status_code} {res.text[:200]}"
             )
         try:
-            return res.json()["access_token"]
-        except (ValueError, KeyError) as e:
+            body = res.json()
+            value = body["access_token"]
+        except (ValueError, KeyError, TypeError) as e:
             raise Auth0ManagementError("token response had no access_token") from e
+        token = _Token(
+            value=value,
+            scopes=_granted_scopes(body, value),
+            expires_at=time.monotonic() + float(body.get("expires_in") or 0),
+        )
+        _TOKENS[self._cache_key] = token
+        return token
 
     async def _user_request(self, method: str, user_id: str) -> httpx.Response:
         try:
             async with self._client() as client:
                 token = await self._token(client)
                 # Auth0 ids contain `|` — it must be percent-encoded.
-                return await client.request(
+                res = await client.request(
                     method,
                     f"/api/v2/users/{quote(user_id, safe='')}",
-                    headers={"Authorization": f"Bearer {token}"},
+                    headers={"Authorization": f"Bearer {token.value}"},
                 )
         except httpx.HTTPError as e:
             raise Auth0ManagementError(f"{method} user failed: {e!r}") from e
+        if res.status_code == 401:
+            # Revoked or rotated: don't keep handing it out.
+            _TOKENS.pop(self._cache_key, None)
+        return res
 
     async def ensure_scopes(self, *scopes: str) -> None:
         """Fetch (or reuse) a token and check it carries `scopes`. Raises
         Auth0NotReady otherwise — call it before starting anything that
         needs Auth0 to finish."""
-        raise NotImplementedError
+        if not self.configured:
+            raise Auth0NotReady("Management API credentials aren't set")
+        try:
+            async with self._client() as client:
+                token = await self._token(client)
+        except httpx.HTTPError as e:
+            raise Auth0NotReady(f"token request failed: {e!r}") from e
+        except Auth0ManagementError as e:
+            raise Auth0NotReady(str(e)) from e
+        missing = set(scopes) - token.scopes
+        if missing:
+            raise Auth0NotReady(f"token lacks {' '.join(sorted(missing))}")
 
     async def get_user(self, user_id: str) -> dict[str, Any] | None:
         """The user's Auth0 profile, trimmed to PROFILE_FIELDS; None when

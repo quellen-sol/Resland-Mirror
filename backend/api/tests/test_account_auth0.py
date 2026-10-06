@@ -243,7 +243,9 @@ class EnsureScopes(_FreshCache):
 
         def handler(request):
             if request.url.path == "/oauth/token":
-                return httpx.Response(200, json={"access_token": token, "expires_in": 60})
+                return httpx.Response(
+                    200, json={"access_token": token, "expires_in": 60}
+                )
             return httpx.Response(204)
 
         client = Auth0Management(
