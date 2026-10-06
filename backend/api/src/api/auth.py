@@ -43,7 +43,12 @@ async def require_auth0_id(
         claims = await asyncio.to_thread(_verify_claims, authorization[7:])
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid access token") from e
-    raise NotImplementedError
+    sub = claims["sub"]
+    # A still-valid token from before the account was deleted (another
+    # device, an open tab) must not keep working against a fresh account.
+    if await token_revoked(pg_conn, sub, claims.get("iat")):
+        raise HTTPException(status_code=401, detail="This account was deleted")
+    return sub
 
 
 # Annotated alias so routes can declare `user_id: Auth0UserId` — FastAPI

@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 from collections.abc import Generator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -32,9 +34,17 @@ async def lifespan(app: FastAPI) -> Generator[None, Any, None]:
     # One shared client for the process — setup declares topology idempotently.
     deps.amqp_client = AmqpClient(AMQP_URL)
     await deps.amqp_client.setup()
-    yield
-    await deps.amqp_client.close()
-    deps.amqp_client = None
+    # Retries Auth0 login deletions that didn't finish and purges old
+    # account_deletion rows (see account.sweeper).
+    sweeper = asyncio.create_task(account_sweeper.run_forever())
+    try:
+        yield
+    finally:
+        sweeper.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await sweeper
+        await deps.amqp_client.close()
+        deps.amqp_client = None
 
 
 app = FastAPI(lifespan=lifespan)

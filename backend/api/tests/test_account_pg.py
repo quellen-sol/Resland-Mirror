@@ -797,8 +797,7 @@ async def test_paid_checkout_the_webhook_missed_is_credited_then_reconfirmed(
     assert exc.value.detail == service.payment_credited_message(512.5)
     row = await _one(
         pg,
-        "SELECT user_id, status, payment_intent_id FROM balance_purchase"
-        " WHERE id = %s",
+        "SELECT user_id, status, payment_intent_id FROM balance_purchase WHERE id = %s",
         (mine["open_checkout"],),
     )
     assert row == (USER, "COMPLETED", "pi_late")
@@ -825,7 +824,9 @@ async def test_checkout_stripe_never_heard_of_does_not_block(
     await seed_user(pg, USER)
 
     def missing(session_id):
-        raise stripe.InvalidRequestError("No such checkout.session", None, code="resource_missing")
+        raise stripe.InvalidRequestError(
+            "No such checkout.session", None, code="resource_missing"
+        )
 
     monkeypatch.setattr(stripe.checkout.Session, "expire", missing)
     monkeypatch.setattr(stripe.checkout.Session, "retrieve", missing)

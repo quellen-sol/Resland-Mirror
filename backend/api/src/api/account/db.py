@@ -5,6 +5,7 @@ deletion's row lock spans its whole sequence (see service.delete_account).
 """
 
 import json
+import math
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -96,24 +97,31 @@ async def lock_account(conn: PgConnection, user_id: str) -> LockedAccount | None
     The lock serializes deletion against everything that adds work for the
     user: inserts into user-owned tables take FOR KEY SHARE on this row via
     their foreign key, and the paths that flip an existing row back to
-    PROCESSING take it explicitly (api.user_row.share_user_row)."""
+    PROCESSING take it explicitly (api.user_row.share_user_row).
+
+    The user's purchase rows are locked first, in id order: the Stripe
+    webhook locks a purchase, then the user, and taking them the other way
+    round deadlocked against a refund arriving mid-deletion."""
     async with conn.cursor() as cursor:
+        res = await cursor.execute(
+            """
+            SELECT id, status FROM balance_purchase
+            WHERE user_id = %s ORDER BY id FOR UPDATE
+            """,
+            (user_id,),
+        )
+        purchases = await res.fetchall()
         res = await cursor.execute(
             'SELECT stripe_customer_id FROM "user" WHERE auth0_id = %s FOR UPDATE',
             (user_id,),
         )
         row = await res.fetchone()
-        if not row:
-            return None
-        res = await cursor.execute(
-            """
-            SELECT id FROM balance_purchase
-            WHERE user_id = %s AND status = 'PENDING' ORDER BY created_at
-            """,
-            (user_id,),
-        )
-        open_ids = [r[0] for r in await res.fetchall()]
-    return LockedAccount(stripe_customer_id=row[0], open_checkout_ids=open_ids)
+    if not row:
+        return None
+    return LockedAccount(
+        stripe_customer_id=row[0],
+        open_checkout_ids=[pid for pid, status in purchases if status == "PENDING"],
+    )
 
 
 async def in_flight_jobs(conn: PgConnection, user_id: str) -> list[str]:
@@ -201,6 +209,23 @@ async def erase_account(conn: PgConnection, user_id: str) -> str | None:
     return tombstone
 
 
+async def record_deletion(conn: PgConnection, user_id: str) -> None:
+    """Note the deletion in account_deletion, in the erase's transaction so
+    it commits with it. A repeat deletion (the person signed up again with
+    the same login) starts the record over."""
+    async with conn.cursor() as cursor:
+        await cursor.execute(
+            """
+            INSERT INTO account_deletion (auth0_id, requested_at)
+            VALUES (%s, clock_timestamp())
+            ON CONFLICT (auth0_id) DO UPDATE SET
+                requested_at = EXCLUDED.requested_at,
+                auth0_deleted_at = NULL
+            """,
+            (user_id,),
+        )
+
+
 async def token_revoked(
     conn: PgConnection, user_id: str, issued_at: float | None
 ) -> bool:
@@ -210,24 +235,60 @@ async def token_revoked(
     Auth0 deleted it. A sign-up after that, even with the same social login
     (same sub), is a new account and passes. `issued_at` is epoch seconds
     (a token's iat, a session's createdAt); None counts as old."""
-    raise NotImplementedError
+    async with conn.cursor() as cursor:
+        res = await cursor.execute(
+            "SELECT auth0_deleted_at FROM account_deletion WHERE auth0_id = %s",
+            (user_id,),
+        )
+        row = await res.fetchone()
+    if row is None:
+        return False
+    deleted_at = row[0]
+    if deleted_at is None or issued_at is None:
+        return True
+    # iat is whole seconds; anything stamped in the second Auth0 deleted the
+    # login counts as old (a new sign-up can't happen that fast).
+    return issued_at <= math.floor(deleted_at.timestamp())
 
 
 async def mark_auth0_deleted(conn: PgConnection, user_id: str) -> None:
-    """Record that Auth0 confirmed the login is deleted."""
-    raise NotImplementedError
+    """Record that Auth0 confirmed the login is deleted. Stamped after the
+    confirmation, so every token Auth0 issued for the old login is older."""
+    async with conn.cursor() as cursor:
+        await cursor.execute(
+            """
+            UPDATE account_deletion SET auth0_deleted_at = clock_timestamp()
+            WHERE auth0_id = %s AND auth0_deleted_at IS NULL
+            """,
+            (user_id,),
+        )
 
 
 async def pending_auth0_deletions(conn: PgConnection) -> list[str]:
     """Deleted accounts whose Auth0 login hasn't been deleted yet."""
-    raise NotImplementedError
+    async with conn.cursor() as cursor:
+        res = await cursor.execute(
+            """
+            SELECT auth0_id FROM account_deletion
+            WHERE auth0_deleted_at IS NULL ORDER BY requested_at
+            """
+        )
+        return [r[0] for r in await res.fetchall()]
 
 
 async def purge_finished_deletions(conn: PgConnection) -> int:
     """Drop account_deletion rows whose Auth0 login has been gone longer than
     REVOCATION_WINDOW — every session from before has expired by then.
     Returns how many were dropped."""
-    raise NotImplementedError
+    async with conn.cursor() as cursor:
+        res = await cursor.execute(
+            """
+            DELETE FROM account_deletion
+            WHERE auth0_deleted_at < now() - %s::interval
+            """,
+            (REVOCATION_WINDOW,),
+        )
+        return res.rowcount
 
 
 async def forget_stripe_customer(
