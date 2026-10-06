@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'fbcfb6d73d6292fc83fe93d684ca06b76cc186f9582c456695cad477992ccb40'>;
+  StorageHashBase<'b8efd6dafa6fc9099e70e37bcab76c6104321edfc9b4844bebdb9e14ac5c518d'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -259,6 +259,16 @@ export type FieldOutputTypes = {
       readonly is_default: CodecTypes['pg/bool@1']['output'];
       readonly sort_order: CodecTypes['pg/int4@1']['output'];
     };
+    readonly PageView: {
+      readonly id: CodecTypes['pg/int4@1']['output'];
+      readonly visit_id: CodecTypes['pg/text@1']['output'];
+      readonly path: CodecTypes['pg/text@1']['output'];
+      readonly prev_path: CodecTypes['pg/text@1']['output'] | null;
+      readonly source: 'SEARCH' | 'AI' | 'SOCIAL' | 'REFERRAL' | 'DIRECT' | 'INTERNAL';
+      readonly source_name: CodecTypes['pg/text@1']['output'] | null;
+      readonly utm_campaign: CodecTypes['pg/text@1']['output'] | null;
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+    };
     readonly SiteSettings: {
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly maintenance_mode: CodecTypes['pg/bool@1']['output'];
@@ -465,6 +475,16 @@ export type FieldInputTypes = {
       readonly enabled: CodecTypes['pg/bool@1']['input'];
       readonly is_default: CodecTypes['pg/bool@1']['input'];
       readonly sort_order: CodecTypes['pg/int4@1']['input'];
+    };
+    readonly PageView: {
+      readonly id: CodecTypes['pg/int4@1']['input'];
+      readonly visit_id: CodecTypes['pg/text@1']['input'];
+      readonly path: CodecTypes['pg/text@1']['input'];
+      readonly prev_path: CodecTypes['pg/text@1']['input'] | null;
+      readonly source: 'SEARCH' | 'AI' | 'SOCIAL' | 'REFERRAL' | 'DIRECT' | 'INTERNAL';
+      readonly source_name: CodecTypes['pg/text@1']['input'] | null;
+      readonly utm_campaign: CodecTypes['pg/text@1']['input'] | null;
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
     };
     readonly SiteSettings: {
       readonly id: CodecTypes['pg/int4@1']['input'];
@@ -673,6 +693,16 @@ export type StorageColumnTypes = {
       readonly is_default: CodecTypes['pg/bool@1']['output'];
       readonly sort_order: CodecTypes['pg/int4@1']['output'];
     };
+    readonly page_view: {
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly id: CodecTypes['pg/int4@1']['output'];
+      readonly path: CodecTypes['pg/text@1']['output'];
+      readonly prev_path: CodecTypes['pg/text@1']['output'] | null;
+      readonly source: 'SEARCH' | 'AI' | 'SOCIAL' | 'REFERRAL' | 'DIRECT' | 'INTERNAL';
+      readonly source_name: CodecTypes['pg/text@1']['output'] | null;
+      readonly utm_campaign: CodecTypes['pg/text@1']['output'] | null;
+      readonly visit_id: CodecTypes['pg/text@1']['output'];
+    };
     readonly site_settings: {
       readonly id: CodecTypes['pg/int4@1']['output'];
       readonly maintenance_mode: CodecTypes['pg/bool@1']['output'];
@@ -879,6 +909,16 @@ export type StorageColumnInputTypes = {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly is_default: CodecTypes['pg/bool@1']['input'];
       readonly sort_order: CodecTypes['pg/int4@1']['input'];
+    };
+    readonly page_view: {
+      readonly created_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly id: CodecTypes['pg/int4@1']['input'];
+      readonly path: CodecTypes['pg/text@1']['input'];
+      readonly prev_path: CodecTypes['pg/text@1']['input'] | null;
+      readonly source: 'SEARCH' | 'AI' | 'SOCIAL' | 'REFERRAL' | 'DIRECT' | 'INTERNAL';
+      readonly source_name: CodecTypes['pg/text@1']['input'] | null;
+      readonly utm_campaign: CodecTypes['pg/text@1']['input'] | null;
+      readonly visit_id: CodecTypes['pg/text@1']['input'];
     };
     readonly site_settings: {
       readonly id: CodecTypes['pg/int4@1']['input'];
@@ -1210,6 +1250,66 @@ type ContractBase = Omit<
               primaryKey: { readonly columns: readonly ['id'] };
               uniques: readonly [];
               indexes: readonly [];
+              foreignKeys: readonly [];
+            };
+            readonly page_view: {
+              columns: {
+                readonly id: {
+                  readonly nativeType: 'int4';
+                  readonly codecId: 'pg/int4@1';
+                  readonly nullable: false;
+                  readonly default: {
+                    readonly kind: 'function';
+                    readonly expression: 'autoincrement()';
+                  };
+                };
+                readonly visit_id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly path: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly prev_path: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly source: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly source_name: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly utm_campaign: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
+                };
+                readonly created_at: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+              };
+              primaryKey: { readonly columns: readonly ['id'] };
+              uniques: readonly [];
+              indexes: readonly [
+                {
+                  readonly name: 'page_view_created_at_idx_225d8c0f';
+                  readonly prefix: 'page_view_created_at_idx';
+                  readonly columns: readonly ['created_at'];
+                  readonly unique: false;
+                },
+              ];
               foreignKeys: readonly [];
             };
             readonly site_settings: {
@@ -2637,6 +2737,17 @@ type ContractBase = Omit<
               readonly kind: 'valueSet';
               readonly values: readonly ['PROCESSING', 'WAITING_FOR_INPUT', 'COMPLETED', 'FAILED'];
             };
+            readonly TrafficSource: {
+              readonly kind: 'valueSet';
+              readonly values: readonly [
+                'SEARCH',
+                'AI',
+                'SOCIAL',
+                'REFERRAL',
+                'DIRECT',
+                'INTERNAL',
+              ];
+            };
             readonly UsageJobKind: {
               readonly kind: 'valueSet';
               readonly values: readonly ['SUGGESTION', 'TAILOR', 'SYSTEM_DESIGN'];
@@ -2729,6 +2840,7 @@ type ContractBase = Omit<
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'UserDsaProgress';
     };
+    readonly page_view: { readonly namespace: 'public' & NamespaceId; readonly model: 'PageView' };
   };
   readonly domain: {
     readonly namespaces: {
@@ -2840,6 +2952,60 @@ type ContractBase = Omit<
                 readonly enabled: { readonly column: 'enabled' };
                 readonly is_default: { readonly column: 'is_default' };
                 readonly sort_order: { readonly column: 'sort_order' };
+              };
+            };
+          };
+          readonly PageView: {
+            readonly fields: {
+              readonly id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/int4@1' };
+              };
+              readonly visit_id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly path: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly prev_path: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly source: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly source_name: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly utm_campaign: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly created_at: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+            };
+            readonly relations: Record<string, never>;
+            readonly storage: {
+              readonly table: 'page_view';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly id: { readonly column: 'id' };
+                readonly visit_id: { readonly column: 'visit_id' };
+                readonly path: { readonly column: 'path' };
+                readonly prev_path: { readonly column: 'prev_path' };
+                readonly source: { readonly column: 'source' };
+                readonly source_name: { readonly column: 'source_name' };
+                readonly utm_campaign: { readonly column: 'utm_campaign' };
+                readonly created_at: { readonly column: 'created_at' };
               };
             };
           };
@@ -4093,6 +4259,17 @@ type ContractBase = Omit<
               { readonly name: 'COMPLETED'; readonly value: 'COMPLETED' },
               { readonly name: 'EXPIRED'; readonly value: 'EXPIRED' },
               { readonly name: 'REFUNDED'; readonly value: 'REFUNDED' },
+            ];
+          };
+          readonly TrafficSource: {
+            readonly codecId: 'pg/text@1';
+            readonly members: readonly [
+              { readonly name: 'SEARCH'; readonly value: 'SEARCH' },
+              { readonly name: 'AI'; readonly value: 'AI' },
+              { readonly name: 'SOCIAL'; readonly value: 'SOCIAL' },
+              { readonly name: 'REFERRAL'; readonly value: 'REFERRAL' },
+              { readonly name: 'DIRECT'; readonly value: 'DIRECT' },
+              { readonly name: 'INTERNAL'; readonly value: 'INTERNAL' },
             ];
           };
         };

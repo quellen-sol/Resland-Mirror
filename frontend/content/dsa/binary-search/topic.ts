@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "binary-search",
   title: "Binary Search",
+  seoTitle: "Binary Search: Template, Lower Bound and Rotated Arrays",
   category: "techniques",
   level: "BEGINNER",
   summary:

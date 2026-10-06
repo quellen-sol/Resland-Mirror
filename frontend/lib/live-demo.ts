@@ -8,8 +8,15 @@ export const DEMO_SCRIPT = {
   question:
     "How many services moved over, and what changed for the team afterward?",
   answer: "About 40. Deploys went from 25 min to 6.",
-  suggestion:
-    "Moved 40 services to Kubernetes, cutting deploys from 25 minutes to 6.",
+  // Three ways to lead with the same facts, like the real suggestion dialog.
+  // Only numbers from the answer: the demo can't make anything up either.
+  options: [
+    "Cut deploys from 25 minutes to 6 by moving 40 services to Kubernetes.",
+    "Moved 40 services to Kubernetes, taking deploys from 25 minutes to 6.",
+    "Migrated 40 services to Kubernetes so the team deploys in 6 minutes, not 25.",
+  ],
+  /** The option the demo picks before accepting. */
+  picked: 0,
 } as const;
 
 export interface DemoFrame {
@@ -23,14 +30,16 @@ export interface DemoFrame {
   answer: string;
   /** The original bullet is struck through. */
   struck: boolean;
-  suggestionVisible: boolean;
-  suggestion: string;
+  /** How many of the options are on screen; they arrive one at a time. */
+  optionsShown: number;
+  /** The option highlighted as chosen, once all of them are up. */
+  picked: number | null;
   actionsVisible: boolean;
   /** Accept is mid-click. */
   acceptPressed: boolean;
   toastVisible: boolean;
   /** Which text is typing right now (it gets the caret), if any. */
-  typing: "question" | "answer" | "suggestion" | null;
+  typing: "question" | "answer" | null;
 }
 
 // Beats, in ms. The answer types slower than Resland's lines so it reads
@@ -41,9 +50,9 @@ const QUESTION_PER_CHAR = 16;
 const BEFORE_ANSWER = 700;
 const ANSWER_PER_CHAR = 42;
 const BEFORE_REWRITE = 600;
-const REWRITE_LEAD = 300;
-const SUGGESTION_PER_CHAR = 20;
-const BEFORE_ACCEPT = 900;
+const OPTION_STAGGER = 450;
+const BEFORE_PICK = 1100;
+const BEFORE_ACCEPT = 800;
 const PRESS = 220;
 const HOLD = 3200;
 
@@ -54,15 +63,16 @@ const QUESTION_DONE_AT =
 const ANSWER_AT = QUESTION_DONE_AT + BEFORE_ANSWER;
 const ANSWER_DONE_AT = ANSWER_AT + DEMO_SCRIPT.answer.length * ANSWER_PER_CHAR;
 const REWRITE_AT = ANSWER_DONE_AT + BEFORE_REWRITE;
-const SUGGESTION_TYPE_AT = REWRITE_AT + REWRITE_LEAD;
-const SUGGESTION_DONE_AT =
-  SUGGESTION_TYPE_AT + DEMO_SCRIPT.suggestion.length * SUGGESTION_PER_CHAR;
-const PRESS_AT = SUGGESTION_DONE_AT + BEFORE_ACCEPT;
+const OPTIONS_DONE_AT =
+  REWRITE_AT + (DEMO_SCRIPT.options.length - 1) * OPTION_STAGGER;
+const PICK_AT = OPTIONS_DONE_AT + BEFORE_PICK;
+const PRESS_AT = PICK_AT + BEFORE_ACCEPT;
 const TOAST_AT = PRESS_AT + PRESS;
 
 export const DEMO_LOOP_MS = TOAST_AT + HOLD;
 
-/** The frame shown without motion: the whole exchange, waiting on Accept. */
+/** The frame shown without motion: the whole exchange, an option picked,
+ *  waiting on Accept. */
 export const DEMO_STATIC_FRAME: DemoFrame = {
   questionVisible: true,
   thinking: false,
@@ -70,8 +80,8 @@ export const DEMO_STATIC_FRAME: DemoFrame = {
   answerVisible: true,
   answer: DEMO_SCRIPT.answer,
   struck: true,
-  suggestionVisible: true,
-  suggestion: DEMO_SCRIPT.suggestion,
+  optionsShown: DEMO_SCRIPT.options.length,
+  picked: DEMO_SCRIPT.picked,
   actionsVisible: true,
   acceptPressed: false,
   toastVisible: false,
@@ -88,12 +98,17 @@ export function demoFrameAt(ms: number): DemoFrame {
   const t = ((ms % DEMO_LOOP_MS) + DEMO_LOOP_MS) % DEMO_LOOP_MS;
   const question = typed(DEMO_SCRIPT.question, QUESTION_TYPE_AT, QUESTION_PER_CHAR, t);
   const answer = typed(DEMO_SCRIPT.answer, ANSWER_AT, ANSWER_PER_CHAR, t);
-  const suggestion = typed(DEMO_SCRIPT.suggestion, SUGGESTION_TYPE_AT, SUGGESTION_PER_CHAR, t);
+  const optionsShown =
+    t < REWRITE_AT
+      ? 0
+      : Math.min(
+          DEMO_SCRIPT.options.length,
+          1 + Math.floor((t - REWRITE_AT) / OPTION_STAGGER),
+        );
 
   let typing: DemoFrame["typing"] = null;
   if (t >= QUESTION_TYPE_AT && question.length < DEMO_SCRIPT.question.length) typing = "question";
   else if (t >= ANSWER_AT && answer.length < DEMO_SCRIPT.answer.length) typing = "answer";
-  else if (t >= SUGGESTION_TYPE_AT && suggestion.length < DEMO_SCRIPT.suggestion.length) typing = "suggestion";
 
   return {
     questionVisible: t >= QUESTION_AT,
@@ -102,9 +117,9 @@ export function demoFrameAt(ms: number): DemoFrame {
     answerVisible: t >= ANSWER_AT,
     answer,
     struck: t >= REWRITE_AT,
-    suggestionVisible: t >= REWRITE_AT,
-    suggestion,
-    actionsVisible: t >= SUGGESTION_DONE_AT,
+    optionsShown,
+    picked: t >= PICK_AT ? DEMO_SCRIPT.picked : null,
+    actionsVisible: t >= OPTIONS_DONE_AT,
     acceptPressed: t >= PRESS_AT && t < TOAST_AT,
     toastVisible: t >= TOAST_AT,
     typing,

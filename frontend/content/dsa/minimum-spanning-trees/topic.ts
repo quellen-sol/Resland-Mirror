@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "minimum-spanning-trees",
   title: "Minimum Spanning Trees",
+  seoTitle: "Minimum Spanning Tree: Kruskal's and Prim's Algorithms",
   category: "graphs",
   level: "ADVANCED",
   summary:

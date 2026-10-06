@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "tries",
   title: "Tries",
+  seoTitle: "Trie (Prefix Tree) Data Structure, with Code",
   category: "trees",
   level: "INTERMEDIATE",
   summary:

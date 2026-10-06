@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "prefix-sums",
   title: "Prefix Sums",
+  seoTitle: "Prefix Sums: Range Queries and Subarray Sum Equals K",
   category: "techniques",
   level: "BEGINNER",
   summary:

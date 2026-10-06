@@ -1,20 +1,11 @@
 import { NextResponse } from "next/server";
+import { hidden, requireAdmin } from "@/lib/admin";
 import { auth0 } from "@/lib/auth0";
-import { getUser } from "@/lib/db";
 import { getSiteSettings, primeSiteSettingsCache } from "@/lib/settings";
 
 // The admin dashboard's settings surface. Writes forward to the Python API
 // (the canonical writer — it upserts the row and flips its own in-process
 // flag), then prime the local cache so this deploy sees it instantly.
-async function requireAdmin() {
-  const user = await getUser();
-  return user?.site_admin ? user : null;
-}
-
-// Hidden like the /admin page itself — pretend it doesn't exist.
-function hidden() {
-  return NextResponse.json({ detail: "Not found" }, { status: 404 });
-}
 
 export async function GET() {
   if (!(await requireAdmin())) return hidden();

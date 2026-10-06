@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "linked-lists",
   title: "Linked Lists",
+  seoTitle: "Linked List Interview Problems: Reverse, Merge, Cycle",
   category: "linear",
   level: "BEGINNER",
   summary:

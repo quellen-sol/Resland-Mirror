@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "arrays-hashing",
   title: "Arrays & Hash Maps",
+  seoTitle: "Arrays and Hash Maps: Two Sum, Group Anagrams and More",
   category: "foundations",
   level: "BEGINNER",
   summary:

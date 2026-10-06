@@ -5,13 +5,18 @@ import test from "node:test";
 import {
   DEFAULT_DSA_LANGUAGE,
   DSA_CATEGORIES,
+  DSA_LANGUAGE_NAMES,
   DSA_LANGUAGES,
+  META_DESCRIPTION_MAX,
   coerceDsaLanguage,
   groupTopicsByCategory,
   orderTopics,
   parseInline,
   parseProgressUpdate,
   summarizeProgress,
+  toPlainText,
+  topicDependents,
+  topicMetaDescription,
   topicNeighbors,
 } from "./dsa.ts";
 import { DSA_TOPICS } from "../content/dsa/index.ts";
@@ -73,6 +78,70 @@ test("topicNeighbors walks study order across category boundaries", () => {
   assert.equal(last.next, null);
 
   assert.deepEqual(topicNeighbors(topics, "nope"), { prev: null, next: null });
+});
+
+test("topicDependents lists topics that build on one, in study order", () => {
+  const topics = [
+    { ...fixture("tries", "trees"), prerequisites: ["binary-trees"] },
+    { ...fixture("binary-trees", "trees"), prerequisites: ["recursion"] },
+    { ...fixture("graph-traversal", "graphs"), prerequisites: ["recursion", "stacks-queues"] },
+    { ...fixture("recursion", "foundations"), prerequisites: [] },
+    { ...fixture("dp-1d", "dp"), prerequisites: ["recursion"] },
+  ];
+  assert.deepEqual(
+    topicDependents(topics, "recursion").map((t) => t.slug),
+    ["binary-trees", "graph-traversal", "dp-1d"],
+  );
+  assert.deepEqual(topicDependents(topics, "dp-1d"), []);
+});
+
+// ---------------------------------------------------------------------------
+// Search metadata
+
+function problem(title) {
+  return { title };
+}
+
+test("topicMetaDescription adds the worked problems that fit", () => {
+  assert.equal(
+    topicMetaDescription({
+      summary: "Halve a sorted range every step.",
+      problems: [problem("Lower Bound"), problem("Koko Eating Bananas")],
+    }),
+    "Halve a sorted range every step. Worked problems: Lower Bound and Koko Eating Bananas.",
+  );
+  assert.equal(
+    topicMetaDescription({
+      summary: "Short.",
+      problems: [problem("A"), problem("B"), problem("C")],
+    }),
+    "Short. Worked problems: A, B and C.",
+  );
+  assert.equal(
+    topicMetaDescription({ summary: "One.", problems: [problem("Two Sum")] }),
+    "One. Worked problem: Two Sum.",
+  );
+});
+
+test("topicMetaDescription drops problems from the end to stay in bounds", () => {
+  const summary = "x".repeat(110) + ".";
+  const d = topicMetaDescription({
+    summary,
+    problems: [problem("Group Anagrams"), problem("Longest Consecutive Sequence")],
+  });
+  assert.equal(d, `${summary} Worked problem: Group Anagrams.`);
+  assert.ok(d.length <= META_DESCRIPTION_MAX);
+
+  const full = "y".repeat(150) + ".";
+  assert.equal(topicMetaDescription({ summary: full, problems: [problem("Two Sum")] }), full);
+});
+
+test("toPlainText strips code, bold and link markup", () => {
+  assert.equal(
+    toPlainText("Move `left` **inward**, see [Binary Search](/dsa/binary-search)."),
+    "Move left inward, see Binary Search.",
+  );
+  assert.equal(toPlainText("O(n) time"), "O(n) time");
 });
 
 // ---------------------------------------------------------------------------
@@ -168,6 +237,15 @@ test("summarizeProgress counts per category and ignores stale slugs", () => {
   });
 });
 
+test("DSA_LANGUAGE_NAMES lists every language for copy", () => {
+  for (const l of DSA_LANGUAGES) assert.ok(DSA_LANGUAGE_NAMES.includes(l.label), l.label);
+  assert.match(DSA_LANGUAGE_NAMES, /, [^,]+ and [^,]+$/);
+});
+
+test("the default language leads the tabs", () => {
+  assert.equal(DSA_LANGUAGES[0].id, DEFAULT_DSA_LANGUAGE);
+});
+
 test("coerceDsaLanguage falls back to the default", () => {
   assert.equal(coerceDsaLanguage("go"), "go");
   assert.equal(coerceDsaLanguage("csharp"), "csharp");
@@ -237,6 +315,10 @@ for (const topic of DSA_TOPICS) {
       assert.ok(topic[field].trim(), `${field} is empty`);
     }
     assert.ok(topic.summary.length <= 160, "summary is too long for a meta description");
+    assert.ok(topic.seoTitle.trim(), "seoTitle is empty");
+    assert.ok(topic.seoTitle.length <= 55, `seoTitle is ${topic.seoTitle.length} characters, over 55`);
+    assert.notEqual(topic.seoTitle, topic.title, "seoTitle should say more than the title");
+    assert.ok(topicMetaDescription(topic).length <= META_DESCRIPTION_MAX);
     assert.ok(topic.overview.length > 0, "no overview");
     assert.ok(topic.signals.length > 0, "no signals");
     assert.ok(topic.complexity.length > 0, "no complexity rows");
@@ -282,6 +364,7 @@ for (const topic of DSA_TOPICS) {
     // House style for user-facing copy: plain sentences, no "X — Y".
     const shown = [
       topic.title,
+      topic.seoTitle,
       ...proseOf(topic),
       ...diagramsOf(topic),
       ...examples.map((e) => e.title),

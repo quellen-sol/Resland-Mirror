@@ -33,7 +33,7 @@ export default function HeaderLinks() {
         href="/auth/login?screen_hint=signup"
         className="rounded-lg bg-white px-3.5 py-1.5 text-sm font-medium text-zinc-950 hover:bg-zinc-200"
       >
-        Try Resland
+        Tailor Your Resume
       </a>
     </div>
   );

@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "recursion",
   title: "Recursion",
+  seoTitle: "Recursion Explained: Base Cases, Call Stack, Examples",
   category: "foundations",
   level: "BEGINNER",
   summary:

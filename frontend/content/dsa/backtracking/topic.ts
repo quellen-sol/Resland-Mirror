@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "backtracking",
   title: "Backtracking",
+  seoTitle: "Backtracking: Subsets, Permutations and N-Queens",
   category: "dp",
   level: "INTERMEDIATE",
   summary:

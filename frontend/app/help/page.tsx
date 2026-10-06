@@ -3,13 +3,17 @@ import Image from "next/image";
 import Link from "next/link";
 import SiteFooter from "@/components/site-footer";
 import Backdrop from "@/components/backdrop";
+import JsonLd from "@/components/json-ld";
+import { DSA_LANGUAGE_NAMES, toPlainText } from "@/lib/dsa";
+import { faqJsonLd, pageMetadata } from "@/lib/seo";
+import { Inline } from "../dsa/prose";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: "Help & FAQ",
-  // The root layout's canonical is "/" — override it so /help indexes as
-  // its own page.
-  alternates: { canonical: "/help" },
-};
+  description:
+    "Answers about Resland: tailoring your software engineering resume, bullet suggestions, the System Design Mock, the free DSA Study Center, and billing.",
+  path: "/help",
+});
 
 // This page is otherwise fully static; re-render daily so the footer's
 // copyright year doesn't stay frozen at the last build.
@@ -23,6 +27,7 @@ function sectionId(title: string) {
     .replace(/^-|-$/g, "")}`;
 }
 
+// Answers accept inline markup: `code`, **bold** and [label](/path) links.
 const SECTIONS: {
   title: string;
   faqs: [string, string][];
@@ -32,7 +37,11 @@ const SECTIONS: {
     faqs: [
       [
         "What is Resland?",
-        "Resland keeps your resume as an editable profile: your jobs, bullets, skills, education and projects. From there it helps you sharpen individual bullets, tailors the whole thing to specific job postings, and exports it as a Word file.",
+        "Resland helps software engineers get interviews and get through them. It keeps your resume as an editable profile: your jobs, bullets, skills, education and projects. From there it helps you sharpen individual bullets, tailors the whole thing to specific job postings, and exports it as a Word file. For the interview itself there's the [System Design Mock](/system-design) and the free [DSA Study Center](/dsa).",
+      ],
+      [
+        "Does it work for resumes outside software engineering?",
+        "Yes. Resland is built for software engineers, and the interview prep is for engineering roles, but tailoring and bullet suggestions work on any resume.",
       ],
       [
         "How do I set up my profile?",
@@ -91,7 +100,7 @@ const SECTIONS: {
     faqs: [
       [
         "What is the DSA Study Center?",
-        "A free guide to data structures and algorithms. Each topic explains how the idea works, how to spot it in an interview question, and walks through classic problems with code in TypeScript, Python, Go, C# and Java. You don't need an account to read it.",
+        `A [free guide to data structures and algorithms](/dsa) for coding interviews. Each topic explains how the idea works, how to spot it in an interview question, and walks through classic problems with code in ${DSA_LANGUAGE_NAMES}. You don't need an account to read it.`,
       ],
       [
         "How do I track what I've studied?",
@@ -163,6 +172,9 @@ export default function HelpPage() {
           Resland
         </Link>
         <nav className="flex gap-4 text-sm text-zinc-400">
+          <Link href="/dsa" className="hover:text-zinc-200">
+            DSA Study Center
+          </Link>
           <Link href="/dashboard" className="hover:text-zinc-200">
             Dashboard
           </Link>
@@ -176,7 +188,8 @@ export default function HelpPage() {
           Help &amp; FAQ
         </h1>
         <p className="mt-2 text-sm text-zinc-400">
-          Answers about your profile, suggestions, tailoring and billing.
+          Answers about your profile, suggestions, tailoring, interview prep and
+          billing.
         </p>
         <div className="mt-10 flex flex-col gap-10">
           {SECTIONS.map((section) => (
@@ -200,7 +213,7 @@ export default function HelpPage() {
                       </span>
                     </summary>
                     <p className="mt-3 text-sm leading-6 text-zinc-500">
-                      {answer}
+                      <Inline text={answer} />
                     </p>
                   </details>
                 ))}
@@ -210,6 +223,13 @@ export default function HelpPage() {
         </div>
       </main>
       <SiteFooter />
+      <JsonLd
+        data={faqJsonLd(
+          SECTIONS.flatMap((section) =>
+            section.faqs.map(([q, a]) => [q, toPlainText(a)] as const),
+          ),
+        )}
+      />
     </div>
   );
 }

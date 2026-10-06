@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "sorting",
   title: "Sorting",
+  seoTitle: "Sorting Algorithms: Merge Sort vs Quicksort Explained",
   category: "techniques",
   level: "INTERMEDIATE",
   summary:

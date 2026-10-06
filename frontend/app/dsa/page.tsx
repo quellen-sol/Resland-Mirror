@@ -3,11 +3,14 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { DSA_TOPICS } from "@/content/dsa/index.ts";
 import {
+  DSA_LANGUAGE_NAMES,
   DSA_LANGUAGES,
   groupTopicsByCategory,
   orderTopics,
   toTopicRef,
 } from "@/lib/dsa";
+import { breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
+import JsonLd from "@/components/json-ld";
 import { LevelBadge } from "./badges";
 import { LanguageTabs } from "./language";
 import {
@@ -16,20 +19,19 @@ import {
   StudiedCheck,
 } from "./progress-ui";
 
-const DESCRIPTION =
-  "Learn data structures and algorithms one topic at a time, with worked problems and code in TypeScript, Python, Go, C# and Java.";
+const PROBLEM_COUNT = DSA_TOPICS.reduce((n, t) => n + t.problems.length, 0);
 
-export const metadata: Metadata = {
-  title: "DSA Study Center",
-  description: DESCRIPTION,
-  alternates: { canonical: "/dsa" },
-  openGraph: { title: "DSA Study Center", description: DESCRIPTION, url: "/dsa" },
-};
+export const metadata: Metadata = pageMetadata({
+  title: "Data Structures and Algorithms (DSA) Study Guide",
+  description: `Free DSA study guide for coding interviews: ${DSA_TOPICS.length} topics, ${PROBLEM_COUNT} worked problems, and tested solutions in ${DSA_LANGUAGE_NAMES}.`,
+  path: "/dsa",
+  // ./opengraph-image.tsx
+  ownImage: true,
+});
 
 export default function DsaIndexPage() {
   const ordered = orderTopics(DSA_TOPICS);
   const refs = ordered.map(toTopicRef);
-  const problemCount = DSA_TOPICS.reduce((n, t) => n + t.problems.length, 0);
 
   return (
     <main className="relative mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 pt-8 pb-16">
@@ -41,9 +43,11 @@ export default function DsaIndexPage() {
           Data structures and algorithms, one topic at a time.
         </h1>
         <p className="max-w-2xl text-[17px] leading-7 text-zinc-400">
-          {DSA_TOPICS.length} topics, each with how it works, how to spot it in an
-          interview question, and {problemCount} classic problems worked through
-          step by step. Every example comes in {DSA_LANGUAGES.length} languages.
+          A free study guide for coding interviews. {DSA_TOPICS.length} topics,
+          each with how it works, how to spot it in an interview question, and
+          classic problems worked through step by step: {PROBLEM_COUNT} in all.
+          Every solution comes in {DSA_LANGUAGES.length} languages and is a
+          complete program, run and checked against its expected output.
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <Link
@@ -62,7 +66,7 @@ export default function DsaIndexPage() {
       <ProgressOverview topics={refs} />
 
       {groupTopicsByCategory(ordered).map(({ category, topics }) => (
-        <section key={category.id} className="flex flex-col gap-4">
+        <section key={category.id} id={category.id} className="flex scroll-mt-6 flex-col gap-4">
           <div className="flex items-end justify-between gap-4 border-b border-white/[.06] pb-3">
             <div>
               <h2 className="text-xl font-semibold tracking-tight">{category.title}</h2>
@@ -94,6 +98,12 @@ export default function DsaIndexPage() {
           </div>
         </section>
       ))}
+      <JsonLd
+        data={breadcrumbJsonLd([
+          { name: "Resland", path: "/" },
+          { name: "DSA Study Center", path: "/dsa" },
+        ])}
+      />
     </main>
   );
 }

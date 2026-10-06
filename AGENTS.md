@@ -113,6 +113,11 @@ cd frontend           && pnpm test          # node --test (explicit file list in
   glob.
 - Lint with `pnpm lint` (eslint-config-next). There is **no** `typecheck` script — run
   `npx tsc --noEmit` from `frontend/` and report the result in the PR.
+- Public pages build their metadata with `pageMetadata()` from `frontend/lib/seo.ts`. Next merges
+  metadata shallowly, so a page that sets `openGraph` by hand drops the share image and anything
+  that only sets `title` inherits the home page's share tags. New public pages also go in
+  `app/sitemap.ts`, and a new dynamic app route with a per-user id (like `/tailored/[id]`) goes in
+  `ID_ROUTES` in `frontend/lib/traffic.ts` so the id stays out of the `page_view` log.
 - The public DSA study center (`/dsa`) is content in `frontend/content/dsa` — read its README
   before adding or editing a topic. Each example is a runnable program in five languages;
   `pnpm test:dsa-examples` runs them all (needs `node`, `python3`, `go`, `dotnet` 10 and `java`

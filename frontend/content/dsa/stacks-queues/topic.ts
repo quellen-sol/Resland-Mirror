@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "stacks-queues",
   title: "Stacks & Queues",
+  seoTitle: "Stacks and Queues: Valid Parentheses, RPN and More",
   category: "linear",
   level: "BEGINNER",
   summary:

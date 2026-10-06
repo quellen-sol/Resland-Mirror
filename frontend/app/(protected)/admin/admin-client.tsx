@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
@@ -168,7 +168,14 @@ function SearchBox({
   );
 }
 
-export default function AdminClient({ accessToken }: { accessToken: string }) {
+export default function AdminClient({
+  accessToken,
+  traffic,
+}: {
+  accessToken: string;
+  /** The Traffic panel, shown under the headline numbers. */
+  traffic?: ReactNode;
+}) {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [byModel, setByModel] = useState<UsageByModel[]>([]);
   const [byKind, setByKind] = useState<UsageByKind[]>([]);
@@ -424,6 +431,8 @@ export default function AdminClient({ accessToken }: { accessToken: string }) {
           </CardContent>
         </Card>
       </div>
+
+      {traffic}
 
       <Card>
         <CardHeader>

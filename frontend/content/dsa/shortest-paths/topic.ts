@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "shortest-paths",
   title: "Shortest Paths",
+  seoTitle: "Shortest Path Algorithms: Dijkstra, Bellman-Ford, BFS",
   category: "graphs",
   level: "ADVANCED",
   summary:

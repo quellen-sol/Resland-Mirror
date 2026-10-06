@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "segment-and-fenwick-trees",
   title: "Segment Trees & Fenwick Trees",
+  seoTitle: "Segment Tree and Fenwick Tree (BIT) Explained",
   category: "trees",
   level: "ADVANCED",
   summary:

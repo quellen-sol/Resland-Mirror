@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "dp-2d",
   title: "Dynamic Programming: Grids & Strings",
+  seoTitle: "2D Dynamic Programming: Grids, LCS and Edit Distance",
   category: "dp",
   level: "ADVANCED",
   summary:

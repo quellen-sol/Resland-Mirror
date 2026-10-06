@@ -3,6 +3,7 @@ import type { DsaTopic } from "../../../lib/dsa.ts";
 export const topic: DsaTopic = {
   slug: "intervals",
   title: "Intervals",
+  seoTitle: "Interval Problems: Merge, Insert and Meeting Rooms",
   category: "techniques",
   level: "INTERMEDIATE",
   summary:
