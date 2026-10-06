@@ -545,19 +545,21 @@ class TailorAgent(unittest.TestCase):
         )
         self.assertEqual(outcome.status, "waiting")
 
-    def test_malformed_tool_call_gets_its_parse_error_back(self):
-        broken = ai(
+    def _broken_call(self, name="ask_clarifying_question", tc_id="bad-1"):
+        return ai(
             invalid_tool_calls=[
                 {
                     "type": "invalid_tool_call",
-                    "name": "ask_clarifying_question",
+                    "name": name,
                     "args": '{"question": "1. How many',
-                    "id": "bad-1",
+                    "id": tc_id,
                     "error": "Unterminated string",
                 }
             ]
         )
-        outcome, model = self._run([broken, self._ask()])
+
+    def test_malformed_tool_call_gets_its_parse_error_back(self):
+        outcome, model = self._run([self._broken_call(), self._ask()])
         self.assertEqual(outcome.status, "waiting")
         # Every tool call id needs an answer, or the provider rejects the
         # next request — the parse error doubles as the retry hint.
@@ -566,6 +568,26 @@ class TailorAgent(unittest.TestCase):
         self.assertEqual(reply.tool_call_id, "bad-1")
         self.assertEqual(reply.status, "error")
         self.assertIn("Unterminated string", reply.content)
+
+    def test_repeated_malformed_calls_give_up_after_max_nudges(self):
+        # A model that keeps truncating its submit JSON would otherwise loop
+        # (and bill) until LangGraph's recursion limit.
+        outcome, model = self._run(
+            [
+                self._broken_call("submit_tailored_resume", tc_id=f"bad-{i}")
+                for i in range(tailor.MAX_NUDGES + 1)
+            ]
+        )
+        self.assertEqual(outcome.status, "completed")
+        self.assertIsNone(outcome.result)
+        self.assertEqual(len(model.calls), tailor.MAX_NUDGES + 1)
+
+    def test_malformed_calls_and_text_replies_share_one_cap(self):
+        outcome, model = self._run(
+            [self._broken_call(), ai("Let me think."), ai("Still thinking.")]
+        )
+        self.assertEqual(outcome.status, "completed")
+        self.assertEqual(len(model.calls), tailor.MAX_NUDGES + 1)
 
     def test_retry_resumes_checkpoint_without_new_kickoff(self):
         # A redelivered first turn — the crashed run left llm_call pending.

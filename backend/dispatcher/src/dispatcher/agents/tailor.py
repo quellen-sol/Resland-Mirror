@@ -114,8 +114,10 @@ and end without another submit call.
 """
 
 # Text outside a tool call never reaches the user, so a reply without one
-# before the resume is submitted is a stalled turn, not an ending. The graph
-# sends the model back to its tools this many times in a row, then gives up.
+# before the resume is submitted is a stalled turn, not an ending. So is a
+# tool call whose arguments didn't parse, at any point. The graph sends the
+# model back to its tools this many times in a row, then gives up — every
+# retry is a billed LLM call.
 MAX_NUDGES = 2
 
 NUDGE_MESSAGE = (
@@ -220,13 +222,13 @@ def _has_submitted(messages: list[AnyMessage]) -> bool:
     )
 
 
-def _nudges_in_a_row(messages: list[AnyMessage]) -> int:
-    """Nudges since the model last got a tool result — progress resets it."""
+def _stalls_in_a_row(messages: list[AnyMessage]) -> int:
+    """Model turns since its last parsed tool call — progress resets it."""
     count = 0
     for msg in reversed(messages):
-        if isinstance(msg, ToolMessage):
-            break
-        if isinstance(msg, HumanMessage) and msg.content == NUDGE_MESSAGE:
+        if isinstance(msg, AIMessage):
+            if msg.tool_calls:
+                break
             count += 1
     return count
 
@@ -373,13 +375,15 @@ def build_and_invoke_agent(
     def should_continue(state: State) -> Literal["tool_node", "nudge", END]:
         """Run the model's tool calls; before a submit, a reply with none is a
         stall rather than an ending (after one, it's the user signing off)"""
-        last_message = state["messages"][-1]
-        if last_message.tool_calls or last_message.invalid_tool_calls:
+        messages = state["messages"]
+        last_message = messages[-1]
+        if last_message.tool_calls:
             return "tool_node"
-        if (
-            not _has_submitted(state["messages"])
-            and _nudges_in_a_row(state["messages"]) < MAX_NUDGES
-        ):
+        if _stalls_in_a_row(messages) > MAX_NUDGES:
+            return END
+        if last_message.invalid_tool_calls:
+            return "tool_node"
+        if not _has_submitted(messages):
             return "nudge"
         return END
 
