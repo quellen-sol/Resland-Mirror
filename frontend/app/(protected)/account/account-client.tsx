@@ -110,6 +110,9 @@ export default function AccountClient({ accessToken }: { accessToken: string }) 
     } catch (e) {
       setDeleteError(errorMessage(e));
       setDeleting(false);
+      // A payment the webhook missed may just have been credited (409), so
+      // the warning must show the balance that would now be forfeited.
+      loadBalance();
     }
   }
 

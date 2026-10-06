@@ -27,7 +27,10 @@ export function isRevokedByDeletion(
   sessionCreatedAt: number | undefined,
   auth0DeletedAt: Date | null,
 ): boolean {
-  throw new Error("not implemented");
+  if (auth0DeletedAt === null || sessionCreatedAt === undefined) return true;
+  // createdAt is whole seconds; the second Auth0 deleted the login counts as
+  // old (a new sign-up can't happen that fast).
+  return sessionCreatedAt <= Math.floor(auth0DeletedAt.getTime() / 1000);
 }
 
 /** The `detail` string from a FastAPI error body, or null when the body
