@@ -64,9 +64,7 @@ class Configured(unittest.TestCase):
         with mock.patch.multiple(
             auth0_mgmt, AUTH0_DOMAIN="login.resland.org", AUTH0_MGMT_DOMAIN=""
         ):
-            self.assertEqual(
-                auth0_mgmt.auth0_management().domain, "login.resland.org"
-            )
+            self.assertEqual(auth0_mgmt.auth0_management().domain, "login.resland.org")
 
 
 class DeleteUser(unittest.IsolatedAsyncioTestCase):

@@ -152,7 +152,9 @@ class DeleteStripeCustomer(unittest.TestCase):
 
     def test_already_deleted_customer_is_fine(self):
         with patch.object(
-            stripe.Customer, "delete", self._delete(_invalid_request("resource_missing"))
+            stripe.Customer,
+            "delete",
+            self._delete(_invalid_request("resource_missing")),
         ):
             service.delete_stripe_customer("cus_1", [])
 

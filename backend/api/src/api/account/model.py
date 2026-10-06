@@ -65,7 +65,9 @@ EXPORT_SECTIONS: tuple[ExportSection, ...] = (
         "created_at DESC, id",
     ),
     ExportSection(
-        "skills", "user_base_skill", ("id", "name", "category", "sort_order"),
+        "skills",
+        "user_base_skill",
+        ("id", "name", "category", "sort_order"),
         "sort_order, id",
     ),
     ExportSection(

@@ -82,9 +82,9 @@ class Routes(unittest.TestCase):
 
 class AppWiring(unittest.TestCase):
     def test_routes_are_mounted(self):
-        paths = {(r.path, tuple(sorted(r.methods))) for r in api_app.app.routes if hasattr(r, "methods")}
-        self.assertIn(("/account/export", ("GET",)), paths)
-        self.assertIn(("/account", ("DELETE",)), paths)
+        paths = api_app.app.openapi()["paths"]
+        self.assertIn("get", paths["/account/export"])
+        self.assertIn("delete", paths["/account"])
 
     def test_cors_exposes_the_download_filename(self):
         cors = next(

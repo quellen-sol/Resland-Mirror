@@ -7,6 +7,7 @@ fetched per call — these are rare, user-initiated operations, so caching a
 """
 
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -59,17 +60,72 @@ class Auth0Management:
 
     @property
     def configured(self) -> bool:
-        raise NotImplementedError
+        return bool(self.domain and self.client_id and self.client_secret)
+
+    def _client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            base_url=f"https://{self.domain}",
+            timeout=TIMEOUT_SECONDS,
+            transport=self._transport,
+        )
+
+    async def _token(self, client: httpx.AsyncClient) -> str:
+        res = await client.post(
+            "/oauth/token",
+            json={
+                "grant_type": "client_credentials",
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+                "audience": f"https://{self.domain}/api/v2/",
+            },
+        )
+        if res.status_code != 200:
+            raise Auth0ManagementError(
+                f"token request failed: {res.status_code} {res.text[:200]}"
+            )
+        try:
+            return res.json()["access_token"]
+        except (ValueError, KeyError) as e:
+            raise Auth0ManagementError("token response had no access_token") from e
+
+    async def _user_request(self, method: str, user_id: str) -> httpx.Response:
+        try:
+            async with self._client() as client:
+                token = await self._token(client)
+                # Auth0 ids contain `|` — it must be percent-encoded.
+                return await client.request(
+                    method,
+                    f"/api/v2/users/{quote(user_id, safe='')}",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+        except httpx.HTTPError as e:
+            raise Auth0ManagementError(f"{method} user failed: {e!r}") from e
 
     async def get_user(self, user_id: str) -> dict[str, Any] | None:
         """The user's Auth0 profile, trimmed to PROFILE_FIELDS; None when
         Auth0 has no such user."""
-        raise NotImplementedError
+        res = await self._user_request("GET", user_id)
+        if res.status_code == 404:
+            return None
+        if res.status_code != 200:
+            raise Auth0ManagementError(f"GET user: {res.status_code} {res.text[:200]}")
+        body = res.json()
+        profile = {k: body[k] for k in PROFILE_FIELDS if k in body}
+        if "identities" in body:
+            profile["identities"] = [
+                {k: ident[k] for k in IDENTITY_FIELDS if k in ident}
+                for ident in body["identities"]
+            ]
+        return profile
 
     async def delete_user(self, user_id: str) -> None:
         """Delete the Auth0 user. An already-deleted user counts as done, so
         a retried account deletion can finish."""
-        raise NotImplementedError
+        res = await self._user_request("DELETE", user_id)
+        if res.status_code not in (200, 204, 404):
+            raise Auth0ManagementError(
+                f"DELETE user: {res.status_code} {res.text[:200]}"
+            )
 
 
 def auth0_management() -> Auth0Management:

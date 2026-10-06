@@ -256,7 +256,7 @@ async def seed_user(pg, uid, *, tag="alpha", stripe_customer="cus_1"):
         " job_description, status, brief, agent_context, diagram, phase_durations,"
         " result) VALUES (%s, %s, 'JOB', NULL, %s,"
         " 'WAITING_FOR_INPUT', '{\"secret\": \"brief\"}', '{\"ctx\": 1}',"
-        " '[{\"id\": \"box\"}]', '{\"REQUIREMENTS\": 60}', NULL)",
+        ' \'[{"id": "box"}]\', \'{"REQUIREMENTS": 60}\', NULL)',
         (sd, uid, p["job"]),
     )
     await pg.execute(
@@ -460,7 +460,7 @@ async def test_delete_erases_every_trace(pg, checkpoint_tables, externals):
     assert is_tombstone_id(tomb)
     tomb_row = await _one(
         pg,
-        'SELECT full_name, email, phone, location, summary, balance_cents,'
+        "SELECT full_name, email, phone, location, summary, balance_cents,"
         ' site_admin, stripe_customer_id, has_onboarded FROM "user"'
         " WHERE auth0_id = %s",
         (tomb,),
@@ -492,7 +492,9 @@ async def test_delete_erases_every_trace(pg, checkpoint_tables, externals):
 
     # The other account is untouched.
     other = await _one(
-        pg, 'SELECT full_name, stripe_customer_id FROM "user" WHERE auth0_id = %s', (OTHER,)
+        pg,
+        'SELECT full_name, stripe_customer_id FROM "user" WHERE auth0_id = %s',
+        (OTHER,),
     )
     assert other == (pii("beta")["name"], "cus_other")
     assert await rows_mentioning(pg, pii("beta")["answer"]) == {
@@ -505,17 +507,19 @@ async def test_delete_erases_every_trace(pg, checkpoint_tables, externals):
         assert n == 1, table
 
 
-async def test_delete_without_billing_makes_no_tombstone(pg, checkpoint_tables, externals):
-    await pg.execute('INSERT INTO "user" (auth0_id, full_name) VALUES (%s, %s)', (USER, "Jane"))
+async def test_delete_without_billing_makes_no_tombstone(
+    pg, checkpoint_tables, externals
+):
+    await pg.execute(
+        'INSERT INTO "user" (auth0_id, full_name) VALUES (%s, %s)', (USER, "Jane")
+    )
     await service.delete_account(pg, USER)
     assert await _one(pg, 'SELECT count(*) FROM "user"') == (0,)
     assert externals.stripe_calls == []
     assert externals.auth0.deleted == [USER]
 
 
-async def test_delete_works_before_any_dispatcher_made_checkpoint_tables(
-    pg, externals
-):
+async def test_delete_works_before_any_dispatcher_made_checkpoint_tables(pg, externals):
     # Park an existing langgraph schema under another name for the test.
     res = await pg.execute("SELECT to_regnamespace('langgraph')")
     parked = (await res.fetchone())[0] is not None
@@ -547,7 +551,9 @@ async def test_repeating_a_finished_deletion_succeeds(pg, checkpoint_tables, ext
     await service.delete_account(pg, USER)
     assert externals.auth0.deleted == [USER, USER]
     tombstones = (
-        await _one(pg, "SELECT count(*) FROM \"user\" WHERE auth0_id LIKE 'deleted|%'")
+        await _one(
+            pg, 'SELECT count(*) FROM "user" WHERE auth0_id LIKE %s', ("deleted|%",)
+        )
     )[0]
     assert tombstones == 1
 
@@ -572,7 +578,9 @@ async def test_running_job_blocks_deletion(
         "user_tailor_run": mine["tailor_run"],
         "user_system_design_session": mine["system_design"],
     }
-    await pg.execute(f"UPDATE {table} SET status = %s WHERE id = %s", (status, ids[table]))
+    await pg.execute(
+        f"UPDATE {table} SET status = %s WHERE id = %s", (status, ids[table])
+    )
     seed_files(externals.s3, USER)
 
     with pytest.raises(HTTPException) as exc:
@@ -581,9 +589,9 @@ async def test_running_job_blocks_deletion(
     assert account_db.JOB_KIND_LABELS[kind] in exc.value.detail
 
     # Nothing was touched anywhere.
-    assert await _one(pg, 'SELECT full_name FROM "user" WHERE auth0_id = %s', (USER,)) == (
-        pii("alpha")["name"],
-    )
+    assert await _one(
+        pg, 'SELECT full_name FROM "user" WHERE auth0_id = %s', (USER,)
+    ) == (pii("alpha")["name"],)
     assert len(externals.s3.objects) == 3
     assert externals.stripe_calls == []
     assert externals.auth0.deleted == []
@@ -649,7 +657,9 @@ async def test_stripe_customer_without_stripe_configured_refuses(
         await service.delete_account(pg, USER)
     assert exc.value.status_code == 503
     assert len(externals.s3.objects) == 3
-    assert await _one(pg, 'SELECT count(*) FROM "user" WHERE auth0_id = %s', (USER,)) == (1,)
+    assert await _one(
+        pg, 'SELECT count(*) FROM "user" WHERE auth0_id = %s', (USER,)
+    ) == (1,)
 
 
 async def test_storage_failure_rolls_back_and_a_retry_finishes(
@@ -664,9 +674,9 @@ async def test_storage_failure_rolls_back_and_a_retry_finishes(
         await service.delete_account(pg, USER)
     assert exc.value.status_code == 502
     # The database is exactly as it was, and Stripe/Auth0 were never called.
-    assert await _one(pg, 'SELECT full_name FROM "user" WHERE auth0_id = %s', (USER,)) == (
-        pii("alpha")["name"],
-    )
+    assert await _one(
+        pg, 'SELECT full_name FROM "user" WHERE auth0_id = %s', (USER,)
+    ) == (pii("alpha")["name"],)
     assert await thread_rows(pg, mine["threads"]) == 9
     assert externals.stripe_calls == []
     assert externals.auth0.deleted == []
@@ -691,7 +701,9 @@ async def test_stripe_failure_rolls_back_and_a_retry_finishes(
         await service.delete_account(pg, USER)
     assert exc.value.status_code == 502
     row = await _one(
-        pg, 'SELECT full_name, stripe_customer_id FROM "user" WHERE auth0_id = %s', (USER,)
+        pg,
+        'SELECT full_name, stripe_customer_id FROM "user" WHERE auth0_id = %s',
+        (USER,),
     )
     assert row == (pii("alpha")["name"], "cus_1")
     assert externals.auth0.deleted == []
@@ -715,7 +727,9 @@ async def test_failure_after_stripe_forgets_the_deleted_customer(
     with pytest.raises(RuntimeError):
         await service.delete_account(pg, USER)
     row = await _one(
-        pg, 'SELECT full_name, stripe_customer_id FROM "user" WHERE auth0_id = %s', (USER,)
+        pg,
+        'SELECT full_name, stripe_customer_id FROM "user" WHERE auth0_id = %s',
+        (USER,),
     )
     assert row == (pii("alpha")["name"], None)
     assert ("delete", "cus_1") in externals.stripe_calls
@@ -743,7 +757,9 @@ async def test_auth0_failure_keeps_the_login_for_a_retry(
     assert await rows_naming(pg, USER) == {}
     assert externals.auth0.deleted == [USER]
     tombstones = (
-        await _one(pg, "SELECT count(*) FROM \"user\" WHERE auth0_id LIKE 'deleted|%'")
+        await _one(
+            pg, 'SELECT count(*) FROM "user" WHERE auth0_id LIKE %s', ("deleted|%",)
+        )
     )[0]
     assert tombstones == 1
 
@@ -801,7 +817,9 @@ async def test_late_checkout_completion_lands_on_the_tombstone(
     )
     assert await billing_service.handle_webhook(pg, b"{}", "sig") == {"ok": True}
     row = await _one(
-        pg, "SELECT user_id, status FROM balance_purchase WHERE id = %s", (mine["open_checkout"],)
+        pg,
+        "SELECT user_id, status FROM balance_purchase WHERE id = %s",
+        (mine["open_checkout"],),
     )
     assert is_tombstone_id(row[0]) and row[1] == "COMPLETED"
     assert await rows_naming(pg, USER) == {}
@@ -910,7 +928,9 @@ async def test_export_without_a_profile_yet(pg, checkpoint_tables, externals):
     assert [n for n in zf.namelist() if n.startswith("files/")] == []
 
 
-async def test_export_fails_loudly_when_storage_is_down(pg, checkpoint_tables, externals):
+async def test_export_fails_loudly_when_storage_is_down(
+    pg, checkpoint_tables, externals
+):
     from botocore.exceptions import ClientError
 
     await seed_user(pg, USER)
@@ -933,7 +953,9 @@ async def _parked(task) -> bool:
     return not task.done()
 
 
-async def test_job_queued_during_deletion_waits_then_404s(pg, checkpoint_tables, externals):
+async def test_job_queued_during_deletion_waits_then_404s(
+    pg, checkpoint_tables, externals
+):
     mine = await seed_user(pg, USER)
     other = await _second_conn()
     amqp = _Amqp()
