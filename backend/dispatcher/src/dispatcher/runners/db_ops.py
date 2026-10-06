@@ -6,6 +6,7 @@ from dataclasses import asdict
 from openrouter import OpenRouter, errors
 from psycopg import Connection
 from psycopg.rows import class_row
+from shared.accounts import new_tombstone_id
 from shared.checkpoints import CHECKPOINT_TABLES
 from shared.docgen import FormatProfile
 
@@ -147,6 +148,27 @@ def record_token_usage(
         )
 
     with pg_client.transaction():
+        # FOR KEY SHARE parks this behind an in-progress account deletion
+        # (which holds FOR UPDATE), so the check below sees its outcome.
+        owner = pg_client.execute(
+            'SELECT 1 FROM "user" WHERE auth0_id = %s FOR KEY SHARE', (user_id,)
+        ).fetchone()
+        if not owner:
+            # The account was deleted while the job ran. The ledger still
+            # records what the job cost — on a fresh tombstone, the same
+            # de-identified shape deletion gives the account's other billing
+            # rows — and the person is never re-created.
+            row = pg_client.execute(
+                """
+                SELECT amount_cents FROM token_usage
+                WHERE job_kind = %s AND job_id = %s
+                """,
+                (job_kind, job_id),
+            ).fetchone()
+            if row:
+                return float(row[0])
+            user_id = new_tombstone_id()
+            pg_client.execute('INSERT INTO "user" (auth0_id) VALUES (%s)', (user_id,))
         res = pg_client.execute(
             """
             INSERT INTO token_usage
@@ -201,18 +223,36 @@ THREAD_OWNER_TABLES = (
 def delete_checkpoint_threads(pg_client: Connection, thread_ids: list[str]) -> None:
     """Drop the LangGraph checkpoint rows of these threads. The tables only
     exist once a dispatcher has run setup, so a missing table is skipped."""
-    raise NotImplementedError
+    if not thread_ids:
+        return
+    for table in CHECKPOINT_TABLES:
+        exists = pg_client.execute("SELECT to_regclass(%s)", (table,)).fetchone()
+        if exists and exists[0]:
+            pg_client.execute(
+                f"DELETE FROM {table} WHERE thread_id = ANY(%s)", (list(thread_ids),)
+            )
 
 
 def suggestion_exists(pg_client: Connection, session_id: str) -> bool:
-    raise NotImplementedError
+    row = pg_client.execute(
+        "SELECT 1 FROM user_suggestion WHERE id = %s", (session_id,)
+    ).fetchone()
+    return row is not None
 
 
 def discard_orphaned_thread(pg_client: Connection, table: str, thread_id: str) -> bool:
     """If `thread_id`'s row in `table` is gone — dismissed, or the account
     deleted, while the agent ran — delete the checkpoints the agent wrote
     after the row's own cleanup, and return True."""
-    raise NotImplementedError
+    if table not in THREAD_OWNER_TABLES:
+        raise ValueError(f"{table!r} doesn't own LangGraph threads")
+    row = pg_client.execute(
+        f"SELECT 1 FROM {table} WHERE id = %s", (thread_id,)
+    ).fetchone()
+    if row is not None:
+        return False
+    delete_checkpoint_threads(pg_client, [thread_id])
+    return True
 
 
 def default_model_spec(pg_client: Connection) -> str | None:
@@ -619,14 +659,7 @@ def complete_system_design_session(
         )
         # A graded interview takes no more turns, and its transcript lives in
         # system_design_message — the interviewer thread is dead weight.
-        for table in CHECKPOINT_TABLES:
-            exists = pg_client.execute(
-                "SELECT to_regclass(%s)", (table,)
-            ).fetchone()
-            if exists and exists[0]:
-                pg_client.execute(
-                    f"DELETE FROM {table} WHERE thread_id = %s", (session_id,)
-                )
+        delete_checkpoint_threads(pg_client, [session_id])
 
 
 def set_system_design_notice(
@@ -662,18 +695,19 @@ def upsert_resume_format(
     pg_client: Connection, user_id: str, fmt: FormatProfile, source_job_id: str
 ):
     """Store the layout profile captured from the user's uploaded doc — the
-    renderer reads this back to regenerate a matching resume."""
+    renderer reads this back to regenerate a matching resume. A no-op when
+    the account has been deleted meanwhile."""
     with pg_client.transaction():
         pg_client.execute(
             """
             INSERT INTO user_resume_format (user_id, format, source_job_id)
-            VALUES (%s, %s, %s)
+            SELECT auth0_id, %s, %s FROM "user" WHERE auth0_id = %s
             ON CONFLICT (user_id) DO UPDATE SET
                 format = EXCLUDED.format,
                 source_job_id = EXCLUDED.source_job_id,
                 captured_at = now()
             """,
-            [user_id, fmt.to_json(), source_job_id],
+            [fmt.to_json(), source_job_id, user_id],
         )
 
 
@@ -687,28 +721,35 @@ def _social_link_type(link: str) -> str:
     return "WEBSITE"
 
 
-def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxProfile):
+def upsert_user_profile(
+    pg_client: Connection, user_id: str, profile: UserDocxProfile
+) -> bool:
+    """Replace the user's profile with a freshly parsed resume. Returns False,
+    writing nothing, when the user row is gone: the account was deleted while
+    the resume was parsing, and inserting it again would resurrect the person.
+    (The row always exists otherwise — the frontend creates it at sign-in and
+    the upload's job row references it.)"""
     with pg_client.transaction():
-        pg_client.execute(
+        # The UPDATE's row lock also holds off a concurrent account deletion
+        # until this profile is committed — the deletion then erases it.
+        res = pg_client.execute(
             """
-            INSERT INTO "user" (auth0_id, full_name, email, phone, location, summary)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (auth0_id) DO UPDATE SET
-                    full_name = EXCLUDED.full_name,
-                    email = EXCLUDED.email,
-                    phone = EXCLUDED.phone,
-                    location = EXCLUDED.location,
-                    summary = EXCLUDED.summary
+            UPDATE "user"
+            SET full_name = %s, email = %s, phone = %s, location = %s,
+                summary = %s
+            WHERE auth0_id = %s
             """,
             [
-                user_id,
                 profile.basic_info.name,
                 profile.basic_info.email,
                 profile.basic_info.phone,
                 profile.basic_info.location,
                 profile.summary or None,
+                user_id,
             ],
         )
+        if res.rowcount == 0:
+            return False
 
         # Header links feed the exported resume's contact line — replace the
         # set wholesale like the other profile-owned rows. The table is
@@ -738,15 +779,19 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
             )
 
         # Bullets FK to experiences — delete children before parents.
-        # Also from suggestions
-        pg_client.execute(
+        # Suggestions reference both, so they go first, and their LangGraph
+        # threads with them (thread_id = session id) — nothing else ever
+        # points at those threads again.
+        stale_sessions = pg_client.execute(
             """
             DELETE FROM user_suggestion WHERE experience_id IN (
                 SELECT id FROM user_base_experience WHERE user_id = %s
             )
+            RETURNING id
             """,
             [user_id],
-        )
+        ).fetchall()
+        delete_checkpoint_threads(pg_client, [row[0] for row in stale_sessions])
 
         pg_client.execute(
             """
@@ -856,3 +901,4 @@ def upsert_user_profile(pg_client: Connection, user_id: str, profile: UserDocxPr
                     project.end_date,
                 ],
             )
+    return True

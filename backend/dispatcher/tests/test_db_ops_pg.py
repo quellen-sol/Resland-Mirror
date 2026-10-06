@@ -688,8 +688,10 @@ class DbOpsPg(unittest.TestCase):
             ),
             (
                 "langgraph.checkpoint_writes",
-                "(thread_id, checkpoint_ns, checkpoint_id, task_id, idx,"
-                " channel, blob)",
+                (
+                    "(thread_id, checkpoint_ns, checkpoint_id, task_id, idx,"
+                    " channel, blob)"
+                ),
                 "(%s, '', 'c1', 't1', 0, 'messages', '')",
             ),
         ):

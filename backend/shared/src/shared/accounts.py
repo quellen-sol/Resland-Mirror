@@ -9,12 +9,14 @@ Auth0 `sub`, under a provider name no Auth0 connection uses, so a tombstone
 can never collide with (or be signed into as) a real account.
 """
 
+import uuid
+
 TOMBSTONE_PREFIX = "deleted|"
 
 
 def new_tombstone_id() -> str:
-    raise NotImplementedError
+    return f"{TOMBSTONE_PREFIX}{uuid.uuid4()}"
 
 
 def is_tombstone_id(user_id: str) -> bool:
-    raise NotImplementedError
+    return user_id.startswith(TOMBSTONE_PREFIX)
