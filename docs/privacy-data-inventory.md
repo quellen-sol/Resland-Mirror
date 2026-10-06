@@ -6,23 +6,49 @@ how long it is kept. Hand this to whoever drafts the policies (lawyer or
 generator), and update it whenever a data flow changes. A policy that
 contradicts this file is a policy that says something untrue.
 
-Snapshot of `master` at `a81c42a` plus the deployed image, 2026-10-06. Section
-8 lists what has to be decided or fixed before the policies can be published.
+Snapshot of `master` at `a81c42a` plus the owner's answers about production
+hosting and policy decisions, 2026-10-06. Section 8 lists what is still open.
 
 ## At a glance
 
-- **Operator:** Quellen Ventures LLC (footer, landing-page JSON-LD). There is
-  no support or privacy contact email anywhere yet.
-- **Collected:** a sign-in identity (Auth0), the uploaded resume and everything
-  parsed from it (including name, email, phone, location, links), pasted job
-  descriptions, mock-interview work, billing records, and anonymous page views.
-- **Sent to third parties:** resume and job content goes to OpenRouter and on
-  to the model provider. In production it currently also goes to LangSmith
-  (see §2). Payments go through Stripe-hosted Checkout.
-- **Not done:** no selling of data, no advertising or third-party analytics
-  trackers, no card data on Resland servers, no email marketing (no email
-  provider exists).
-- **Missing:** account deletion, data export, and any retention limits.
+- **Operator:** Quellen Ventures LLC, a Colorado LLC.
+  - Contact: `marquelle.nesbitt@gmail.com`.
+  - Mailing address (registered agent): United States Corporation Agents, Inc.,
+    8400 E Crescent Pkwy, Suite 600, Greenwood Village, CO 80111, US.
+- **Hosting:**
+  - Railway, region US West: the API, dispatcher, frontend, Postgres and
+    RabbitMQ.
+  - AWS S3, `us-east-2`: resume files.
+  - Vercel is not used.
+  - The AWS ECS/RDS/Amazon MQ stack in `terraform/` is not the live system
+    (see §5).
+- **Collected:**
+  - a sign-in identity (Auth0)
+  - the uploaded resume and everything parsed from it, including name, email,
+    phone, location and links
+  - pasted job descriptions
+  - mock-interview work
+  - billing records
+  - anonymous page views
+- **Sent to third parties:**
+  - Resume and job content goes to OpenRouter, with zero data retention
+    enforced, and on to OpenAI or Anthropic models.
+  - Agent traces go to LangSmith.
+  - Payments go through Stripe-hosted Checkout.
+- **Not done:**
+  - no selling of data
+  - no advertising or third-party analytics trackers
+  - no card data on Resland servers
+  - no email marketing (no email provider exists)
+- **Decided:**
+  - Users must be 18+.
+  - The policies cover GDPR/UK GDPR.
+  - Balance never expires, and refunds are discretionary.
+  - On account deletion, the balance is forfeited, and billing records are
+    kept de-identified.
+- **In progress:** self-serve account deletion and data export
+  (`feat/account-deletion-export`). Until that merges, there is no deletion,
+  no export, and no retention limit.
 
 ## 1. What we collect
 
@@ -99,12 +125,13 @@ language lives in the browser only (localStorage).
 
 ### 1.8 Server logs
 
-CloudWatch `/ecs/api` and `/ecs/dispatcher`, **30-day** retention
-(`terraform/modules/ecs`).
+Railway keeps application and HTTP logs for **7 days on Hobby, 30 on Pro**.
+The window isn't configurable within a plan, and Railway doesn't delete logs
+on request
+([Railway logging docs](https://docs.railway.com/reference/logging)). Write
+the policy as "up to 30 days" and assume logs may contain IP addresses.
 
-- Uvicorn access logs: method, path, status, client address. Behind the load
-  balancer the address is most likely the load balancer's, since
-  `FORWARDED_ALLOW_IPS` is not set.
+- Uvicorn access logs: method, path, status, client address.
 - The API prints the caller's Auth0 id on every request while maintenance mode
   is on (`backend/api/src/api/auth.py`).
 - The dispatcher prints S3 keys (which contain the Auth0 id) and, when a job
@@ -117,13 +144,13 @@ CloudWatch `/ecs/api` and `/ecs/dispatcher`, **30-day** retention
 
 | Service | Purpose | What it receives |
 |---|---|---|
+| **Railway** (US West) | Hosts the API, dispatcher, frontend, Postgres, and RabbitMQ | All app data at rest. Every page request and API call. The Auth0 session cookie passes through the frontend |
+| **AWS S3** (`us-east-2`) | File storage | Original resumes and generated `.docx` files |
 | **Auth0** (Okta) | Sign-in | The account itself: email, name, picture from the social or password login; login sessions |
 | **Stripe** | Payments | Everything entered at Checkout (email, card, billing details) plus our `auth0_id` in metadata |
-| **OpenRouter** | AI gateway for every model call | **Resume parsing:** the full resume text, including contact details. **Tailoring:** the full profile as JSON, including name, email, phone, location, links, plus the job description and the user's answers. **Suggestions:** the experience entry and bullets, plus the user's guidance and answers (no contact details). **System design:** notes, diagram text, transcript, and for job-based sessions the job description. No user identifier is sent |
-| **The model provider OpenRouter routes to** | Running the model | The same content as above. Users pick from an admin-curated list for suggestions, tailoring, and interviews. Resume parsing always uses `RESUME_PARSER_MODEL`, which is `openrouter/auto` (OpenRouter picks the model and provider). No provider privacy routing (`data_collection`, ZDR) is set in code, so the OpenRouter account settings decide whether prompts can reach providers that log or train on them |
-| **LangSmith** (LangChain) | Agent tracing | The deployed dispatcher image (pushed to ECR 2026-09-27) contains `backend/dispatcher/.env` with `LANGSMITH_TRACING=true`, and Terraform injects `LANGSMITH_API_KEY`. If that image is what's running, **every prompt, tool output (resume text, contact details, job descriptions), model output, and user answer is sent to the LangSmith project "Resland"** |
-| **AWS** (us-east-2) | Hosting | S3 (resume files), RDS Postgres (all app data), Amazon MQ (job messages), ECS Fargate (API and workers), CloudWatch (logs), Route 53, ACM |
-| **Frontend host** (Vercel and/or Railway; not in Terraform, needs confirming) | Runs the Next.js server | Every page request, the Auth0 session cookie, and a direct Postgres connection |
+| **OpenRouter** | AI gateway for every model call | **Resume parsing:** the full resume text, including contact details. **Tailoring:** the full profile as JSON, including name, email, phone, location, links, plus the job description and the user's answers. **Suggestions:** the experience entry and bullets, plus the user's guidance and answers (no contact details). **System design:** notes, diagram text, transcript, and for job-based sessions the job description. No user identifier is sent. **Zero data retention is enforced on all providers in the account settings** (owner, 2026-10-06) |
+| **OpenAI, Anthropic** (via OpenRouter) | Running the models | The same content as above. The `/admin` model list offers OpenAI GPT and Anthropic Claude models. Resume parsing uses `RESUME_PARSER_MODEL`. If that is still `openrouter:openrouter/auto`, OpenRouter can pick another vendor's zero-retention endpoint. Pin it to an OpenAI or Claude model so the policy's list is complete |
+| **LangSmith** (LangChain) | Agent tracing | When `LANGSMITH_TRACING=true` is set on the dispatcher, every prompt, tool output (resume text, contact details, job descriptions), model output, and user answer goes to the LangSmith project. Listed as a subprocessor by decision; set the project's trace retention to the shortest tier |
 | **esm.sh** | Excalidraw fonts on `/system-design/[id]` | The visitor's IP and user agent (browser request). `EXCALIDRAW_ASSET_PATH` is unset, so the package falls back to the CDN |
 
 Not used: analytics or ad trackers, error monitoring, email providers, a CDN.
@@ -145,7 +172,7 @@ handling. Everything above is either needed for sign-in or anonymous
 first-party analytics. Whether that needs a consent prompt for EU/UK visitors is
 a question for the lawyer.
 
-## 4. Retention and deletion today
+## 4. Retention and deletion
 
 | Data | Kept for | User can delete? |
 |---|---|---|
@@ -158,44 +185,53 @@ a question for the lawyer.
 | System-design sessions and transcripts | Until dismissed | Yes |
 | LangGraph checkpoints (`langgraph` schema): full conversations, including the tailor profile with contact details, and the user's answers | Deleted with their run/session. **Orphaned forever** when a re-upload deletes suggestion rows, and for any abandoned session. No TTL, no application-level encryption | Indirectly |
 | AMQP dead-letter queues: failed job messages, which can contain user free text | **Forever.** No TTL and nothing consumes them | No |
-| `token_usage`, `balance_purchase` | Forever (accounting) | No |
+| `token_usage`, `balance_purchase` | Forever (accounting). Decided: on account deletion they stay, repointed to an anonymous placeholder user | No |
 | `page_view` | Forever | n/a (anonymous) |
-| CloudWatch logs | 30 days | No |
-| RDS automated backups | 3 days | No |
+| Railway logs | 7 days (Hobby) / 30 days (Pro) | No |
+| Postgres backups | **None today.** Planned: weekly, kept one month | No |
 | Auth0 account | Until deleted in Auth0 | No |
 | Stripe customer and payments | Indefinitely, per Stripe's own obligations | No |
-| LangSmith traces | Per the LangSmith plan's retention | No |
+| LangSmith traces | Per the project's trace retention setting | No |
 
-There is **no account deletion, no data export, and no "delete my resume"**.
-The schema declares no `onDelete` cascades, so an account-deletion path has to
-delete dependent rows in order, then the S3 prefix `resumes/<auth0_id>/`, the
-LangGraph threads, the Auth0 user, and the Stripe customer (or keep billing
-records with a stated reason).
+`feat/account-deletion-export` adds a self-serve export, and a deletion that
+covers:
 
-## 5. Security: what the policy can and can't claim
+- every DB row (billing de-identified),
+- the S3 prefix `resumes/<auth0_id>/`,
+- the LangGraph threads,
+- the Stripe customer,
+- the Auth0 user.
 
-**Accurate today**
-- HTTPS everywhere: the API load balancer redirects HTTP to HTTPS (ACM cert).
+It also fixes the re-upload checkpoint orphaning. Deletion can't reach
+dead-letter messages, platform logs, backups, or LangSmith traces. The policy
+should say those age out on their own schedules.
+
+## 5. Security: what the policy can claim
+
+**Accurate**
+- HTTPS for all traffic to the site and API.
+- **Encryption at rest:** Railway encrypts all volumes and backups with
+  AES-256. S3 encrypts new objects by default (SSE-S3).
+- **Network isolation:** Postgres and RabbitMQ are reachable only over
+  Railway's private network, which runs over encrypted WireGuard tunnels.
+- Railway holds SOC 2 Type II and offers a GDPR Article 28 DPA
+  ([Railway Station](https://station.railway.com/questions/data-protection-questions-encryption-a-e5128546)).
 - Card details never touch Resland (Stripe-hosted Checkout).
 - Every content query is scoped to the signed-in user. Admins see users' email,
   name, balance, and usage through `/admin`, but not resume content, job
-  descriptions, or transcripts (though they have direct database access).
+  descriptions, or transcripts (though the owner has direct database access).
 
-**Not accurate today; don't claim it until fixed**
-- **Database encryption at rest:** `storage_encrypted` is unset on the RDS
-  instance (`terraform/rds.tf`), so it is off. RDS can't encrypt an existing
-  instance in place: snapshot, copy the snapshot with encryption, restore.
-- **Network isolation:** RDS is `publicly_accessible` with `0.0.0.0/0` on 5432
-  (password auth only), probably because the frontend host connects to
-  Postgres directly. The Amazon MQ broker is also `publicly_accessible`.
-- **S3 hardening:** the bucket declares no encryption, public-access block,
-  versioning, or lifecycle rules (`terraform/durable/s3.tf`). AWS defaults
-  (SSE-S3; public access blocked on buckets created after April 2023) probably
-  apply, but the repo doesn't enforce them.
-- **Secrets:** they are plaintext env vars in the ECS task definitions and
-  Terraform state. `.dockerignore` excludes only the root `.env`, so
-  `backend/dispatcher/.env` (API keys included) is baked into the image pushed
-  to ECR.
+**Caveats**
+- The AWS stack in `terraform/` (ECS, an unencrypted and publicly reachable
+  RDS instance, a public Amazon MQ broker) is not the live system. `deploy.sh`
+  still pushes to ECR and redeploys ECS; an image was pushed 2026-09-27. If
+  those resources still exist, they are a second copy of the app and possibly
+  of old user data. Tear them down, or confirm they're gone.
+- The S3 bucket's encryption and public-access-block settings come from AWS
+  defaults, not from Terraform.
+- `.dockerignore` excludes only the root `.env`, so `docker build` bakes
+  `backend/dispatcher/.env` (API keys included) into the image. That matters
+  for the ECR path in `deploy.sh`, not for Railway builds from git.
 
 ## 6. What the site already promises
 
@@ -208,7 +244,7 @@ These must stay true, or the policy and the copy must change together:
   the work." (`frontend/app/help/page.tsx`) **Incomplete:**
   - Resume parsing sends the whole resume to a model the user doesn't pick.
   - Mock interviews send content too.
-  - LangSmith receives everything while tracing is on.
+  - LangSmith receives traces.
 - Charges are "the AI provider's cost for that work, plus a service fee"
   (billing page, Help). The fee is a 1.25× markup (`COST_MARKUP`); the UI never
   shows the number.
@@ -216,10 +252,10 @@ These must stay true, or the policy and the copy must change together:
 
 ## 7. Facts the Terms of Service need
 
-- **Contracting party:** Quellen Ventures LLC. The state of formation (for
-  governing law) is not in the repo.
-- **Accounts:** Auth0 sign-up. No age gate and no Terms acceptance step at
-  sign-up or checkout.
+- **Contracting party:** Quellen Ventures LLC, a Colorado LLC. Governing law
+  is Colorado.
+- **Accounts:** Auth0 sign-up. **Users must be 18 or older.** There is no age
+  gate and no Terms acceptance step at sign-up or checkout yet.
 - **Billing:** a prepaid USD balance bought in one-time Stripe Checkout packs.
 
   | Pack | Pay | Balance added |
@@ -233,11 +269,19 @@ These must stay true, or the policy and the copy must change together:
     used instead.
   - Resume parsing is free.
   - The balance never goes negative, and new jobs are refused at zero.
-  - The balance has no expiry logic.
-- **Refunds:** a full Stripe refund removes the granted balance (floored at
-  zero). A partial refund leaves the balance untouched; that behaviour is an
-  open decision in `docs/stripe-billing-plan.md`. There is no written refund
-  policy yet, and Stripe expects one on the site.
+- **Balance and refunds (decided):**
+  - The balance never expires.
+  - Purchases aren't refundable except at the operator's discretion or where
+    the law requires.
+  - Any remaining balance is forfeited on account deletion; the deletion
+    screen warns about this.
+  - A full Stripe refund removes the granted balance (floored at zero). A
+    partial refund leaves the balance untouched, which is fine for
+    discretionary refunds.
+  - EU/UK consumers have a 14-day right to withdraw from digital services. It
+    lapses only if they expressly ask for the service to start right away and
+    acknowledge losing the right, which can be done in the checkout consent
+    text. That's a lawyer question.
 - **AI output:** generated resumes and suggestions can be wrong or embellished,
   and the user is responsible for what they send to employers. Interview grades
   are automated practice feedback, not hiring decisions.
@@ -248,33 +292,32 @@ These must stay true, or the policy and the copy must change together:
 
 ## 8. Before publishing
 
-**Decide**
-1. Will you serve EU/UK users? That adds GDPR lawful-basis, transfer, and
-   rights language, and may affect §3.
-2. Minimum age: 13, 16, or 18.
-3. Unused balance: does it expire, and is it refundable, including on account
-   closure? Some US states regulate expiring prepaid value.
-4. How partial refunds should behave.
-5. Which frontend host is live: Vercel, Railway, or both.
-6. A contact address for privacy and support requests.
+**Done or decided**
+- Zero data retention enabled for all OpenRouter providers.
+- LangSmith will be listed.
+- Postgres and RabbitMQ are private on Railway.
+- Users must be 18+.
+- GDPR is in scope.
+- Balance never expires and refunds are discretionary.
+- Billing records are kept de-identified on deletion.
+- Contact email, mailing address, and governing law are set.
 
-**Fix in code/infra, or disclose as-is**
-1. **LangSmith:** either turn tracing off in production, or list LangSmith as a
-   subprocessor and set a short trace retention. To turn it off, first move
-   `RESUME_PARSER_MODEL` (and the other `*_MODEL` vars) into Terraform, then
-   stop shipping `backend/**/.env` in the image. Today resume parsing depends on
-   that baked-in file.
-2. **OpenRouter:** turn on the account setting that excludes providers that
-   train on or retain prompts, or send `provider.data_collection: "deny"` / ZDR
-   per request. Consider pinning the parser model instead of `openrouter/auto`
-   so the policy can name providers.
-3. **Account deletion and data export** (§4), plus a "delete my resume" option.
-4. **Retention:** purge orphaned checkpoints, add a TTL to the dead-letter
-   queues, add a `page_view` retention window, and add S3 lifecycle rules if
-   wanted.
-5. **Database:** encrypt RDS at rest, and restrict RDS and MQ network access.
-6. Self-host the Excalidraw fonts (`EXCALIDRAW_ASSET_PATH`), or list esm.sh.
-7. Update the Help page's privacy answer (§6).
-8. Publish `/privacy`, `/terms`, and a refund policy. Add them to the footer
+**Still to do**
+1. Merge account deletion and data export (`feat/account-deletion-export`).
+   It needs an Auth0 Management API app; see that PR.
+2. Pin `RESUME_PARSER_MODEL`, plus the `SUGGESTIONS_MODEL` and `TAILOR_MODEL`
+   fallbacks, to OpenAI or Claude models in Railway, so `openrouter/auto` can't
+   route outside the vendors the policy names.
+3. Set LangSmith trace retention to the shortest tier, and turn on the planned
+   weekly Postgres backups.
+4. Sign Railway's DPA. Confirm the DPAs for Stripe, Auth0, OpenRouter,
+   LangSmith, and AWS; most are incorporated into their terms automatically.
+5. Tear down, or confirm gone, the legacy AWS ECS/RDS/Amazon MQ stack, and
+   retire `deploy.sh`.
+6. Retention: add a TTL to the dead-letter queues and a `page_view` retention
+   window.
+7. Self-host the Excalidraw fonts (`EXCALIDRAW_ASSET_PATH`), or list esm.sh.
+8. Update the Help page's privacy answer (§6).
+9. Publish `/privacy`, `/terms`, and a refund policy. Add them to the footer
    `LEGAL_LINKS` and `app/sitemap.ts`, and set Checkout's
    `consent_collection.terms_of_service = "required"`.
