@@ -18,6 +18,7 @@ from ..env_vars import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_RESUME_BUCKE
 from ..resume_export import service as resume_export
 from ..tailor import db as tailor_db
 from ..tailor.model import MAX_TAILOR_FIELD_CHARS
+from ..user_row import share_user_row
 from . import db, model
 
 GENERATED_TAILORED_KEY_TEMPLATE = "resumes/{user_id}/tailored/{tailored_id}.docx"
@@ -291,8 +292,14 @@ async def export_tailored(
     )
     if stale:
         docx_bytes = render_docx(content, fmt)
-        s3_client.upload_fileobj(io.BytesIO(docx_bytes), S3_RESUME_BUCKET, s3_key)
-        await db.set_tailored_generated(pg_conn, tailored_id, s3_key, source_hash)
+        # Hold the account row while the file lands, so it can't appear
+        # after an account deletion swept the user's files.
+        async with pg_conn.transaction():
+            await share_user_row(pg_conn, user_id)
+            s3_client.upload_fileobj(
+                io.BytesIO(docx_bytes), S3_RESUME_BUCKET, s3_key
+            )
+            await db.set_tailored_generated(pg_conn, tailored_id, s3_key, source_hash)
         regenerated = True
 
     url = s3_client.generate_presigned_url(

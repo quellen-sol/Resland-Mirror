@@ -6,6 +6,7 @@ from shared.amqp import TAILOR_EXCHANGE_NAME, AmqpTailorJob
 from ..balance import require_balance, validate_model_choice
 from ..deps import AmqpClientDep, PgConnection
 from ..tailored import service as tailored_service
+from ..user_row import share_user_row
 from . import db, model
 
 
@@ -90,9 +91,13 @@ async def answer_tailor(
     if run.status != "WAITING_FOR_INPUT":
         raise HTTPException(status_code=409, detail="Run is not awaiting input")
 
-    await db.update_tailor_run(
-        pg_conn, run_id, status="PROCESSING", pending_question=None
-    )
+    # The row lock keeps an account deletion from missing (or racing) the
+    # new work.
+    async with pg_conn.transaction():
+        await share_user_row(pg_conn, user_id)
+        await db.update_tailor_run(
+            pg_conn, run_id, status="PROCESSING", pending_question=None
+        )
     # Commit before publishing — the pooled connection otherwise commits at
     # teardown and could overwrite the dispatcher's result write.
     await pg_conn.commit()

@@ -21,4 +21,9 @@ async def share_user_row(conn: PgConnection, user_id: str) -> None:
     Blocks while a deletion holds the row; raises 404 when the account no
     longer exists. Call it inside `conn.transaction()` — on an autocommit
     connection outside one, the lock is released as soon as it's taken."""
-    raise NotImplementedError
+    async with conn.cursor() as cursor:
+        res = await cursor.execute(
+            'SELECT 1 FROM "user" WHERE auth0_id = %s FOR KEY SHARE', (user_id,)
+        )
+        if not await res.fetchone():
+            raise HTTPException(status_code=404, detail="Account not found")

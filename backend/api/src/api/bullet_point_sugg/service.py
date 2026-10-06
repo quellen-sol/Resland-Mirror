@@ -6,6 +6,7 @@ from shared.amqp import BULLET_SUGG_EXCHANGE_NAME, AmqpSuggestionJob
 
 from ..balance import require_balance, validate_model_choice
 from ..deps import AmqpClientDep, PgConnection
+from ..user_row import share_user_row
 from . import db, model
 
 
@@ -124,14 +125,17 @@ async def answer_suggestion(
         raise HTTPException(status_code=409, detail="Session is not awaiting input")
 
     # Keep any options already shown — a reply asking for more that ends
-    # without a resubmit leaves them as the ones to apply.
-    await db.update_sugg_session(
-        pg_conn,
-        session_id,
-        status="PROCESSING",
-        pending_question=None,
-        result=session.result,
-    )
+    # without a resubmit leaves them as the ones to apply. The row lock keeps
+    # an account deletion from missing (or racing) the new work.
+    async with pg_conn.transaction():
+        await share_user_row(pg_conn, user_id)
+        await db.update_sugg_session(
+            pg_conn,
+            session_id,
+            status="PROCESSING",
+            pending_question=None,
+            result=session.result,
+        )
     # Commit before publishing — the pooled connection otherwise commits at
     # teardown and could overwrite the dispatcher's result write.
     await pg_conn.commit()
@@ -164,13 +168,15 @@ async def retry_suggestion(
     # Retrying burns tokens again — apply the same balance gate as start.
     await require_balance(pg_conn, user_id)
 
-    await db.update_sugg_session(
-        pg_conn,
-        session_id,
-        status="PROCESSING",
-        pending_question=None,
-        result=session.result,
-    )
+    async with pg_conn.transaction():
+        await share_user_row(pg_conn, user_id)
+        await db.update_sugg_session(
+            pg_conn,
+            session_id,
+            status="PROCESSING",
+            pending_question=None,
+            result=session.result,
+        )
     # Commit before publishing — the pooled connection otherwise commits at
     # teardown and could overwrite the dispatcher's result write.
     await pg_conn.commit()

@@ -24,6 +24,7 @@ from ..env_vars import (
     AWS_SECRET_ACCESS_KEY,
     S3_RESUME_BUCKET,
 )
+from ..user_row import share_user_row
 from . import model
 
 GENERATED_KEY_TEMPLATE = "resumes/{user_id}/generated.docx"
@@ -227,23 +228,29 @@ async def export_resume(pg_conn: PgConnection, user_id: str):
     )
     if stale:
         docx_bytes = render_docx(content, fmt)
-        s3_client.upload_fileobj(
-            io.BytesIO(docx_bytes), S3_RESUME_BUCKET, s3_key
-        )
-        row = await _fetch_one(
-            pg_conn,
-            """
-            INSERT INTO user_generated_resume (user_id, template, s3_key, source_hash)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (user_id) DO UPDATE SET
-                template = EXCLUDED.template,
-                s3_key = EXCLUDED.s3_key,
-                source_hash = EXCLUDED.source_hash,
-                generated_at = now()
-            RETURNING generated_at
-            """,
-            (user_id, TEMPLATE_ORIGINAL, s3_key, source_hash),
-        )
+        # Hold the account row while the file lands: an account deletion in
+        # progress either finishes first (and this 404s before writing) or
+        # waits, then sweeps the file with everything else.
+        async with pg_conn.transaction():
+            await share_user_row(pg_conn, user_id)
+            s3_client.upload_fileobj(
+                io.BytesIO(docx_bytes), S3_RESUME_BUCKET, s3_key
+            )
+            row = await _fetch_one(
+                pg_conn,
+                """
+                INSERT INTO user_generated_resume
+                    (user_id, template, s3_key, source_hash)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    template = EXCLUDED.template,
+                    s3_key = EXCLUDED.s3_key,
+                    source_hash = EXCLUDED.source_hash,
+                    generated_at = now()
+                RETURNING generated_at
+                """,
+                (user_id, TEMPLATE_ORIGINAL, s3_key, source_hash),
+            )
         generated_at = row[0] if row else None
         regenerated = True
 
