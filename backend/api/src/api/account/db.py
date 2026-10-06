@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Any
 
 from shared.accounts import new_tombstone_id
-from shared.checkpoints import CHECKPOINT_TABLES
+from shared.checkpoints import CHECKPOINT_TABLES, THREAD_OWNER_TABLES
 
 from ..deps import PgConnection
 from .model import (
@@ -49,13 +49,6 @@ ERASED_TABLES = (
 
 # Billing ledger: kept for accounting, re-pointed at a tombstone user.
 REPOINTED_TABLES = ("balance_purchase", "token_usage")
-
-# Tables whose ids are LangGraph thread ids (langgraph.* checkpoints).
-THREAD_TABLES = (
-    "user_suggestion",
-    "user_tailor_run",
-    "user_system_design_session",
-)
 
 # A resume upload still PENDING/PROCESSING after this long has crashed (the
 # dispatcher drops a job whose account is gone), so it can't block deletion
@@ -166,7 +159,7 @@ async def erase_account(conn: PgConnection, user_id: str) -> str | None:
     Returns the tombstone id, or None when no billing rows existed."""
     async with conn.cursor() as cursor:
         thread_ids: list[str] = []
-        for table in THREAD_TABLES:
+        for table in THREAD_OWNER_TABLES:
             res = await cursor.execute(
                 f"SELECT id FROM {table} WHERE user_id = %s", (user_id,)
             )

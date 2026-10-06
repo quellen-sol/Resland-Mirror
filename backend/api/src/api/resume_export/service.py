@@ -1,3 +1,4 @@
+import asyncio
 import io
 from collections.abc import Iterable
 from typing import Any
@@ -233,8 +234,12 @@ async def export_resume(pg_conn: PgConnection, user_id: str):
         # waits, then sweeps the file with everything else.
         async with pg_conn.transaction():
             await share_user_row(pg_conn, user_id)
-            s3_client.upload_fileobj(
-                io.BytesIO(docx_bytes), S3_RESUME_BUCKET, s3_key
+            # Off the event loop: the row lock is held until this lands.
+            await asyncio.to_thread(
+                s3_client.upload_fileobj,
+                io.BytesIO(docx_bytes),
+                S3_RESUME_BUCKET,
+                s3_key,
             )
             row = await _fetch_one(
                 pg_conn,

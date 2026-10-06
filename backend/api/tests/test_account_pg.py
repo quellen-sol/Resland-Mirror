@@ -16,6 +16,7 @@ import asyncio
 import io
 import json
 import zipfile
+from types import SimpleNamespace
 
 import psycopg
 import pytest
@@ -117,10 +118,15 @@ def externals(monkeypatch):
     def expire(session_id):
         stripe_calls.append(("expire", session_id))
 
+    def retrieve(session_id):
+        stripe_calls.append(("retrieve", session_id))
+        return SimpleNamespace(status="expired", payment_status="unpaid")
+
     def delete(customer_id):
         stripe_calls.append(("delete", customer_id))
 
     monkeypatch.setattr(stripe.checkout.Session, "expire", expire)
+    monkeypatch.setattr(stripe.checkout.Session, "retrieve", retrieve)
     monkeypatch.setattr(stripe.Customer, "delete", delete)
     monkeypatch.setattr(service, "get_s3_client", lambda **_kw: s3)
     monkeypatch.setattr(service, "auth0_management", lambda: auth0)
@@ -673,12 +679,13 @@ async def test_storage_failure_rolls_back_and_a_retry_finishes(
     with pytest.raises(HTTPException) as exc:
         await service.delete_account(pg, USER)
     assert exc.value.status_code == 502
-    # The database is exactly as it was, and Stripe/Auth0 were never called.
+    # The database is exactly as it was; the Stripe customer and the Auth0
+    # login were never touched (only the abandoned checkout was expired).
     assert await _one(
         pg, 'SELECT full_name FROM "user" WHERE auth0_id = %s', (USER,)
     ) == (pii("alpha")["name"],)
     assert await thread_rows(pg, mine["threads"]) == 9
-    assert externals.stripe_calls == []
+    assert externals.stripe_calls == [("expire", mine["open_checkout"])]
     assert externals.auth0.deleted == []
 
     externals.s3.fail_delete_keys = set()
@@ -711,6 +718,38 @@ async def test_stripe_failure_rolls_back_and_a_retry_finishes(
     monkeypatch.setattr(stripe.Customer, "delete", lambda customer_id: None)
     await service.delete_account(pg, USER)
     assert await rows_naming(pg, USER) == {}
+
+
+async def test_paid_checkout_not_yet_credited_blocks_deletion(
+    pg, checkpoint_tables, externals, monkeypatch
+):
+    """Paid a moment ago, webhook not in yet: the person must see that
+    balance before agreeing to forfeit it, so nothing is touched."""
+    mine = await seed_user(pg, USER)
+    seed_files(externals.s3, USER)
+
+    def expire(session_id):
+        raise stripe.InvalidRequestError("not open", None)
+
+    monkeypatch.setattr(stripe.checkout.Session, "expire", expire)
+    monkeypatch.setattr(
+        stripe.checkout.Session,
+        "retrieve",
+        lambda session_id: SimpleNamespace(status="complete", payment_status="paid"),
+    )
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_account(pg, USER)
+    assert exc.value.status_code == 409
+    assert exc.value.detail == service.PAYMENT_SETTLING
+    assert len(externals.s3.objects) == 3
+    assert externals.stripe_calls == []  # no customer deletion
+    assert externals.auth0.deleted == []
+    row = await _one(
+        pg,
+        "SELECT user_id, status FROM balance_purchase WHERE id = %s",
+        (mine["open_checkout"],),
+    )
+    assert row == (USER, "PENDING")
 
 
 async def test_failure_after_stripe_forgets_the_deleted_customer(
@@ -918,6 +957,16 @@ async def test_export_survives_an_auth0_outage(pg, checkpoint_tables, externals)
     zf = await _export(pg)
     assert json.loads(zf.read("data.json"))["login_identity"] is None
     assert "couldn't be retrieved" in zf.read("README.txt").decode()
+
+
+async def test_export_says_when_auth0_has_no_profile(pg, checkpoint_tables, externals):
+    await seed_user(pg, USER)
+    externals.auth0.profile = None
+    zf = await _export(pg)
+    readme = " ".join(zf.read("README.txt").decode().split())
+    assert json.loads(zf.read("data.json"))["login_identity"] is None
+    assert "Auth0 holds no sign-in profile" in readme
+    assert "try exporting again" not in readme.lower()
 
 
 async def test_export_without_a_profile_yet(pg, checkpoint_tables, externals):

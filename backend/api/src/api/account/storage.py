@@ -15,7 +15,10 @@ _MISSING_CODES = {"NoSuchKey", "404", "NotFound"}
 
 
 class StorageError(Exception):
-    """S3 refused a list/read/delete — the operation didn't complete."""
+    """S3 refused a list/read/delete — the operation didn't complete.
+
+    Messages never name the key or prefix: both contain the Auth0 id, and
+    these end up in logs that outlive a deleted account."""
 
 
 def user_prefix(user_id: str) -> str:
@@ -41,7 +44,7 @@ def list_keys(s3: Any, bucket: str, prefix: str) -> list[str]:
                 return keys
             token = page["NextContinuationToken"]
     except (BotoCoreError, ClientError) as e:
-        raise StorageError(f"listing {prefix}: {e}") from e
+        raise StorageError(f"listing failed: {e}") from e
 
 
 def delete_prefix(s3: Any, bucket: str, prefix: str) -> int:
@@ -56,13 +59,13 @@ def delete_prefix(s3: Any, bucket: str, prefix: str) -> int:
                 Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True},
             )
         except (BotoCoreError, ClientError) as e:
-            raise StorageError(f"deleting under {prefix}: {e}") from e
+            raise StorageError(f"delete failed: {e}") from e
         # Per-key failures come back in a 200 response, not as an exception.
         errors = resp.get("Errors") or []
         if errors:
             first = errors[0]
             raise StorageError(
-                f"{len(errors)} object(s) under {prefix} not deleted"
+                f"{len(errors)} object(s) not deleted"
                 f" (first: {first.get('Code')} {first.get('Message')})"
             )
     return len(keys)
@@ -76,6 +79,6 @@ def open_object(s3: Any, bucket: str, key: str) -> Any | None:
     except ClientError as e:
         if e.response.get("Error", {}).get("Code") in _MISSING_CODES:
             return None
-        raise StorageError(f"reading {key}: {e}") from e
+        raise StorageError(f"read failed: {e}") from e
     except BotoCoreError as e:
-        raise StorageError(f"reading {key}: {e}") from e
+        raise StorageError(f"read failed: {e}") from e

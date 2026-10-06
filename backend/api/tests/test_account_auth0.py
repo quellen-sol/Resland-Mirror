@@ -162,6 +162,20 @@ class GetUser(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(Auth0ManagementError):
             await server.client().get_user(USER)
 
+    async def test_non_json_success_raises_the_client_error(self):
+        # A proxy answering 200 with HTML must degrade the export (no login
+        # profile), not crash it.
+        def html(request):
+            if request.url.path == "/oauth/token":
+                return httpx.Response(200, json={"access_token": "t"})
+            return httpx.Response(200, text="<html>hi</html>")
+
+        client = Auth0Management(
+            DOMAIN, "cid", "secret", transport=httpx.MockTransport(html)
+        )
+        with self.assertRaises(Auth0ManagementError):
+            await client.get_user(USER)
+
 
 if __name__ == "__main__":
     unittest.main()

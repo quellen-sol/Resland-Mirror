@@ -1,3 +1,4 @@
+import asyncio
 import io
 import uuid
 from contextlib import suppress
@@ -296,8 +297,12 @@ async def export_tailored(
         # after an account deletion swept the user's files.
         async with pg_conn.transaction():
             await share_user_row(pg_conn, user_id)
-            s3_client.upload_fileobj(
-                io.BytesIO(docx_bytes), S3_RESUME_BUCKET, s3_key
+            # Off the event loop: the row lock is held until this lands.
+            await asyncio.to_thread(
+                s3_client.upload_fileobj,
+                io.BytesIO(docx_bytes),
+                S3_RESUME_BUCKET,
+                s3_key,
             )
             await db.set_tailored_generated(pg_conn, tailored_id, s3_key, source_hash)
         regenerated = True

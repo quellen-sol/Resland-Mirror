@@ -8,6 +8,7 @@ import io
 import json
 import unittest
 import zipfile
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import stripe
@@ -19,7 +20,7 @@ from .helpers import FakeS3
 PREFIX = "resumes/u1/"
 
 
-def _write(data=None, objects=None, keys=None, identity=True):
+def _write(data=None, objects=None, keys=None, identity_note=None):
     s3 = FakeS3(objects or {})
     dest = io.BytesIO()
     included = archive.write_archive(
@@ -29,7 +30,7 @@ def _write(data=None, objects=None, keys=None, identity=True):
         bucket="b",
         prefix=PREFIX,
         keys=keys if keys is not None else sorted(s3.objects),
-        login_identity_included=identity,
+        login_identity_note=identity_note,
     )
     dest.seek(0)
     return zipfile.ZipFile(dest), included
@@ -87,11 +88,21 @@ class WriteArchive(unittest.TestCase):
         self.assertEqual(included, [])
         self.assertIn("No files", zf.read("README.txt").decode())
 
-    def test_readme_flags_a_missing_login_identity(self):
-        with_identity = archive.readme_text(files=[], login_identity_included=True)
-        without = archive.readme_text(files=[], login_identity_included=False)
-        self.assertNotIn("couldn't be retrieved", with_identity)
-        self.assertIn("couldn't be retrieved", without)
+    def test_readme_explains_a_missing_login_identity(self):
+        with_identity = archive.readme_text(files=[], login_identity_note=None)
+        self.assertNotIn("Note:", with_identity)
+        for note in (
+            archive.IDENTITY_UNAVAILABLE,
+            archive.IDENTITY_NOT_FOUND,
+            archive.IDENTITY_NOT_FETCHED,
+        ):
+            readme = archive.readme_text(files=[], login_identity_note=note)
+            # Wrapped for a text file, but every word is there.
+            self.assertIn(" ".join(note.split()), " ".join(readme.split()))
+            self.assertTrue(all(len(line) <= 76 for line in readme.splitlines()))
+        # Only a transient failure suggests trying again.
+        self.assertIn("again later", archive.IDENTITY_UNAVAILABLE)
+        self.assertNotIn("again", archive.IDENTITY_NOT_FOUND)
 
 
 class ExportFilename(unittest.TestCase):
@@ -106,7 +117,7 @@ def _invalid_request(code):
     return stripe.InvalidRequestError("nope", None, code=code)
 
 
-class DeleteStripeCustomer(unittest.TestCase):
+class _StripeFakes(unittest.TestCase):
     def setUp(self):
         self.calls = []
 
@@ -118,6 +129,13 @@ class DeleteStripeCustomer(unittest.TestCase):
 
         return expire
 
+    def _retrieve(self, status, payment_status):
+        def retrieve(session_id):
+            self.calls.append(("retrieve", session_id))
+            return SimpleNamespace(status=status, payment_status=payment_status)
+
+        return retrieve
+
     def _delete(self, error=None):
         def delete(customer_id):
             self.calls.append(("delete", customer_id))
@@ -126,29 +144,61 @@ class DeleteStripeCustomer(unittest.TestCase):
 
         return delete
 
-    def test_expires_open_checkouts_then_deletes_the_customer(self):
-        with (
-            patch.object(stripe.checkout.Session, "expire", self._expire()),
-            patch.object(stripe.Customer, "delete", self._delete()),
-        ):
-            service.delete_stripe_customer("cus_1", ["cs_a", "cs_b"])
-        self.assertEqual(
-            self.calls,
-            [("expire", "cs_a"), ("expire", "cs_b"), ("delete", "cus_1")],
-        )
 
-    def test_already_finished_checkout_is_fine(self):
-        # Expiring a completed/expired session is an InvalidRequestError.
+class ExpireOpenCheckouts(_StripeFakes):
+    def test_expires_each_open_session(self):
+        with patch.object(stripe.checkout.Session, "expire", self._expire()):
+            service.expire_open_checkouts(["cs_a", "cs_b"])
+        self.assertEqual(self.calls, [("expire", "cs_a"), ("expire", "cs_b")])
+
+    def test_expired_or_unpaid_sessions_are_fine(self):
+        # Expiring a session that isn't open is an InvalidRequestError; an
+        # expired one, or an async payment still pending, doesn't block.
+        for status, payment_status in (("expired", "unpaid"), ("complete", "unpaid")):
+            with (
+                self.subTest(status=status, payment_status=payment_status),
+                patch.object(
+                    stripe.checkout.Session,
+                    "expire",
+                    self._expire(_invalid_request(None)),
+                ),
+                patch.object(
+                    stripe.checkout.Session,
+                    "retrieve",
+                    self._retrieve(status, payment_status),
+                ),
+            ):
+                service.expire_open_checkouts(["cs_x"])
+
+    def test_paid_but_uncredited_session_must_settle_first(self):
+        with (
+            patch.object(
+                stripe.checkout.Session, "expire", self._expire(_invalid_request(None))
+            ),
+            patch.object(
+                stripe.checkout.Session, "retrieve", self._retrieve("complete", "paid")
+            ),
+            self.assertRaises(service.CheckoutStillSettling),
+        ):
+            service.expire_open_checkouts(["cs_paid"])
+
+    def test_unreachable_stripe_propagates(self):
         with (
             patch.object(
                 stripe.checkout.Session,
                 "expire",
-                self._expire(_invalid_request(None)),
+                self._expire(stripe.APIConnectionError("down")),
             ),
-            patch.object(stripe.Customer, "delete", self._delete()),
+            self.assertRaises(stripe.StripeError),
         ):
-            service.delete_stripe_customer("cus_1", ["cs_done"])
-        self.assertIn(("delete", "cus_1"), self.calls)
+            service.expire_open_checkouts(["cs_open"])
+
+
+class DeleteStripeCustomer(_StripeFakes):
+    def test_deletes_the_customer(self):
+        with patch.object(stripe.Customer, "delete", self._delete()):
+            service.delete_stripe_customer("cus_1")
+        self.assertEqual(self.calls, [("delete", "cus_1")])
 
     def test_already_deleted_customer_is_fine(self):
         with patch.object(
@@ -156,7 +206,7 @@ class DeleteStripeCustomer(unittest.TestCase):
             "delete",
             self._delete(_invalid_request("resource_missing")),
         ):
-            service.delete_stripe_customer("cus_1", [])
+            service.delete_stripe_customer("cus_1")
 
     def test_other_errors_propagate(self):
         for error in (
@@ -168,21 +218,7 @@ class DeleteStripeCustomer(unittest.TestCase):
                 patch.object(stripe.Customer, "delete", self._delete(error)),
                 self.assertRaises(stripe.StripeError),
             ):
-                service.delete_stripe_customer("cus_1", [])
-
-    def test_unreachable_stripe_while_expiring_propagates(self):
-        with (
-            patch.object(
-                stripe.checkout.Session,
-                "expire",
-                self._expire(stripe.APIConnectionError("down")),
-            ),
-            patch.object(stripe.Customer, "delete", self._delete()),
-            self.assertRaises(stripe.StripeError),
-        ):
-            service.delete_stripe_customer("cus_1", ["cs_open"])
-        # Never delete the customer while a checkout might still be payable.
-        self.assertNotIn(("delete", "cus_1"), self.calls)
+                service.delete_stripe_customer("cus_1")
 
 
 if __name__ == "__main__":

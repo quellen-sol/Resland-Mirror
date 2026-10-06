@@ -7,6 +7,7 @@ Layout:
 """
 
 import json
+import textwrap
 import zipfile
 from typing import IO, Any
 
@@ -31,8 +32,9 @@ Your data as JSON. Dates are UTC (ISO 8601); money is in US cents.
   account          Your account id (from your sign-in provider), when the
                    account was created, your balance, and your Stripe
                    customer reference.
-  login_identity   Your sign-in profile as our sign-in provider, Auth0, holds
-                   it: email, name, picture, and recent sign-in details.
+  login_identity   Your sign-in profile as our sign-in provider, Auth0,
+                   holds it: email, name, picture, and recent sign-in
+                   details.
   profile, links, experiences (each with its bullets), skills, education,
   projects         Your resume profile.
   resume_format    The layout captured from the resume you uploaded.
@@ -80,15 +82,24 @@ Not included
 - Short-lived server logs.
 """
 
-_IDENTITY_MISSING = """
-Note: your sign-in profile (login_identity) couldn't be retrieved from Auth0
-for this export, so it's empty. Try exporting again later to include it.
-"""
+# Why login_identity is empty, when it is — the service picks one.
+IDENTITY_UNAVAILABLE = (
+    "Your sign-in profile (login_identity) couldn't be retrieved from Auth0 "
+    "for this export, so it's empty. Try exporting again later to include it."
+)
+IDENTITY_NOT_FOUND = (
+    "Auth0 holds no sign-in profile for this account, so login_identity is empty."
+)
+IDENTITY_NOT_FETCHED = (
+    "Your sign-in profile (login_identity) isn't included in this export."
+)
 
 
-def readme_text(*, files: list[str], login_identity_included: bool) -> str:
+def readme_text(*, files: list[str], login_identity_note: str | None) -> str:
     """README.txt for one archive: lists the files actually included and says
-    plainly what isn't (agent working state, Stripe's records, logs)."""
+    plainly what isn't (agent working state, Stripe's records, logs).
+    `login_identity_note` explains an empty login_identity; None when it's
+    there."""
     if files:
         listing = "Included in this export:\n" + "".join(
             f"  {name}\n" for name in files
@@ -96,8 +107,8 @@ def readme_text(*, files: list[str], login_identity_included: bool) -> str:
     else:
         listing = "No files are stored for your account.\n"
     text = _README_HEAD + listing + _README_EXCLUDED
-    if not login_identity_included:
-        text += _IDENTITY_MISSING
+    if login_identity_note:
+        text += "\n" + textwrap.fill(f"Note: {login_identity_note}", 76) + "\n"
     return text
 
 
@@ -109,7 +120,7 @@ def write_archive(
     bucket: str,
     prefix: str,
     keys: list[str],
-    login_identity_included: bool,
+    login_identity_note: str | None,
 ) -> list[str]:
     """Write the zip into `dest`. Each key under `prefix` lands at
     files/<key minus prefix>; a key that vanished since listing is skipped.
@@ -134,8 +145,6 @@ def write_archive(
             included.append(name)
         zf.writestr(
             README_NAME,
-            readme_text(
-                files=included, login_identity_included=login_identity_included
-            ),
+            readme_text(files=included, login_identity_note=login_identity_note),
         )
     return included

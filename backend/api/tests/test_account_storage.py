@@ -74,6 +74,33 @@ class DeletePrefix(unittest.TestCase):
             storage.delete_prefix(s3, BUCKET, "resumes/u1/")
 
 
+class ErrorsStayAnonymous(unittest.TestCase):
+    """StorageError messages end up in logs that outlive a deleted account,
+    so they must not carry the key or prefix (both contain the Auth0 id)."""
+
+    def test_no_message_names_the_user(self):
+        denied = ClientError({"Error": {"Code": "AccessDenied"}}, "Op")
+        prefix = "resumes/google-oauth2|42/"
+
+        s3 = FakeS3()
+        s3.fail_list = denied
+        with self.assertRaises(storage.StorageError) as ctx:
+            storage.list_keys(s3, BUCKET, prefix)
+        self.assertNotIn("google-oauth2|42", str(ctx.exception))
+
+        s3 = FakeS3({f"{prefix}a.docx": b"x"})
+        s3.fail_delete_keys = {f"{prefix}a.docx"}
+        with self.assertRaises(storage.StorageError) as ctx:
+            storage.delete_prefix(s3, BUCKET, prefix)
+        self.assertNotIn("google-oauth2|42", str(ctx.exception))
+
+        s3 = FakeS3({f"{prefix}a.docx": b"x"})
+        s3.fail_get = denied
+        with self.assertRaises(storage.StorageError) as ctx:
+            storage.open_object(s3, BUCKET, f"{prefix}a.docx")
+        self.assertNotIn("google-oauth2|42", str(ctx.exception))
+
+
 class OpenObject(unittest.TestCase):
     def test_reads_body(self):
         s3 = FakeS3({"resumes/u1/a.docx": b"data"})

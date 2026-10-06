@@ -7,7 +7,7 @@ from openrouter import OpenRouter, errors
 from psycopg import Connection
 from psycopg.rows import class_row
 from shared.accounts import new_tombstone_id
-from shared.checkpoints import CHECKPOINT_TABLES
+from shared.checkpoints import CHECKPOINT_TABLES, THREAD_OWNER_TABLES
 from shared.docgen import FormatProfile
 
 from ..agents.docx_parser import UserDocxProfile
@@ -210,14 +210,6 @@ def record_token_usage(
             (amount_cents, user_id),
         )
     return amount_cents
-
-
-# Tables whose row ids double as LangGraph thread ids.
-THREAD_OWNER_TABLES = (
-    "user_suggestion",
-    "user_tailor_run",
-    "user_system_design_session",
-)
 
 
 def delete_checkpoint_threads(pg_client: Connection, thread_ids: list[str]) -> None:

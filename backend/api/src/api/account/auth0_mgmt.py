@@ -109,7 +109,10 @@ class Auth0Management:
             return None
         if res.status_code != 200:
             raise Auth0ManagementError(f"GET user: {res.status_code} {res.text[:200]}")
-        body = res.json()
+        try:
+            body = res.json()
+        except ValueError as e:
+            raise Auth0ManagementError("GET user: response wasn't JSON") from e
         profile = {k: body[k] for k in PROFILE_FIELDS if k in body}
         if "identities" in body:
             profile["identities"] = [
