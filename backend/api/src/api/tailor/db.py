@@ -120,10 +120,13 @@ async def clear_completed_tailor_runs(conn: PgConnection, user_id: str) -> None:
 
 async def delete_tailor_run(conn: PgConnection, run_id: str, user_id: str) -> None:
     async with conn.cursor() as cursor:
-        await cursor.execute(
-            "DELETE FROM user_tailor_run WHERE id = %s AND user_id = %s",
+        res = await cursor.execute(
+            "DELETE FROM user_tailor_run WHERE id = %s AND user_id = %s RETURNING id",
             (run_id, user_id),
         )
+        # Someone else's run (or none): its thread isn't the caller's to drop.
+        if not await res.fetchall():
+            return
         # The dispatcher's langgraph checkpointer keys conversation state on
         # thread_id = run_id — drop it with the run.
         for table in CHECKPOINT_TABLES:

@@ -235,8 +235,16 @@ class AnswerTailor(unittest.IsolatedAsyncioTestCase):
 
 
 class DismissTailor(unittest.IsolatedAsyncioTestCase):
+    async def test_someone_elses_run_leaves_its_thread_alone(self):
+        pg = _Pg([[]])  # DELETE ... RETURNING found no row of theirs
+        out = await service.dismiss_tailor("u1", "r-other", pg)
+        self.assertEqual(out, {"ok": True})
+        deletes = [q for q, _ in pg.queries if "DELETE FROM" in q]
+        self.assertEqual(len(deletes), 1)
+        self.assertIn("user_tailor_run", deletes[0])
+
     async def test_deletes_run_and_checkpoints(self):
-        pg = _Pg()
+        pg = _Pg([[("r1",)]])
         out = await service.dismiss_tailor("u1", "r1", pg)
         self.assertEqual(out, {"ok": True})
         deletes = [(q, p) for q, p in pg.queries if "DELETE FROM" in q]

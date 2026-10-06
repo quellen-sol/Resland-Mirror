@@ -387,7 +387,9 @@ class AcceptSuggestion(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.exception.status_code, 500)
 
     async def test_applies_chosen_options_and_cleans_up(self):
-        pg = self._pg()
+        row = _row(status="WAITING_FOR_INPUT", result=_OPTIONS, experience_id=5)
+        # session fetch, two bullet UPDATEs, then the DELETE ... RETURNING id
+        pg = _Pg([_Result(fetchone=row), _Result(), _Result(), [("s1",)]])
         out = await service.accept_suggestion(
             "u1", "s1", pg, _accept_req((1, 2), (2, 0))
         )
@@ -476,8 +478,18 @@ class AcceptRoute(unittest.TestCase):
 
 
 class DismissSuggestion(unittest.IsolatedAsyncioTestCase):
+    async def test_someone_elses_session_leaves_its_thread_alone(self):
+        # The row delete is scoped to the caller; the checkpoint delete must
+        # be too, or any signed-in user could wipe another's thread by id.
+        pg = _Pg([[]])  # DELETE ... RETURNING found no row of theirs
+        out = await service.dismiss_suggestion("u1", "s-other", pg)
+        self.assertEqual(out, {"ok": True})
+        deletes = [q for q, _ in pg.queries if "DELETE FROM" in q]
+        self.assertEqual(len(deletes), 1)
+        self.assertIn("user_suggestion", deletes[0])
+
     async def test_deletes_session_and_checkpoints(self):
-        pg = _Pg()
+        pg = _Pg([[("s1",)]])
         out = await service.dismiss_suggestion("u1", "s1", pg)
         self.assertEqual(out, {"ok": True})
         deletes = [(q, p) for q, p in pg.queries if "DELETE FROM" in q]

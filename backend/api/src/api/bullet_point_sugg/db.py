@@ -107,10 +107,13 @@ async def delete_sugg_session(
     conn: PgConnection, session_id: str, user_id: str
 ) -> None:
     async with conn.cursor() as cursor:
-        await cursor.execute(
-            "DELETE FROM user_suggestion WHERE id = %s AND user_id = %s",
+        res = await cursor.execute(
+            "DELETE FROM user_suggestion WHERE id = %s AND user_id = %s RETURNING id",
             (session_id, user_id),
         )
+        # Someone else's session (or none): its thread isn't the caller's.
+        if not await res.fetchall():
+            return
         # The dispatcher's langgraph checkpointer keys conversation state on
         # thread_id = session_id — drop it with the session.
         for table in CHECKPOINT_TABLES:
