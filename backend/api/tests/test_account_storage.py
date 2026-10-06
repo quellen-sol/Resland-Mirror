@@ -33,7 +33,9 @@ class UserPrefix(unittest.TestCase):
     def test_ids_with_a_slash_get_the_prefix_uploads_use(self):
         # Uploads build resumes/<raw id>/…; export and deletion must look in
         # the same place rather than erroring.
-        self.assertEqual(storage.user_prefix("samlp|corp/jane"), "resumes/samlp|corp/jane/")
+        self.assertEqual(
+            storage.user_prefix("samlp|corp/jane"), "resumes/samlp|corp/jane/"
+        )
 
     def test_rejects_an_empty_id(self):
         with self.assertRaises(ValueError):

@@ -49,13 +49,20 @@ def user_prefix(user_id: str) -> str:
 def is_user_file(prefix: str, key: str) -> bool:
     """Whether `key` is one of the files the app writes for the user whose
     prefix this is (and not another account's file sharing the prefix)."""
-    raise NotImplementedError
+    return (
+        key.startswith(prefix) and USER_FILE.fullmatch(key[len(prefix) :]) is not None
+    )
 
 
 def list_user_files(s3: Any, bucket: str, prefix: str) -> list[str]:
     """The user's files under `prefix` (see USER_FILE). Anything else found
     there is left alone, and logged by count so it isn't silent."""
-    raise NotImplementedError
+    keys = list_keys(s3, bucket, prefix)
+    mine = [k for k in keys if is_user_file(prefix, k)]
+    if len(mine) != len(keys):
+        # No key or prefix in the message: both carry an Auth0 id.
+        print(f"{len(keys) - len(mine)} object(s) under a user prefix aren't theirs")
+    return mine
 
 
 def list_keys(s3: Any, bucket: str, prefix: str) -> list[str]:
