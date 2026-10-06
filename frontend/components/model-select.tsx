@@ -28,6 +28,7 @@ export default function ModelSelect({
   jobKind?: "SUGGESTION" | "TAILOR" | "SYSTEM_DESIGN";
 }) {
   const [models, setModels] = useState<PricedModel[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const defaultModel = models.find((m) => m.is_default);
   const effective = models.find((m) => m.id === value) ?? defaultModel;
   const estimateFor = (m: PricedModel | undefined) =>
@@ -38,7 +39,9 @@ export default function ModelSelect({
     let cancelled = false;
     apiFetch(accessToken, "/models")
       .then((data: { models: PricedModel[] }) => {
-        if (!cancelled) setModels(data.models);
+        if (cancelled) return;
+        setModels(data.models);
+        setLoaded(true);
       })
       .catch(() => {
         // Picker degrades to just the system default.
@@ -47,6 +50,13 @@ export default function ModelSelect({
       cancelled = true;
     };
   }, [accessToken]);
+
+  // An id that's no longer offered (say, a retried run's model that has since
+  // been disabled) would show as Default yet still be sent, and the API would
+  // reject it — fall back to the real default instead.
+  useEffect(() => {
+    if (loaded && value && !models.some((m) => m.id === value)) onChange("");
+  }, [loaded, models, value, onChange]);
 
   return (
     <span className="inline-flex flex-col gap-0.5">
