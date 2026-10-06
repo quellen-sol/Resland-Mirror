@@ -191,7 +191,61 @@ async def apply_paid_checkout(pg_conn: PgConnection, session: dict) -> int | Non
     purchase row, move it PENDING -> COMPLETED and add the cents to the
     buyer's balance. Returns the cents credited, or None when there was
     nothing to do (not one of ours, not paid yet, already credited)."""
-    raise NotImplementedError
+    if session.get("payment_status") == "unpaid":
+        # Async payment still in flight — the purchase stays PENDING until
+        # checkout.session.async_payment_succeeded lands.
+        return None
+    purchaser_id = session.get("client_reference_id")
+    cents = (session.get("metadata") or {}).get("cents")
+    if not purchaser_id or not cents:
+        # Not one of our token-pack sessions.
+        return None
+    payment_intent = session.get("payment_intent")
+    async with pg_conn.transaction(), pg_conn.cursor() as cursor:
+        # Stripe may deliver the event before the checkout endpoint's
+        # INSERT commits — upsert from the session payload first.
+        await cursor.execute(
+            """
+            INSERT INTO balance_purchase
+              (id, user_id, cents, amount_cents, currency, status,
+               payment_intent_id)
+            VALUES (%s, %s, %s, %s, %s, 'PENDING', %s)
+            ON CONFLICT (id) DO UPDATE SET
+              payment_intent_id = COALESCE(
+                balance_purchase.payment_intent_id,
+                EXCLUDED.payment_intent_id
+              )
+            """,
+            (
+                session["id"],
+                purchaser_id,
+                int(cents),
+                session["amount_total"],
+                session["currency"],
+                payment_intent,
+            ),
+        )
+        # Only a PENDING row transitions — a redelivered event is a no-op.
+        res = await cursor.execute(
+            """
+            UPDATE balance_purchase SET status = 'COMPLETED'
+            WHERE id = %s AND status = 'PENDING'
+            RETURNING user_id, cents
+            """,
+            (session["id"],),
+        )
+        purchase = await res.fetchone()
+        if not purchase:
+            return None
+        await cursor.execute(
+            """
+            UPDATE "user"
+            SET balance_cents = balance_cents + %s
+            WHERE auth0_id = %s
+            """,
+            (purchase[1], purchase[0]),
+        )
+    return purchase[1]
 
 
 async def handle_webhook(
@@ -218,60 +272,7 @@ async def handle_webhook(
         "checkout.session.completed",
         "checkout.session.async_payment_succeeded",
     ):
-        session = obj
-        if session.get("payment_status") == "unpaid":
-            # Async payment still in flight — the purchase stays PENDING until
-            # checkout.session.async_payment_succeeded lands.
-            return {"ok": True}
-        purchaser_id = session.get("client_reference_id")
-        cents = (session.get("metadata") or {}).get("cents")
-        if not purchaser_id or not cents:
-            # Not one of our token-pack sessions — acknowledge and move on.
-            return {"ok": True}
-        payment_intent = session.get("payment_intent")
-        async with pg_conn.transaction(), pg_conn.cursor() as cursor:
-            # Stripe may deliver the event before the checkout endpoint's
-            # INSERT commits — upsert from the session payload first.
-            await cursor.execute(
-                """
-                INSERT INTO balance_purchase
-                  (id, user_id, cents, amount_cents, currency, status,
-                   payment_intent_id)
-                VALUES (%s, %s, %s, %s, %s, 'PENDING', %s)
-                ON CONFLICT (id) DO UPDATE SET
-                  payment_intent_id = COALESCE(
-                    balance_purchase.payment_intent_id,
-                    EXCLUDED.payment_intent_id
-                  )
-                """,
-                (
-                    session["id"],
-                    purchaser_id,
-                    int(cents),
-                    session["amount_total"],
-                    session["currency"],
-                    payment_intent,
-                ),
-            )
-            # Only a PENDING row transitions — a redelivered event is a no-op.
-            res = await cursor.execute(
-                """
-                UPDATE balance_purchase SET status = 'COMPLETED'
-                WHERE id = %s AND status = 'PENDING'
-                RETURNING user_id, cents
-                """,
-                (session["id"],),
-            )
-            purchase = await res.fetchone()
-            if purchase:
-                await cursor.execute(
-                    """
-                    UPDATE "user"
-                    SET balance_cents = balance_cents + %s
-                    WHERE auth0_id = %s
-                    """,
-                    (purchase[1], purchase[0]),
-                )
+        await apply_paid_checkout(pg_conn, obj)
     elif event_type == "checkout.session.expired":
         async with pg_conn.transaction(), pg_conn.cursor() as cursor:
             await cursor.execute(
