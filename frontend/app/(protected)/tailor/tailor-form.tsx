@@ -48,6 +48,7 @@ interface TailorRun {
   job_description?: string;
   company_name?: string | null;
   role?: string | null;
+  model?: string | null;
   pending_question?: string | null;
   result?: string | null;
 }
@@ -145,7 +146,8 @@ export default function TailorForm({
         startedAtRef.current = Date.now();
         consecutiveFailuresRef.current = 0;
         setRun(status);
-        notifyResumed();
+        // A failed run has nothing to pick up — its card offers a retry.
+        if (status.status !== "FAILED") notifyResumed();
       } catch {
         // 404 = nothing outstanding; anything else also falls through to
         // the entry form (a failed start will toast its own error).
@@ -277,7 +279,7 @@ export default function TailorForm({
     }
   }
 
-  async function reset() {
+  async function dropRun() {
     finishedRef.current = true;
     try {
       if (run) {
@@ -287,11 +289,26 @@ export default function TailorForm({
       // Dismiss is best-effort — reset regardless.
     }
     setRun(null);
+    setAnswer("");
+    setSavedId(null);
+  }
+
+  async function reset() {
     setJd("");
     setCompany("");
     setRole("");
-    setAnswer("");
-    setSavedId(null);
+    await dropRun();
+  }
+
+  // Back to the entry form with the run's inputs still filled in, so an
+  // error doesn't cost the user their pasted posting. A run reattached after
+  // a reload carries them; otherwise the form state still holds them.
+  async function retry() {
+    if (run?.job_description) setJd(run.job_description);
+    if (run?.company_name) setCompany(run.company_name);
+    if (run?.role) setRole(run.role);
+    if (run?.model) setModel(run.model);
+    await dropRun();
   }
 
   async function save() {
@@ -681,15 +698,16 @@ export default function TailorForm({
         <Card className="ring-red-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-red-400">
-              Something went wrong while tailoring. Please try again.
+              Something went wrong while tailoring. Try again — your job
+              details will still be filled in.
             </p>
             <div>
               <Button
                 variant="outline"
-                onClick={reset}
+                onClick={retry}
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start Over
+                Try Again
               </Button>
             </div>
           </CardContent>
@@ -700,15 +718,16 @@ export default function TailorForm({
         <Card className="ring-amber-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-amber-400">
-              This took too long, so we stopped waiting. Start over to try again.
+              This took too long, so we stopped waiting. Try again — your job
+              details will still be filled in.
             </p>
             <div>
               <Button
                 variant="outline"
-                onClick={reset}
+                onClick={retry}
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start Over
+                Try Again
               </Button>
             </div>
           </CardContent>
@@ -719,14 +738,15 @@ export default function TailorForm({
         <Card className="ring-amber-500/30">
           <CardContent className="flex flex-col gap-3 pt-6">
             <p className="text-sm text-amber-400">
-              This session has expired. Start a new one.
+              This session has expired. Try again — your job details will
+              still be filled in.
             </p>
             <Button
               variant="outline"
-              onClick={reset}
+              onClick={retry}
               className="self-start border-zinc-700 text-zinc-300 hover:bg-zinc-800"
             >
-              Start Over
+              Try Again
             </Button>
           </CardContent>
         </Card>
@@ -751,10 +771,10 @@ export default function TailorForm({
             <div>
               <Button
                 variant="outline"
-                onClick={reset}
+                onClick={retry}
                 className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
               >
-                Start Over
+                Try Again
               </Button>
             </div>
           </CardContent>

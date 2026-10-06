@@ -6,6 +6,7 @@ from typing import Annotated, Literal, TypedDict
 
 from langchain.chat_models import init_chat_model
 from langchain.messages import (
+    AIMessage,
     AnyMessage,
     HumanMessage,
     SystemMessage,
@@ -19,6 +20,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from psycopg.rows import dict_row
 from pydantic import BaseModel
+from shared.checkpoints import CHECKPOINT_CONN_OPTIONS
 from shared.pg import get_pg_client
 
 from ..env_vars import PG_URL
@@ -28,6 +30,9 @@ TAILOR_SYSTEM_PROMPT = f"""You tailor a user's resume to one job posting. Tailor
 A recruiter skimming the result should see within seconds that this person
 has done the work the posting describes. Your job is to find that work in the
 user's history, draw out the details that prove it, and put it first.
+The user has already chosen to apply, so never judge whether they fit the
+role or suggest they skip it; make the strongest honest case from what they
+have.
 
 Workflow:
 1. Call get_job_description. It also returns the target company_name and role
@@ -46,8 +51,8 @@ Workflow:
    result), and the needs nothing in the profile touches.
 5. Interview the user with ask_clarifying_question. The profile is a summary
    and the user remembers far more, so your questions decide how good the
-   resume can get. Send one message with 3-5 short questions, numbered, one
-   per line, most valuable first:
+   resume can get. Call ask_clarifying_question once with 3-5 short
+   questions, numbered, one per line, most valuable first:
    - Where a bullet probably relates, ask for the detail that would make the
      match obvious: scale, results, who relied on it, what made it hard, what
      the user personally owned.
@@ -67,6 +72,9 @@ Workflow:
 6. Write the tailored resume, call verify_tailored_resume, fix anything it
    reports, then call submit_tailored_resume exactly once.
 
+Until you submit, end every turn with a tool call: the user sees only what
+you send through ask_clarifying_question and submit_tailored_resume.
+
 Tailoring the content:
 - Lead each experience with the bullets that answer the posting's top needs,
   and rewrite them so that need is the first thing the reader sees. Change
@@ -83,8 +91,10 @@ Tailoring the content:
   tracking systems and recruiters both find the match. Never stretch a term
   onto work it doesn't describe, never keyword-stuff, and never claim skills
   the user lacks.
-- You may drop bullets that don't serve this posting and omit experiences
-  that add nothing, but keep the strongest two to four experiences.
+- Keep every experience in the profile. Dropping a job leaves a gap in the
+  user's work history, and a less relevant role still shows tenure and
+  growth. Within each experience you may drop bullets that don't serve this
+  posting, but keep at least one.
 - summary: include it only when the user asked for one. Keep it to 2-3 lines
   aimed at this posting, built from the same facts as the bullets.
 - skills: reorder the user's real skills by relevance to the posting. Never
@@ -107,6 +117,25 @@ feedback. Treat it as guidance, revise (re-verify ids if they change), and
 submit the improved resume. If they indicate they're satisfied, reply briefly
 and end without another submit call.
 """
+
+# Text outside a tool call never reaches the user, so a reply without one
+# before the resume is submitted is a stalled turn, not an ending. So is a
+# tool call whose arguments didn't parse, at any point. The graph sends the
+# model back to its tools this many times in a row, then gives up — every
+# retry is a billed LLM call.
+MAX_NUDGES = 2
+
+# Most graph steps one invocation (one user action) may take. LangGraph's own
+# default is 10007, so any loop of valid tool calls (a model resubmitting a
+# rejected resume, say) would otherwise bill thousands of LLM calls.
+RECURSION_LIMIT = 40
+
+NUDGE_MESSAGE = (
+    "You ended your turn without calling a tool, and the user never sees text "
+    "outside a tool call. To ask the user something, call "
+    "ask_clarifying_question. When the resume is ready, call "
+    "verify_tailored_resume and then submit_tailored_resume."
+)
 
 
 class FetchTailorRunRow(BaseModel):
@@ -194,6 +223,86 @@ class State(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]
 
 
+def _has_submitted(messages: list[AnyMessage]) -> bool:
+    return any(
+        tool_call["name"] == "submit_tailored_resume"
+        for msg in messages
+        if isinstance(msg, AIMessage)
+        for tool_call in msg.tool_calls
+    )
+
+
+def _stalls_in_a_row(messages: list[AnyMessage]) -> int:
+    """Model turns since its last parsed tool call — progress resets it."""
+    count = 0
+    for msg in reversed(messages):
+        if isinstance(msg, AIMessage):
+            if msg.tool_calls:
+                break
+            count += 1
+    return count
+
+
+def check_tailored_resume(resume: TailoredResume, profile: TailorProfile) -> str | None:
+    """The first problem with a tailored resume, or None when it's valid."""
+    bullet_to_exp: dict[int, int] = {}
+    # Profile order, one entry per experience: "49 (Senior Engineer at Acme)".
+    labels: dict[int, str] = {}
+    for row in profile.experiences:
+        if row.bullet_id is not None:
+            bullet_to_exp[row.bullet_id] = row.experience_id
+        labels.setdefault(
+            row.experience_id,
+            f"{row.experience_id} ({row.title} at {row.company_name})",
+        )
+
+    seen_exps: set[int] = set()
+    for exp in resume.experiences:
+        if exp.experience_id not in labels:
+            return f"Invalid experience id ({exp.experience_id}) in: {exp}"
+        if exp.experience_id in seen_exps:
+            return f"Duplicate experience id ({exp.experience_id})"
+        seen_exps.add(exp.experience_id)
+        seen: set[int] = set()
+        for bullet in exp.bullets:
+            if bullet.bullet_id in seen:
+                return f"Duplicate bullet id ({bullet.bullet_id}) in: {exp}"
+            seen.add(bullet.bullet_id)
+            if bullet_to_exp.get(bullet.bullet_id) != exp.experience_id:
+                return (
+                    f"Bullet id ({bullet.bullet_id}) does not belong to "
+                    f"experience id ({exp.experience_id})"
+                )
+
+    # Roles are never dropped: a missing job reads as a gap in the user's
+    # work history. Bullets within a role may go, but not all of them.
+    missing = [label for exp_id, label in labels.items() if exp_id not in seen_exps]
+    if missing:
+        return (
+            "Every experience must stay on the resume, or the user's work "
+            f"history shows a gap. Missing: {', '.join(missing)}. Add each "
+            "back, leading with its bullets that best fit this posting."
+        )
+    has_bullets = set(bullet_to_exp.values())
+    bare = [
+        labels[exp.experience_id]
+        for exp in resume.experiences
+        if not exp.bullets and exp.experience_id in has_bullets
+    ]
+    if bare:
+        return (
+            "; ".join(f"Experience {label} has no bullets" for label in bare)
+            + ". Keep at least one bullet for every experience."
+        )
+
+    known_skills = {s.name for s in profile.skills}
+    unknown = [s for s in resume.skills if s not in known_skills]
+    if unknown:
+        return f"Skills not present in the base profile: {unknown}"
+
+    return None
+
+
 @dataclass
 class TailorRunOutcome:
     status: Literal["completed", "waiting"]
@@ -233,35 +342,10 @@ def build_and_invoke_agent(
 
     @tool
     def verify_tailored_resume(resume: TailoredResume):
-        """Verify that experience_id and bullet_id values are intact and unchanged"""
-        bullet_to_exp: dict[int, int] = {}
-        for row in profile.experiences:
-            if row.bullet_id is not None:
-                bullet_to_exp[row.bullet_id] = row.experience_id
-        valid_exp_ids = {row.experience_id for row in profile.experiences}
-
-        if not resume.experiences:
-            return "Invalid resume: at least one experience is required"
-
-        for exp in resume.experiences:
-            if exp.experience_id not in valid_exp_ids:
-                return f"Invalid experience id ({exp.experience_id}) in: {exp}"
-            seen: set[int] = set()
-            for bullet in exp.bullets:
-                if bullet.bullet_id in seen:
-                    return f"Duplicate bullet id ({bullet.bullet_id}) in: {exp}"
-                seen.add(bullet.bullet_id)
-                if bullet_to_exp.get(bullet.bullet_id) != exp.experience_id:
-                    return (
-                        f"Bullet id ({bullet.bullet_id}) does not belong to "
-                        f"experience id ({exp.experience_id})"
-                    )
-
-        known_skills = {s.name for s in profile.skills}
-        unknown = [s for s in resume.skills if s not in known_skills]
-        if unknown:
-            return f"Skills not present in the base profile: {unknown}"
-
+        """Check the tailored resume: ids intact, every experience present
+        with at least one bullet, and skills taken from the profile"""
+        if problem := check_tailored_resume(resume, profile):
+            return problem
         return "All ids are valid. You may submit the tailored resume when ready."
 
     @tool
@@ -273,7 +357,11 @@ def build_and_invoke_agent(
 
     @tool
     def submit_tailored_resume(resume: TailoredResume):
-        """Submit the final tailored resume with this. Call exactly once."""
+        """Submit the final tailored resume with this. A resume that fails
+        verify_tailored_resume's checks is sent back instead of stored."""
+        # A bad submit is bounced back to the model rather than stored.
+        if problem := check_tailored_resume(resume, profile):
+            return f"Not submitted: {problem} Fix it and submit again."
         result_queue.put(resume)
         return "Tailored resume submitted successfully"
 
@@ -310,21 +398,47 @@ def build_and_invoke_agent(
 
     def tool_node(state: State):
         """Performs the tool call"""
+        last_message = state["messages"][-1]
         result = []
-        for tool_call in state["messages"][-1].tool_calls:
+        for tool_call in last_message.tool_calls:
             tool = tools_by_name[tool_call["name"]]
             observation = tool.invoke(tool_call["args"])
             result.append(
                 ToolMessage(content=observation, tool_call_id=tool_call["id"])
             )
+        # Arguments that didn't parse still go back to the provider as tool
+        # calls, and every call needs an answer — the error is the retry hint.
+        for bad_call in last_message.invalid_tool_calls:
+            result.append(
+                ToolMessage(
+                    content=(
+                        f"Could not parse the arguments for {bad_call['name']}: "
+                        f"{bad_call['error']}. Call it again with valid JSON."
+                    ),
+                    tool_call_id=bad_call["id"],
+                    status="error",
+                )
+            )
         return {"messages": result}
 
-    def should_continue(state: State) -> Literal["tool_node", END]:
-        """Decide if we should continue the loop or stop based upon whether the LLM made a tool call"""
-        last_message = state["messages"][-1]
+    def should_continue(state: State) -> Literal["tool_node", "nudge", END]:
+        """Run the model's tool calls; before a submit, a reply with none is a
+        stall rather than an ending (after one, it's the user signing off)"""
+        messages = state["messages"]
+        last_message = messages[-1]
         if last_message.tool_calls:
             return "tool_node"
+        if _stalls_in_a_row(messages) > MAX_NUDGES:
+            return END
+        if last_message.invalid_tool_calls:
+            return "tool_node"
+        if not _has_submitted(messages):
+            return "nudge"
         return END
+
+    def nudge(state: State):
+        """Send a stalled model back to its tools"""
+        return {"messages": [HumanMessage(content=NUDGE_MESSAGE)]}
 
     def after_tools(state: State) -> Literal["llm_call", "feedback"]:
         """A submitted resume goes to user review; otherwise keep looping"""
@@ -348,17 +462,26 @@ def build_and_invoke_agent(
     agent_builder.add_node("llm_call", llm_call)
     agent_builder.add_node("tool_node", tool_node)
     agent_builder.add_node("feedback", feedback)
+    agent_builder.add_node("nudge", nudge)
 
     agent_builder.add_edge(START, "llm_call")
     agent_builder.add_edge("feedback", "llm_call")
-    agent_builder.add_conditional_edges("llm_call", should_continue, ["tool_node", END])
+    agent_builder.add_edge("nudge", "llm_call")
+    agent_builder.add_conditional_edges(
+        "llm_call", should_continue, ["tool_node", "nudge", END]
+    )
     agent_builder.add_conditional_edges("tool_node", after_tools, ["llm_call", "feedback"])
 
-    with get_pg_client(PG_URL, row_factory=dict_row) as conn:
+    with get_pg_client(
+        PG_URL, row_factory=dict_row, options=CHECKPOINT_CONN_OPTIONS
+    ) as conn:
         checkpointer = PostgresSaver(conn)
         agent = agent_builder.compile(checkpointer=checkpointer)
 
-        config: RunnableConfig = {"configurable": {"thread_id": run_id}}
+        config: RunnableConfig = {
+            "configurable": {"thread_id": run_id},
+            "recursion_limit": RECURSION_LIMIT,
+        }
         if answer is not None:
             try:
                 agent.invoke(input=Command(resume=answer), config=config)
@@ -367,6 +490,10 @@ def build_and_invoke_agent(
                 # Command(resume) has nothing to feed. None resumes the
                 # pending nodes from the checkpoint instead.
                 agent.invoke(input=None, config=config)
+        elif agent.get_state(config).next:
+            # A redelivered first turn: the checkpoint still has pending nodes,
+            # so resume them — a fresh kickoff would restart the conversation.
+            agent.invoke(input=None, config=config)
         else:
             invoke_param = {
                 "messages": [

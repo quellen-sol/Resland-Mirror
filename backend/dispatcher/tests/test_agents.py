@@ -16,6 +16,8 @@ from unittest.mock import MagicMock, patch
 import docx
 from langchain.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.errors import GraphRecursionError
+from shared.checkpoints import CHECKPOINT_CONN_OPTIONS
 
 from dispatcher.agents import docx_parser, suggestions, tailor, writing
 
@@ -40,10 +42,19 @@ class FakeChatModel:
         return nxt() if callable(nxt) else nxt
 
 
-def ai(content="", tool_calls=None, in_tok=10, out_tok=5, cost=0.001, gen="gen-1"):
+def ai(
+    content="",
+    tool_calls=None,
+    in_tok=10,
+    out_tok=5,
+    cost=0.001,
+    gen="gen-1",
+    invalid_tool_calls=None,
+):
     return AIMessage(
         content=content,
         tool_calls=tool_calls or [],
+        invalid_tool_calls=invalid_tool_calls or [],
         usage_metadata={
             "input_tokens": in_tok,
             "output_tokens": out_tok,
@@ -133,6 +144,21 @@ def tailor_profile(**over):
     return tailor.TailorProfile(**base)
 
 
+def tailor_resume(**over):
+    """A resume that passes every check against tailor_profile(): both
+    experiences, each with its bullet."""
+    base = {
+        "summary": None,
+        "experiences": [
+            {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "Built x"}]},
+            {"experience_id": 2, "bullets": [{"bullet_id": 20, "text": "Shipped y"}]},
+        ],
+        "skills": ["Python"],
+    }
+    base.update(over)
+    return base
+
+
 def tailor_run(**over):
     base = dict(
         id="run-1",
@@ -175,8 +201,8 @@ def _opts(bullet_id=7, options=("a", "b", "c")):
 class SuggestionAgent(unittest.TestCase):
     def setUp(self):
         self.saver = InMemorySaver()
-        self.pg_patch, self.saver_patch = _patch_infra(suggestions, self.saver)
-        self.pg_patch.start()
+        self.saver_patch, self.pg_patch = _patch_infra(suggestions, self.saver)
+        self.pg = self.pg_patch.start()
         self.saver_patch.start()
         self.addCleanup(self.pg_patch.stop)
         self.addCleanup(self.saver_patch.stop)
@@ -309,6 +335,12 @@ class SuggestionAgent(unittest.TestCase):
         self.assertEqual(len(humans), 1)
         self.assertIn("get_user_bullet_points", humans[0].content)
 
+    def test_checkpointer_connects_to_its_schema(self):
+        self._run([ai("done")])
+        self.assertEqual(
+            self.pg.call_args.kwargs["options"], CHECKPOINT_CONN_OPTIONS
+        )
+
     def test_answer_on_finished_run_hits_empty_input_fallback(self):
         # Command(resume) on a checkpoint with no pending interrupt raises
         # EmptyInputError — the code falls back to invoke(None).
@@ -412,8 +444,8 @@ class SuggestionAgent(unittest.TestCase):
 class TailorAgent(unittest.TestCase):
     def setUp(self):
         self.saver = InMemorySaver()
-        self.pg_patch, self.saver_patch = _patch_infra(tailor, self.saver)
-        self.pg_patch.start()
+        self.saver_patch, self.pg_patch = _patch_infra(tailor, self.saver)
+        self.pg = self.pg_patch.start()
         self.saver_patch.start()
         self.addCleanup(self.pg_patch.stop)
         self.addCleanup(self.saver_patch.stop)
@@ -433,14 +465,12 @@ class TailorAgent(unittest.TestCase):
     def _verify_call(self, resume):
         return tc("verify_tailored_resume", {"resume": resume})
 
+    def _ask(self, question="Want a summary?", **kw):
+        """A clarifying question — pauses the run so a test can stop there."""
+        return tc("ask_clarifying_question", {"question": question}, **kw)
+
     def test_submit_waits_for_feedback_then_done_completes(self):
-        resume = {
-            "summary": None,
-            "experiences": [
-                {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "Built x"}]}
-            ],
-            "skills": ["Python"],
-        }
+        resume = tailor_resume()
         outcome, _ = self._run(
             [
                 tc("get_job_description", {}),
@@ -457,13 +487,12 @@ class TailorAgent(unittest.TestCase):
 
         # Revision feedback resumes the checkpointed graph — the agent sees
         # the reply as a user message and resubmits, pausing again.
-        revised = {
-            "summary": None,
-            "experiences": [
-                {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "Shipped x"}]}
-            ],
-            "skills": ["Python"],
-        }
+        revised = tailor_resume(
+            experiences=[
+                {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "Shipped x"}]},
+                {"experience_id": 2, "bullets": [{"bullet_id": 20, "text": "Shipped y"}]},
+            ]
+        )
         outcome, model = self._run(
             [
                 self._verify_call(revised),
@@ -483,17 +512,131 @@ class TailorAgent(unittest.TestCase):
         self.assertEqual(model.calls[0][-1].content, "done")
 
     def test_system_prompt_carries_shared_writing_rules(self):
-        _, model = self._run([ai("done")])
+        _, model = self._run([self._ask()])
         system = model.calls[0][0]
         self.assertEqual(system.type, "system")
         self.assertIn(writing.BULLET_WRITING_RULES, system.content)
+
+    def test_checkpointer_connects_to_its_schema(self):
+        self._run([self._ask()])
+        self.assertEqual(
+            self.pg.call_args.kwargs["options"], CHECKPOINT_CONN_OPTIONS
+        )
+
+    def test_text_reply_before_submit_is_nudged_back_to_tools(self):
+        # The shape of a real failed run: both get_* tools in one turn, then
+        # the interview questions written as plain text (finish_reason
+        # "stop"). They never reach the user, so the graph sends the model
+        # back to its tools instead of ending the run.
+        fetch_both = ai(
+            "I'll start by fetching the job description and your profile.",
+            tool_calls=[
+                {"name": name, "args": {}, "id": f"tc-{name}", "type": "tool_call"}
+                for name in ("get_job_description", "get_user_profile")
+            ],
+        )
+        outcome, model = self._run(
+            [
+                fetch_both,
+                ai("1. How many users?\n2. Want a summary?"),
+                self._ask("1. How many users?\n2. Want a summary?"),
+            ]
+        )
+        self.assertEqual(outcome.status, "waiting")
+        self.assertEqual(outcome.question, "1. How many users?\n2. Want a summary?")
+        nudge = model.calls[2][-1]
+        self.assertEqual(nudge.type, "human")
+        self.assertEqual(nudge.content, tailor.NUDGE_MESSAGE)
+
+    def test_stalled_model_gives_up_after_max_nudges(self):
+        outcome, model = self._run(
+            [ai("Let me think.") for _ in range(tailor.MAX_NUDGES + 1)]
+        )
+        # The runner turns a completed outcome with no result into a failure.
+        self.assertEqual(outcome.status, "completed")
+        self.assertIsNone(outcome.result)
+        self.assertEqual(len(model.calls), tailor.MAX_NUDGES + 1)
+
+    def test_nudge_cap_resets_after_a_tool_call(self):
+        stall = [ai("Let me think.") for _ in range(tailor.MAX_NUDGES)]
+        outcome, _ = self._run(
+            [*stall, tc("get_job_description", {}), *stall, self._ask()]
+        )
+        self.assertEqual(outcome.status, "waiting")
+
+    def _broken_call(self, name="ask_clarifying_question", tc_id="bad-1"):
+        return ai(
+            invalid_tool_calls=[
+                {
+                    "type": "invalid_tool_call",
+                    "name": name,
+                    "args": '{"question": "1. How many',
+                    "id": tc_id,
+                    "error": "Unterminated string",
+                }
+            ]
+        )
+
+    def test_malformed_tool_call_gets_its_parse_error_back(self):
+        outcome, model = self._run([self._broken_call(), self._ask()])
+        self.assertEqual(outcome.status, "waiting")
+        # Every tool call id needs an answer, or the provider rejects the
+        # next request — the parse error doubles as the retry hint.
+        reply = model.calls[1][-1]
+        self.assertEqual(reply.type, "tool")
+        self.assertEqual(reply.tool_call_id, "bad-1")
+        self.assertEqual(reply.status, "error")
+        self.assertIn("Unterminated string", reply.content)
+
+    def test_repeated_malformed_calls_give_up_after_max_nudges(self):
+        # A model that keeps truncating its submit JSON would otherwise loop
+        # (and bill) until LangGraph's recursion limit.
+        outcome, model = self._run(
+            [
+                self._broken_call("submit_tailored_resume", tc_id=f"bad-{i}")
+                for i in range(tailor.MAX_NUDGES + 1)
+            ]
+        )
+        self.assertEqual(outcome.status, "completed")
+        self.assertIsNone(outcome.result)
+        self.assertEqual(len(model.calls), tailor.MAX_NUDGES + 1)
+
+    def test_malformed_calls_and_text_replies_share_one_cap(self):
+        outcome, model = self._run(
+            [self._broken_call(), ai("Let me think."), ai("Still thinking.")]
+        )
+        self.assertEqual(outcome.status, "completed")
+        self.assertEqual(len(model.calls), tailor.MAX_NUDGES + 1)
+
+    def test_retry_resumes_checkpoint_without_new_kickoff(self):
+        # A redelivered first turn — the crashed run left llm_call pending.
+        def boom():
+            raise RuntimeError("provider down")
+
+        with self.assertRaises(RuntimeError):
+            self._run([tc("get_job_description", {}), boom])
+
+        outcome, model = self._run([self._ask()])
+        self.assertEqual(outcome.status, "waiting")
+        humans = [m for m in model.calls[0] if getattr(m, "type", None) == "human"]
+        self.assertEqual(len(humans), 1)
+        self.assertIn("get_job_description", humans[0].content)
+
+    def test_redelivered_turn_at_a_question_asks_it_again(self):
+        # The turn finished but its ack never landed — the redelivery re-raises
+        # the pending question instead of dropping it for a second kickoff.
+        self._run([self._ask("1. How many users?")])
+        outcome, model = self._run([])
+        self.assertEqual(outcome.status, "waiting")
+        self.assertEqual(outcome.question, "1. How many users?")
+        self.assertEqual(model.calls, [])
 
     def test_tools_hand_back_job_description_and_profile(self):
         _, model = self._run(
             [
                 tc("get_job_description", {}),
                 tc("get_user_profile", {}),
-                ai("done"),
+                self._ask(),
             ]
         )
         self.assertIn("Python engineer", model.calls[1][-1].content)
@@ -503,13 +646,7 @@ class TailorAgent(unittest.TestCase):
         self._run([tc("ask_clarifying_question", {"question": "Want a summary?"})])
         run = tailor_run()
         profile = tailor_profile()
-        resume = {
-            "summary": "Yes please",
-            "experiences": [
-                {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "x"}]}
-            ],
-            "skills": [],
-        }
+        resume = tailor_resume(summary="Yes please", skills=[])
         outcome, model = self._run(
             [tc("submit_tailored_resume", {"resume": resume})],
             answer="yes, write one",
@@ -523,13 +660,7 @@ class TailorAgent(unittest.TestCase):
 
     def test_usage_accumulates(self):
         usage = _usage()
-        resume = {
-            "summary": None,
-            "experiences": [
-                {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "x"}]}
-            ],
-            "skills": [],
-        }
+        resume = tailor_resume(skills=[])
         self._run(
             [
                 tc("get_job_description", {}, in_tok=3, out_tok=2, cost=0.0005),
@@ -543,12 +674,123 @@ class TailorAgent(unittest.TestCase):
         self.assertEqual(usage["generation_ids"], ["gen-1", "gen-2"])
 
     def _verify_feedback(self, resume):
-        _, model = self._run([self._verify_call(resume), ai("done")])
+        _, model = self._run([self._verify_call(resume), self._ask()])
         return _last_tool_msg(model).content
 
-    def test_verify_requires_an_experience(self):
-        msg = self._verify_feedback({"summary": None, "experiences": [], "skills": []})
-        self.assertIn("at least one experience", msg)
+    def test_verify_requires_every_experience(self):
+        # Dropping a role leaves a gap in the user's work history — the
+        # check names what's missing so the model can put it back.
+        only_acme = tailor_resume(
+            experiences=[
+                {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "x"}]}
+            ]
+        )
+        msg = self._verify_feedback(only_acme)
+        self.assertIn("Every experience must stay", msg)
+        self.assertIn("2 (Senior at Beta)", msg)
+        self.assertNotIn("1 (Engineer at Acme)", msg)
+
+    def test_verify_lists_every_missing_experience(self):
+        msg = self._verify_feedback(tailor_resume(experiences=[]))
+        self.assertIn("1 (Engineer at Acme), 2 (Senior at Beta)", msg)
+
+    def test_verify_rejects_an_experience_left_without_bullets(self):
+        msg = self._verify_feedback(
+            tailor_resume(
+                experiences=[
+                    {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "x"}]},
+                    {"experience_id": 2, "bullets": []},
+                ]
+            )
+        )
+        self.assertIn("2 (Senior at Beta) has no bullets", msg)
+
+    def test_verify_rejects_a_duplicate_experience(self):
+        resume = tailor_resume()
+        resume["experiences"].append(
+            {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "again"}]}
+        )
+        msg = self._verify_feedback(resume)
+        self.assertIn("Duplicate experience id (1)", msg)
+
+    def test_verify_still_allows_dropping_bullets(self):
+        profile = tailor_profile()
+        profile.experiences.append(
+            profile.experiences[0].model_copy(
+                update={"bullet_id": 11, "bullet": "Fixed the printer", "bullet_order": 1}
+            )
+        )
+        _, model = self._run(
+            [self._verify_call(tailor_resume()), self._ask()], profile=profile
+        )
+        self.assertIn("All ids are valid", _last_tool_msg(model).content)
+
+    def test_verify_allows_an_experience_with_no_bullets_to_stay_empty(self):
+        profile = tailor_profile()
+        profile.experiences.append(
+            tailor.TailorExperienceRow(
+                experience_id=3,
+                company_name="Gamma",
+                title="Intern",
+                start_date="2018",
+                end_date="2019",
+                description=None,
+                bullet_id=None,
+                bullet=None,
+                bullet_order=None,
+            )
+        )
+        resume = tailor_resume()
+        resume["experiences"].append({"experience_id": 3, "bullets": []})
+        _, model = self._run([self._verify_call(resume), self._ask()], profile=profile)
+        self.assertIn("All ids are valid", _last_tool_msg(model).content)
+
+    def test_submit_bounces_a_resume_that_drops_an_experience(self):
+        # A model can skip verify — submit runs the same check, so a resume
+        # missing a role is never stored.
+        only_acme = tailor_resume(
+            experiences=[
+                {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "x"}]}
+            ]
+        )
+        outcome, model = self._run(
+            [
+                tc("submit_tailored_resume", {"resume": only_acme}),
+                tc("submit_tailored_resume", {"resume": tailor_resume()}, tc_id="tc-2"),
+            ]
+        )
+        bounced = model.calls[1][-1]
+        self.assertIn("Not submitted", bounced.content)
+        self.assertIn("2 (Senior at Beta)", bounced.content)
+        self.assertEqual(outcome.status, "waiting")
+        self.assertEqual(
+            [e.experience_id for e in outcome.result.experiences], [1, 2]
+        )
+
+    def test_resubmit_loop_stops_at_the_recursion_limit(self):
+        # Every bounced submit is a valid tool call, so the nudge cap never
+        # trips — the per-invocation step limit is what stops the billing.
+        # The runner turns the error into a resumable question.
+        only_acme = tailor_resume(
+            experiences=[
+                {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "x"}]}
+            ]
+        )
+        script = [
+            tc("submit_tailored_resume", {"resume": only_acme}, tc_id=f"tc-{i}")
+            for i in range(200)
+        ]
+        with (
+            _patch_model(tailor, script) as model_cls,
+            self.assertRaises(GraphRecursionError),
+        ):
+            tailor.build_and_invoke_agent(
+                "run-1", None, tailor_run(), tailor_profile(),
+                "openrouter:test/model", _usage(),
+            )
+        calls = len(model_cls.return_value.calls)
+        self.assertLessEqual(calls, tailor.RECURSION_LIMIT // 2 + 1)
+        self.assertLess(calls, 200)
 
     def test_verify_rejects_unknown_experience(self):
         msg = self._verify_feedback(
@@ -591,27 +833,11 @@ class TailorAgent(unittest.TestCase):
         self.assertIn("Duplicate bullet id (10)", msg)
 
     def test_verify_rejects_unknown_skills(self):
-        msg = self._verify_feedback(
-            {
-                "summary": None,
-                "experiences": [
-                    {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "x"}]}
-                ],
-                "skills": ["Kubernetes"],
-            }
-        )
+        msg = self._verify_feedback(tailor_resume(skills=["Kubernetes"]))
         self.assertIn("Skills not present", msg)
 
     def test_verify_accepts_valid_resume(self):
-        msg = self._verify_feedback(
-            {
-                "summary": None,
-                "experiences": [
-                    {"experience_id": 1, "bullets": [{"bullet_id": 10, "text": "x"}]}
-                ],
-                "skills": ["Python"],
-            }
-        )
+        msg = self._verify_feedback(tailor_resume())
         self.assertIn("All ids are valid", msg)
 
     def test_missing_inline_cost_marks_not_all_costed(self):
@@ -621,8 +847,8 @@ class TailorAgent(unittest.TestCase):
         _, _ = self._run(
             [
                 msg,
-                self._verify_call({"summary": None, "experiences": [], "skills": []}),
-                tc("submit_tailored_resume", {"resume": {"summary": None, "experiences": [], "skills": []}}, tc_id="tc-3"),
+                self._verify_call(tailor_resume()),
+                tc("submit_tailored_resume", {"resume": tailor_resume()}, tc_id="tc-3"),
             ],
             usage=usage,
         )

@@ -20,6 +20,7 @@ from shared.amqp import (
     SYSTEM_DESIGN_QUEUE_NAME,
     TAILOR_QUEUE_NAME,
 )
+from shared.checkpoints import CHECKPOINT_CONN_OPTIONS
 
 
 class AsyncMain(unittest.IsolatedAsyncioTestCase):
@@ -64,24 +65,41 @@ class AsyncMain(unittest.IsolatedAsyncioTestCase):
         client.close.assert_awaited_once()
 
 
+def _conn_cm(conn):
+    cm = MagicMock()
+    cm.__enter__ = MagicMock(return_value=conn)
+    cm.__exit__ = MagicMock(return_value=False)
+    return cm
+
+
 class PgSetup(unittest.TestCase):
-    def test_do_pg_setup_creates_checkpointer_tables(self):
-        conn = MagicMock()
-        cm = MagicMock()
-        cm.__enter__ = MagicMock(return_value=conn)
-        cm.__exit__ = MagicMock(return_value=False)
+    def test_do_pg_setup_creates_checkpointer_tables_in_their_schema(self):
+        plain, scoped = MagicMock(), MagicMock()
         saver = MagicMock()
         with (
-            patch("psycopg.connect", return_value=cm) as connect,
+            patch(
+                "psycopg.connect", side_effect=[_conn_cm(plain), _conn_cm(scoped)]
+            ) as connect,
+            patch.object(
+                pg_module, "move_checkpoint_tables", return_value=[]
+            ) as move,
             patch.object(
                 pg_module, "PostgresSaver", return_value=saver
             ) as saver_cls,
         ):
             pg_module.do_pg_setup()
-        connect.assert_called_once_with(
-            conninfo=pg_module.PG_URL, autocommit=True
+        # The schema (and any legacy tables) first, then PostgresSaver on a
+        # connection whose search_path lands its tables in that schema.
+        move.assert_called_once_with(plain)
+        self.assertEqual(
+            connect.call_args_list[1].kwargs,
+            {
+                "conninfo": pg_module.PG_URL,
+                "autocommit": True,
+                "options": CHECKPOINT_CONN_OPTIONS,
+            },
         )
-        saver_cls.assert_called_once_with(conn)
+        saver_cls.assert_called_once_with(scoped)
         saver.setup.assert_called_once_with()
 
 

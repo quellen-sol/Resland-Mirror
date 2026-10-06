@@ -29,6 +29,10 @@ docs/                 Design docs (billing plan, UX specs)
 - **RabbitMQ topology is declared by the dispatcher on startup** (exchanges, durable queues,
   `#` topic bindings, DLX args) — no need to start the API first.
 - Job dataclasses live in `backend/shared` (`AmqpResumeJob`, `AmqpSuggestionJob`, `AmqpTailorJob`).
+- **LangGraph checkpointer tables live in the `langgraph` Postgres schema**, not `public`, created by
+  the dispatcher on startup (`dispatcher.pg.do_pg_setup`). `prisma db update` only reads the schemas
+  the contract declares and drops tables there that it doesn't model, so keep them out of `public`
+  and out of the contract. Raw SQL goes through `shared.checkpoints.CHECKPOINT_TABLES`.
 - `token_usage` is an append-only ledger, one row per job (`@@unique([job_kind, job_id])`), recording
   `model` + charged `amount_cents`; billing/admin aggregates read from it.
 
@@ -154,9 +158,9 @@ step 4 gets sent back.
 ## Conventions
 
 - **Never commit to `master` directly.** Branch, push, open a PR; the human owner merges.
-- **Open the PR without asking.** When a change is done and verified, commit, push the branch and
-  open the PR straight away; the owner reviews and merges there. This doesn't extend to deploys
-  (see below).
+- **Always open a PR for your changes** — don't wait to be asked. Once a change is done and tested,
+  branch, commit, push, and open a PR against `master`, then report the link. Uncommitted edits
+  or local-only commits aren't finished work.
 - Branch naming: `fix/<issue>-slug`, `feat/<issue>-slug`, `docs/<issue>-slug`, or the Devin agent
   convention `devin/<epoch>-slug`. Keep one issue per branch.
 - Commit messages: imperative subject, body explains *why*. Reference the issue (`Refs #63`).
