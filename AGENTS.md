@@ -43,7 +43,11 @@ docs/                 Design docs (billing plan, UX specs)
   in `backend/api/tests/test_account_pg.py` fail until it is. Deletion holds `FOR UPDATE` on the user
   row and refuses while a job is PENDING/PROCESSING, so an endpoint that flips an idle row back to
   PROCESSING or writes under `resumes/<auth0_id>/` must call `api.user_row.share_user_row` in the same
-  transaction first (inserts into user tables are covered by their foreign key).
+  transaction first (inserts into user tables are covered by their foreign key). The erase also
+  writes an `account_deletion` row (Auth0 id only): an API background sweeper retries the Auth0
+  login deletion from it, and until it's purged (3 days after Auth0 confirms) the API's
+  `require_auth0_id` and the frontend's `getUser()` refuse sessions/tokens of the deleted login —
+  never re-create a `user` row for a session without going through `getUser()`.
 
 ## Toolchain
 
