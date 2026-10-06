@@ -1,9 +1,16 @@
-"""S3 access for a user's files: everything under `resumes/<auth0_id>/`
-(the original upload(s), generated.docx, tailored/<id>.docx).
+"""S3 access for a user's files under `resumes/<auth0_id>/`: the original
+upload(s), generated.docx, tailored/<uuid>.docx.
+
+A user's files are recognized by those exact key shapes, not just the prefix:
+uploads build keys from the raw Auth0 id, so an id containing `/` (rare, but
+Auth0 doesn't forbid it) shares its prefix with a shorter id —
+`resumes/a/b/resume_doc.docx` sits under both `resumes/a/` and `resumes/a/b/`.
+Matching the shapes keeps each account's export and deletion to its own files.
 
 Blocking boto3 calls — callers run these in a worker thread.
 """
 
+import re
 from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -21,12 +28,34 @@ class StorageError(Exception):
     these end up in logs that outlive a deleted account."""
 
 
+# Every key the app writes under a user's prefix (resume_upload, the resume
+# export and the tailored export). A new kind of file must be added here, or
+# export and deletion won't see it — tests pin the writers' key formats.
+USER_FILE = re.compile(
+    r"(resume_doc\.(docx|pdf)"
+    r"|generated\.docx"
+    r"|tailored/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.docx)"
+)
+
+
 def user_prefix(user_id: str) -> str:
-    """`resumes/<user_id>/` — the trailing slash keeps `auth0|ab` from
-    matching `auth0|abc`'s files. Rejects ids that could escape the prefix."""
-    if not user_id or "/" in user_id or user_id in (".", ".."):
-        raise ValueError(f"unsafe user id for an S3 prefix: {user_id!r}")
+    """`resumes/<user_id>/`, the same prefix uploads write under. The
+    trailing slash keeps `auth0|ab` from matching `auth0|abc`'s files."""
+    if not user_id:
+        raise ValueError("empty user id")
     return f"resumes/{user_id}/"
+
+
+def is_user_file(prefix: str, key: str) -> bool:
+    """Whether `key` is one of the files the app writes for the user whose
+    prefix this is (and not another account's file sharing the prefix)."""
+    raise NotImplementedError
+
+
+def list_user_files(s3: Any, bucket: str, prefix: str) -> list[str]:
+    """The user's files under `prefix` (see USER_FILE). Anything else found
+    there is left alone, and logged by count so it isn't silent."""
+    raise NotImplementedError
 
 
 def list_keys(s3: Any, bucket: str, prefix: str) -> list[str]:
@@ -47,10 +76,10 @@ def list_keys(s3: Any, bucket: str, prefix: str) -> list[str]:
         raise StorageError(f"listing failed: {e}") from e
 
 
-def delete_prefix(s3: Any, bucket: str, prefix: str) -> int:
-    """Delete every object under `prefix` in DeleteObjects batches. Returns
-    how many were deleted; raises StorageError if any key failed."""
-    keys = list_keys(s3, bucket, prefix)
+def delete_user_files(s3: Any, bucket: str, prefix: str) -> int:
+    """Delete the user's files under `prefix` in DeleteObjects batches.
+    Returns how many were deleted; raises StorageError if any key failed."""
+    keys = list_user_files(s3, bucket, prefix)
     for start in range(0, len(keys), DELETE_BATCH_SIZE):
         batch = keys[start : start + DELETE_BATCH_SIZE]
         try:

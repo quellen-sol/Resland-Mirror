@@ -58,7 +58,7 @@ class Routes(unittest.TestCase):
         ) as delete:
             resp = self.client.delete("/account")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json(), {"ok": True})
+        self.assertEqual(resp.json(), {"ok": True, "login_deleted": True})
         self.assertEqual(delete.call_args.kwargs["user_id"], "auth0|u1")
 
     def test_delete_conflict_passes_through(self):

@@ -12,6 +12,9 @@ from pydantic import BaseModel
 
 class DeleteAccountResponse(BaseModel):
     ok: bool = True
+    # False when Auth0 didn't confirm the login deletion yet: the data is
+    # gone and the sweeper finishes the login (see account.sweeper).
+    login_deleted: bool = True
 
 
 # Bumped whenever a section's shape changes, so a reader of an old archive

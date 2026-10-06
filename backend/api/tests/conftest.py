@@ -40,7 +40,8 @@ async def pg():
         pytest.skip(_DESTRUCTIVE_REASON)
     conn = await psycopg.AsyncConnection.connect(TEST_PG_URL, autocommit=True)
     await conn.execute(
-        'TRUNCATE balance_purchase, token_usage, model_pricing, "user" CASCADE'
+        'TRUNCATE balance_purchase, token_usage, model_pricing, "user",'
+        " account_deletion CASCADE"
     )
     yield conn
     await conn.close()

@@ -16,6 +16,20 @@ export function exportFilename(now: Date): string {
   return `resland-data-${now.toISOString().slice(0, 10)}.zip`;
 }
 
+/** Whether a sign-in session belongs to an account that was deleted, given
+ *  that account's account_deletion row. While Auth0 still has the old login
+ *  (`auth0DeletedAt` null) every session does; after that, sessions created
+ *  at or before that moment. A later sign-up with the same social login is a
+ *  new account. `sessionCreatedAt` is epoch seconds (nextjs-auth0's
+ *  `internal.createdAt`); missing counts as old. Mirrors the API's
+ *  account.db.token_revoked. */
+export function isRevokedByDeletion(
+  sessionCreatedAt: number | undefined,
+  auth0DeletedAt: Date | null,
+): boolean {
+  throw new Error("not implemented");
+}
+
 /** The `detail` string from a FastAPI error body, or null when the body
  *  isn't one (a load balancer's HTML error page, a structured detail). */
 export function apiErrorDetail(body: string): string | null {

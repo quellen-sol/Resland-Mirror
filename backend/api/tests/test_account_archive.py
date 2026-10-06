@@ -8,7 +8,6 @@ import io
 import json
 import unittest
 import zipfile
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import stripe
@@ -129,10 +128,15 @@ class _StripeFakes(unittest.TestCase):
 
         return expire
 
-    def _retrieve(self, status, payment_status):
+    def _retrieve(self, status=None, payment_status=None, error=None):
         def retrieve(session_id):
             self.calls.append(("retrieve", session_id))
-            return SimpleNamespace(status=status, payment_status=payment_status)
+            if error:
+                raise error
+            return stripe.checkout.Session.construct_from(
+                {"id": session_id, "status": status, "payment_status": payment_status},
+                key=None,
+            )
 
         return retrieve
 
@@ -178,9 +182,32 @@ class ExpireOpenCheckouts(_StripeFakes):
             patch.object(
                 stripe.checkout.Session, "retrieve", self._retrieve("complete", "paid")
             ),
-            self.assertRaises(service.CheckoutStillSettling),
+            self.assertRaises(service.CheckoutStillSettling) as ctx,
         ):
             service.expire_open_checkouts(["cs_paid"])
+        # Carries the session so it can be credited through the webhook path.
+        self.assertEqual(ctx.exception.session["id"], "cs_paid")
+
+    def test_session_stripe_never_heard_of_counts_as_expired(self):
+        # A leftover id from another Stripe account or mode can't be paid —
+        # it must not block deletion forever.
+        missing = _invalid_request("resource_missing")
+        for expire_error, retrieve_error in (
+            (missing, None),
+            (_invalid_request(None), missing),
+        ):
+            with (
+                self.subTest(expire=expire_error.code, retrieve=retrieve_error),
+                patch.object(
+                    stripe.checkout.Session, "expire", self._expire(expire_error)
+                ),
+                patch.object(
+                    stripe.checkout.Session,
+                    "retrieve",
+                    self._retrieve(error=retrieve_error),
+                ),
+            ):
+                service.expire_open_checkouts(["cs_gone"])
 
     def test_unreachable_stripe_propagates(self):
         with (
@@ -192,6 +219,13 @@ class ExpireOpenCheckouts(_StripeFakes):
             self.assertRaises(stripe.StripeError),
         ):
             service.expire_open_checkouts(["cs_open"])
+
+
+class PaymentCreditedMessage(unittest.TestCase):
+    def test_states_the_new_balance(self):
+        message = service.payment_credited_message(1250.0)
+        self.assertIn("$12.50", message)
+        self.assertIn("again", message)
 
 
 class DeleteStripeCustomer(_StripeFakes):

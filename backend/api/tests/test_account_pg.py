@@ -15,20 +15,21 @@ Run: .venv/bin/python -m pytest backend/api/tests/test_account_pg.py -v
 import asyncio
 import io
 import json
+import time
+import uuid
 import zipfile
-from types import SimpleNamespace
 
 import psycopg
 import pytest
 import stripe
 from fastapi import HTTPException
-from psycopg.errors import ForeignKeyViolation
+from psycopg.errors import DeadlockDetected, ForeignKeyViolation
 from shared.accounts import is_tombstone_id
 from shared.checkpoints import CHECKPOINT_TABLES
 
 from api.account import db as account_db
-from api.account import service
-from api.account.auth0_mgmt import Auth0ManagementError
+from api.account import service, sweeper
+from api.account.auth0_mgmt import Auth0ManagementError, Auth0NotReady
 from api.account.model import EXPORT_SECTIONS
 from api.admin import service as admin_service
 from api.billing import service as billing_service
@@ -120,7 +121,7 @@ def externals(monkeypatch):
 
     def retrieve(session_id):
         stripe_calls.append(("retrieve", session_id))
-        return SimpleNamespace(status="expired", payment_status="unpaid")
+        return stripe_session(session_id, status="expired", payment_status="unpaid")
 
     def delete(customer_id):
         stripe_calls.append(("delete", customer_id))
@@ -139,6 +140,12 @@ def externals(monkeypatch):
     ext = Externals()
     ext.s3, ext.auth0, ext.stripe_calls = s3, auth0, stripe_calls
     return ext
+
+
+def stripe_session(session_id, **fields):
+    return stripe.checkout.Session.construct_from(
+        {"id": session_id, **fields}, key=None
+    )
 
 
 # Seeding ----------------------------------------------------------------
@@ -319,7 +326,7 @@ def seed_files(s3, uid, n_tailored=0):
     s3.objects[f"resumes/{uid}/resume_doc.pdf"] = b"%PDF original"
     s3.objects[f"resumes/{uid}/generated.docx"] = b"generated"
     for i in range(n_tailored):
-        s3.objects[f"resumes/{uid}/tailored/{i:05}.docx"] = b"tailored"
+        s3.objects[f"resumes/{uid}/tailored/{uuid.UUID(int=i)}.docx"] = b"tailored"
 
 
 # Schema introspection ---------------------------------------------------
@@ -382,6 +389,16 @@ async def rows_naming(pg, uid: str) -> dict[str, int]:
     return found
 
 
+async def assert_erased(pg, uid):
+    """Nothing names the account any more except its account_deletion row,
+    which only holds the id (and goes after REVOCATION_WINDOW)."""
+    assert await rows_naming(pg, uid) == {"account_deletion": 1}
+    row = await _one(
+        pg, "SELECT auth0_id FROM account_deletion WHERE auth0_id = %s", (uid,)
+    )
+    assert row == (uid,)
+
+
 async def thread_rows(pg, thread_ids) -> int:
     total = 0
     for table in CHECKPOINT_TABLES:
@@ -420,10 +437,10 @@ async def test_delete_erases_every_trace(pg, checkpoint_tables, externals):
     their_files = {k for k in externals.s3.objects if k.startswith(f"resumes/{OTHER}/")}
 
     resp = await service.delete_account(pg, USER)
-    assert resp.ok is True
+    assert resp.ok is True and resp.login_deleted is True
 
     # No row in any table still carries the person or their PII…
-    assert await rows_naming(pg, USER) == {}
+    await assert_erased(pg, USER)
     for needle in pii("alpha").values():
         assert await rows_mentioning(pg, needle) == {}, needle
     for table in await tables_reaching_user(pg):
@@ -493,8 +510,16 @@ async def test_delete_erases_every_trace(pg, checkpoint_tables, externals):
         ("expire", mine["open_checkout"]),
         ("delete", "cus_1"),
     ]
-    # Auth0 last.
+    # Auth0 last, checked before anything was touched, and recorded.
+    assert externals.auth0.scope_checks == [("delete:users",)]
     assert externals.auth0.deleted == [USER]
+    record = await _one(
+        pg,
+        "SELECT requested_at, auth0_deleted_at FROM account_deletion"
+        " WHERE auth0_id = %s",
+        (USER,),
+    )
+    assert record[0] is not None and record[1] is not None
 
     # The other account is untouched.
     other = await _one(
@@ -534,7 +559,7 @@ async def test_delete_works_before_any_dispatcher_made_checkpoint_tables(pg, ext
     try:
         await seed_user(pg, USER)
         await service.delete_account(pg, USER)
-        assert await rows_naming(pg, USER) == {}
+        await assert_erased(pg, USER)
     finally:
         if parked:
             await pg.execute(
@@ -626,7 +651,7 @@ async def test_crashed_upload_does_not_block_deletion_forever(
         (USER,),
     )
     await service.delete_account(pg, USER)
-    assert await rows_naming(pg, USER) == {}
+    await assert_erased(pg, USER)
 
 
 async def test_idle_sessions_do_not_block_deletion(pg, checkpoint_tables, externals):
@@ -651,6 +676,26 @@ async def test_unconfigured_auth0_refuses_before_touching_anything(
     assert exc.value.status_code == 503
     assert len(externals.s3.objects) == 3
     assert externals.stripe_calls == []
+
+
+@pytest.mark.parametrize("reason", ["missing delete:users", "bad secret"])
+async def test_unusable_auth0_refuses_before_touching_anything(
+    pg, checkpoint_tables, externals, reason
+):
+    """A misconfigured M2M app used to surface only after the erase
+    committed, leaving the login behind. The token is checked first now."""
+    await seed_user(pg, USER)
+    seed_files(externals.s3, USER)
+    externals.auth0.not_ready = Auth0NotReady(reason)
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_account(pg, USER)
+    assert exc.value.status_code == 503
+    assert len(externals.s3.objects) == 3
+    assert externals.stripe_calls == []
+    assert await _one(pg, "SELECT count(*) FROM account_deletion") == (0,)
+    assert await _one(
+        pg, 'SELECT full_name FROM "user" WHERE auth0_id = %s', (USER,)
+    ) == (pii("alpha")["name"],)
 
 
 async def test_stripe_customer_without_stripe_configured_refuses(
@@ -690,7 +735,7 @@ async def test_storage_failure_rolls_back_and_a_retry_finishes(
 
     externals.s3.fail_delete_keys = set()
     await service.delete_account(pg, USER)
-    assert await rows_naming(pg, USER) == {}
+    await assert_erased(pg, USER)
     assert externals.s3.objects == {}
     assert externals.auth0.deleted == [USER]
 
@@ -717,39 +762,76 @@ async def test_stripe_failure_rolls_back_and_a_retry_finishes(
 
     monkeypatch.setattr(stripe.Customer, "delete", lambda customer_id: None)
     await service.delete_account(pg, USER)
-    assert await rows_naming(pg, USER) == {}
+    await assert_erased(pg, USER)
 
 
-async def test_paid_checkout_not_yet_credited_blocks_deletion(
+async def test_paid_checkout_the_webhook_missed_is_credited_then_reconfirmed(
     pg, checkpoint_tables, externals, monkeypatch
 ):
-    """Paid a moment ago, webhook not in yet: the person must see that
-    balance before agreeing to forfeit it, so nothing is touched."""
+    """Paid, but the webhook never credited it (late or lost). Deletion
+    credits it through the webhook's own path and stops with 409 showing the
+    new balance, so the person confirms with the real amount — and it can't
+    block deletion forever: the next attempt goes through."""
     mine = await seed_user(pg, USER)
     seed_files(externals.s3, USER)
+    paid = stripe_session(
+        mine["open_checkout"],
+        status="complete",
+        payment_status="paid",
+        client_reference_id=USER,
+        metadata={"pack_id": "starter", "cents": "500"},
+        amount_total=500,
+        currency="usd",
+        payment_intent="pi_late",
+    )
 
-    def expire(session_id):
+    def not_open(session_id):
         raise stripe.InvalidRequestError("not open", None)
 
-    monkeypatch.setattr(stripe.checkout.Session, "expire", expire)
-    monkeypatch.setattr(
-        stripe.checkout.Session,
-        "retrieve",
-        lambda session_id: SimpleNamespace(status="complete", payment_status="paid"),
-    )
+    monkeypatch.setattr(stripe.checkout.Session, "expire", not_open)
+    monkeypatch.setattr(stripe.checkout.Session, "retrieve", lambda session_id: paid)
     with pytest.raises(HTTPException) as exc:
         await service.delete_account(pg, USER)
     assert exc.value.status_code == 409
-    assert exc.value.detail == service.PAYMENT_SETTLING
-    assert len(externals.s3.objects) == 3
-    assert externals.stripe_calls == []  # no customer deletion
-    assert externals.auth0.deleted == []
+    # 12.5¢ + 500¢ credited = $5.125
+    assert exc.value.detail == service.payment_credited_message(512.5)
     row = await _one(
         pg,
-        "SELECT user_id, status FROM balance_purchase WHERE id = %s",
+        "SELECT user_id, status, payment_intent_id FROM balance_purchase"
+        " WHERE id = %s",
         (mine["open_checkout"],),
     )
-    assert row == (USER, "PENDING")
+    assert row == (USER, "COMPLETED", "pi_late")
+    assert await _one(
+        pg, 'SELECT balance_cents FROM "user" WHERE auth0_id = %s', (USER,)
+    ) == (512.5,)
+    # Nothing else was touched.
+    assert len(externals.s3.objects) == 3
+    assert externals.stripe_calls == []
+    assert externals.auth0.deleted == []
+    assert await _one(pg, "SELECT count(*) FROM account_deletion") == (0,)
+
+    # Confirming again goes through: the purchase isn't PENDING any more.
+    resp = await service.delete_account(pg, USER)
+    assert resp.ok
+    await assert_erased(pg, USER)
+
+
+async def test_checkout_stripe_never_heard_of_does_not_block(
+    pg, checkpoint_tables, externals, monkeypatch
+):
+    """A PENDING row whose session Stripe can't find (e.g. a test-mode
+    leftover) can't be paid; it counts as expired."""
+    await seed_user(pg, USER)
+
+    def missing(session_id):
+        raise stripe.InvalidRequestError("No such checkout.session", None, code="resource_missing")
+
+    monkeypatch.setattr(stripe.checkout.Session, "expire", missing)
+    monkeypatch.setattr(stripe.checkout.Session, "retrieve", missing)
+    resp = await service.delete_account(pg, USER)
+    assert resp.ok
+    await assert_erased(pg, USER)
 
 
 async def test_failure_after_stripe_forgets_the_deleted_customer(
@@ -775,32 +857,128 @@ async def test_failure_after_stripe_forgets_the_deleted_customer(
     assert externals.auth0.deleted == []
 
 
-async def test_auth0_failure_keeps_the_login_for_a_retry(
+async def test_auth0_failure_after_the_erase_is_finished_by_the_sweeper(
     pg, checkpoint_tables, externals
 ):
     await seed_user(pg, USER)
     externals.auth0.fail_delete = Auth0ManagementError("auth0 down")
 
-    with pytest.raises(HTTPException) as exc:
-        await service.delete_account(pg, USER)
-    assert exc.value.status_code == 502
-    assert "sign-in" in exc.value.detail
-    # The data is already gone…
-    assert await rows_mentioning(pg, pii("alpha")["email"]) == {}
+    resp = await service.delete_account(pg, USER)
+    # The data is gone and the person is told so; the login goes later.
+    assert resp.ok is True and resp.login_deleted is False
+    await assert_erased(pg, USER)
+    assert await _one(
+        pg, "SELECT auth0_deleted_at FROM account_deletion WHERE auth0_id = %s", (USER,)
+    ) == (None,)
+    # Until then every session of the old login is refused, new or not.
+    assert await account_db.token_revoked(pg, USER, time.time() + 3600)
 
-    # …the still-signed-in frontend re-creates a bare row on its next page
-    # load, and the retry clears that too and finishes with Auth0.
-    await pg.execute('INSERT INTO "user" (auth0_id) VALUES (%s)', (USER,))
+    # A sweep while Auth0 is still down changes nothing.
+    result = await sweeper.sweep_once(pg, externals.auth0)
+    assert (result.logins_deleted, result.purged) == (0, 0)
+
     externals.auth0.fail_delete = None
-    await service.delete_account(pg, USER)
-    assert await rows_naming(pg, USER) == {}
+    result = await sweeper.sweep_once(pg, externals.auth0)
+    assert result.logins_deleted == 1
     assert externals.auth0.deleted == [USER]
-    tombstones = (
+    deleted_at = (
         await _one(
-            pg, 'SELECT count(*) FROM "user" WHERE auth0_id LIKE %s', ("deleted|%",)
+            pg,
+            "SELECT auth0_deleted_at FROM account_deletion WHERE auth0_id = %s",
+            (USER,),
         )
     )[0]
-    assert tombstones == 1
+    assert deleted_at is not None
+    # Old sessions stay refused; a sign-up after the login was deleted works.
+    assert await account_db.token_revoked(pg, USER, deleted_at.timestamp() - 60)
+    assert not await account_db.token_revoked(pg, USER, deleted_at.timestamp() + 60)
+
+
+async def test_process_dying_before_auth0_leaves_a_durable_record(
+    pg, checkpoint_tables, externals, monkeypatch
+):
+    """The erase commits the account_deletion row with it, so a crash
+    between the commit and the Auth0 call can't lose the login deletion."""
+    await seed_user(pg, USER)
+
+    async def crash(user_id):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(externals.auth0, "delete_user", crash)
+    with pytest.raises(asyncio.CancelledError):
+        await service.delete_account(pg, USER)
+    assert await _one(
+        pg, "SELECT auth0_deleted_at FROM account_deletion WHERE auth0_id = %s", (USER,)
+    ) == (None,)
+    assert await account_db.pending_auth0_deletions(pg) == [USER]
+
+
+async def test_sweeper_purges_records_once_old_sessions_have_expired(pg):
+    await pg.execute(
+        """
+        INSERT INTO account_deletion (auth0_id, requested_at, auth0_deleted_at)
+        VALUES ('old', now() - interval '4 days', now() - interval '4 days'),
+               ('recent', now() - interval '1 day', now() - interval '1 day'),
+               ('pending', now() - interval '5 days', NULL)
+        """
+    )
+    auth0 = FakeAuth0()
+    auth0.fail_delete = Auth0ManagementError("still down")
+    result = await sweeper.sweep_once(pg, auth0)
+    assert result.purged == 1
+    rows = await _all(pg, "SELECT auth0_id FROM account_deletion ORDER BY auth0_id")
+    # 'pending' stays however old: Auth0 hasn't confirmed the login is gone.
+    assert rows == [("pending",), ("recent",)]
+
+
+async def test_sweeper_without_auth0_configured_still_purges(pg):
+    await pg.execute(
+        "INSERT INTO account_deletion (auth0_id, requested_at, auth0_deleted_at)"
+        " VALUES ('old', now() - interval '4 days', now() - interval '4 days'),"
+        "        ('pending', now(), NULL)"
+    )
+    auth0 = FakeAuth0(configured=False)
+    result = await sweeper.sweep_once(pg, auth0)
+    assert (result.logins_deleted, result.purged) == (0, 1)
+    assert auth0.deleted == []
+
+
+async def test_token_revocation_rules(pg):
+    await pg.execute(
+        "INSERT INTO account_deletion (auth0_id, auth0_deleted_at)"
+        " VALUES ('done', '2026-10-01T12:00:00Z'), ('pending', NULL)"
+    )
+    deleted = 1790856000  # 2026-10-01T12:00:00Z
+    # No record: nothing to revoke.
+    assert not await account_db.token_revoked(pg, "someone", 0)
+    # Auth0 still has the old login: every token is the old account's.
+    assert await account_db.token_revoked(pg, "pending", time.time() + 10_000)
+    # After Auth0 deleted it: issued at or before then is old, later is new.
+    assert await account_db.token_revoked(pg, "done", deleted - 3600)
+    assert await account_db.token_revoked(pg, "done", deleted)
+    assert not await account_db.token_revoked(pg, "done", deleted + 1)
+    assert await account_db.token_revoked(pg, "done", None)
+
+
+async def test_new_deletion_of_a_re_signed_up_account_resets_the_record(
+    pg, checkpoint_tables, externals
+):
+    """Deleted, signed up again with the same login, deleted again: the
+    record starts over instead of colliding on the id."""
+    await pg.execute(
+        "INSERT INTO account_deletion (auth0_id, requested_at, auth0_deleted_at)"
+        " VALUES (%s, now() - interval '1 day', now() - interval '1 day')",
+        (USER,),
+    )
+    await pg.execute('INSERT INTO "user" (auth0_id) VALUES (%s)', (USER,))
+    await service.delete_account(pg, USER)
+    row = await _one(
+        pg,
+        "SELECT requested_at > now() - interval '1 minute', auth0_deleted_at"
+        " > now() - interval '1 minute' FROM account_deletion WHERE auth0_id = %s",
+        (USER,),
+    )
+    assert row == (True, True)
 
 
 # After deletion -------------------------------------------------------------
@@ -861,7 +1039,7 @@ async def test_late_checkout_completion_lands_on_the_tombstone(
         (mine["open_checkout"],),
     )
     assert is_tombstone_id(row[0]) and row[1] == "COMPLETED"
-    assert await rows_naming(pg, USER) == {}
+    await assert_erased(pg, USER)
 
 
 # Export ---------------------------------------------------------------------
@@ -946,7 +1124,7 @@ async def test_export_contains_every_row_and_file(pg, checkpoint_tables, externa
         "files/resume_doc.docx",
         "files/resume_doc.pdf",
         "files/generated.docx",
-        "files/tailored/00000.docx",
+        f"files/tailored/{uuid.UUID(int=0)}.docx",
     } == names
     assert zf.read("files/resume_doc.pdf") == b"%PDF original"
 
@@ -1141,6 +1319,102 @@ async def test_resume_export_during_deletion_writes_no_file(
         assert externals.s3.objects == {}
     finally:
         await other.close()
+
+
+async def test_refund_webhook_racing_deletion_does_not_deadlock(
+    pg, checkpoint_tables, externals
+):
+    """charge.refunded locks the purchase row, then the user row. Deletion
+    used to lock them the other way round and deadlock — after the S3 files
+    and the Stripe customer were already gone. It now takes purchases first,
+    like the webhook, so one simply waits for the other."""
+    mine = await seed_user(pg, USER)
+    webhook = await _second_conn()
+    try:
+        async with webhook.transaction():
+            # billing.service.handle_webhook, charge.refunded, step 1 …
+            await webhook.execute(
+                "UPDATE balance_purchase SET status = 'REFUNDED'"
+                " WHERE payment_intent_id = %s AND status = 'COMPLETED'",
+                ("pi_alpha",),
+            )
+            deletion = asyncio.create_task(service.delete_account(pg, USER))
+            assert await _parked(deletion)
+            # … step 2, while the deletion waits: must not deadlock.
+            await webhook.execute(
+                'UPDATE "user" SET balance_cents = GREATEST(0, balance_cents - 1100)'
+                " WHERE auth0_id = %s",
+                (USER,),
+            )
+        resp = await deletion
+        assert resp.ok
+        row = await _one(
+            pg,
+            "SELECT user_id, status FROM balance_purchase WHERE id = %s",
+            (mine["paid_checkout"],),
+        )
+        assert is_tombstone_id(row[0]) and row[1] == "REFUNDED"
+        await assert_erased(pg, USER)
+    finally:
+        await webhook.close()
+
+
+async def test_deadlock_is_a_retryable_failure_not_a_500(
+    pg, checkpoint_tables, externals, monkeypatch
+):
+    """Whatever still deadlocks (or fails serialization) rolls back to the
+    retryable 502, and the deleted Stripe customer is let go of."""
+    await seed_user(pg, USER)
+
+    async def deadlocked(conn, user_id):
+        raise DeadlockDetected("deadlock detected")
+
+    monkeypatch.setattr(account_db, "erase_account", deadlocked)
+    with pytest.raises(HTTPException) as exc:
+        await service.delete_account(pg, USER)
+    assert exc.value.status_code == 502
+    assert exc.value.detail == service.INCOMPLETE
+    row = await _one(
+        pg,
+        'SELECT full_name, stripe_customer_id FROM "user" WHERE auth0_id = %s',
+        (USER,),
+    )
+    assert row == (pii("alpha")["name"], None)
+    assert externals.auth0.deleted == []
+
+
+async def test_stale_pending_upload_no_longer_blocks_uploading(
+    pg, checkpoint_tables, externals, monkeypatch
+):
+    """The upload's job row commits before its file is stored; a crash in
+    between used to leave it PENDING forever, blocking every later upload."""
+    import docx
+    from fastapi import UploadFile
+
+    await seed_user(pg, USER)
+    buf = io.BytesIO()
+    docx.Document().save(buf)
+    monkeypatch.setattr(upload_service, "get_s3_client", lambda **_kw: externals.s3)
+
+    def upload():
+        return upload_service.upload_resume(
+            UploadFile(file=io.BytesIO(buf.getvalue()), filename="r.docx"),
+            USER,
+            _Amqp(),
+            pg,
+        )
+
+    await pg.execute(
+        "INSERT INTO user_upload_job (id, user_id, s3_key, status, created_at)"
+        " VALUES ('j-crashed', %s, 'k', 'PENDING', now() - interval '2 hours')",
+        (USER,),
+    )
+    resp = await upload()
+    assert resp.job_id
+    # A fresh in-flight upload still blocks.
+    with pytest.raises(HTTPException) as exc:
+        await upload()
+    assert exc.value.status_code == 409
 
 
 async def test_deletion_waits_for_a_job_being_queued_then_409s(

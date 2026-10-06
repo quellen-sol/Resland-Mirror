@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from shared.amqp import AmqpClient
 
 from . import deps
+from .account import sweeper as account_sweeper
 from .account.router import router as account_router
 from .admin.router import router as admin_router
 from .auth import (

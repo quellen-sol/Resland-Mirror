@@ -186,6 +186,14 @@ async def create_checkout(
     return model.CheckoutResponse(url=session.url)
 
 
+async def apply_paid_checkout(pg_conn: PgConnection, session: dict) -> int | None:
+    """Credit a paid token-pack Checkout session exactly once: upsert its
+    purchase row, move it PENDING -> COMPLETED and add the cents to the
+    buyer's balance. Returns the cents credited, or None when there was
+    nothing to do (not one of ours, not paid yet, already credited)."""
+    raise NotImplementedError
+
+
 async def handle_webhook(
     pg_conn: PgConnection, payload: bytes, sig_header: str | None
 ) -> dict:

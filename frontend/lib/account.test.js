@@ -5,6 +5,7 @@ import {
   apiErrorDetail,
   exportFilename,
   isDeleteConfirmed,
+  isRevokedByDeletion,
 } from "./account.ts";
 
 test("deletion unlocks only on the exact confirmation word", () => {
@@ -45,4 +46,22 @@ test("apiErrorDetail ignores bodies that aren't a string detail", () => {
   ]) {
     assert.equal(apiErrorDetail(body), null, body);
   }
+});
+
+test("every session is revoked while Auth0 still has the deleted login", () => {
+  const now = Math.floor(Date.now() / 1000);
+  assert.equal(isRevokedByDeletion(now + 3600, null), true);
+  assert.equal(isRevokedByDeletion(undefined, null), true);
+});
+
+test("after Auth0 deleted the login, only older sessions are revoked", () => {
+  const deletedAt = new Date("2026-10-01T12:00:00.750Z");
+  const deletedSec = Math.floor(deletedAt.getTime() / 1000);
+  // Signed in before (or in the same second as) the deletion: the old account.
+  assert.equal(isRevokedByDeletion(deletedSec - 86400, deletedAt), true);
+  assert.equal(isRevokedByDeletion(deletedSec, deletedAt), true);
+  // A sign-up afterwards with the same social login is a new account.
+  assert.equal(isRevokedByDeletion(deletedSec + 1, deletedAt), false);
+  // No creation time on the session: treat it as old.
+  assert.equal(isRevokedByDeletion(undefined, deletedAt), true);
 });

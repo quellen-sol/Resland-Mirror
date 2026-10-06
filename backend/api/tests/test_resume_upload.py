@@ -12,6 +12,7 @@ import docx
 from fastapi import HTTPException, UploadFile
 
 from api.resume_upload import router, service
+from api.resume_upload.model import STALE_UPLOAD_INTERVAL
 from shared.amqp import RESUME_EXCHANGE_NAME
 
 from .helpers import _Amqp, _Pg, _Result
@@ -37,6 +38,16 @@ class UploadResume(unittest.IsolatedAsyncioTestCase):
                 _file(_docx_bytes()), "u1", _Amqp(), pg
             )
         self.assertEqual(ctx.exception.status_code, 409)
+
+    async def test_in_flight_check_ignores_crashed_uploads(self):
+        # A job row stuck PENDING (the API died before storing its file)
+        # mustn't block uploads forever.
+        pg = _Pg([[(1,)]])
+        with self.assertRaises(HTTPException):
+            await service.upload_resume(_file(_docx_bytes()), "u1", _Amqp(), pg)
+        query, params = pg.queries[0]
+        self.assertIn("created_at > now() - %s::interval", query)
+        self.assertEqual(params, ("u1", STALE_UPLOAD_INTERVAL))
 
     async def test_non_docx_400(self):
         pg = _Pg([[]])  # no in-flight

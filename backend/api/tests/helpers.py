@@ -183,6 +183,18 @@ class FakeAuth0:
         self.deleted = []
         self.fail_delete = None
         self.fail_get = None
+        # An Auth0NotReady to raise from ensure_scopes (bad secret, scope).
+        self.not_ready = None
+        self.scope_checks = []
+
+    async def ensure_scopes(self, *scopes):
+        from api.account.auth0_mgmt import Auth0NotReady
+
+        self.scope_checks.append(scopes)
+        if not self.configured:
+            raise Auth0NotReady("not configured")
+        if self.not_ready:
+            raise self.not_ready
 
     async def get_user(self, user_id):
         if self.fail_get:

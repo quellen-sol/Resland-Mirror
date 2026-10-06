@@ -72,7 +72,17 @@ class StepFailed(Exception):
 
 class CheckoutStillSettling(Exception):
     """A Checkout session is paid, but its webhook hasn't credited the
-    balance yet."""
+    balance yet. Carries the Stripe session so it can be credited."""
+
+    def __init__(self, session):
+        super().__init__("paid checkout not yet credited")
+        self.session = session
+
+
+def payment_credited_message(balance_cents: float) -> str:
+    """The 409 after crediting a paid checkout the webhook never delivered:
+    the balance the person is about to forfeit just changed."""
+    raise NotImplementedError
 
 
 def export_filename(today: date | None = None) -> str:
@@ -127,7 +137,7 @@ async def export_account(pg_conn: PgConnection, user_id: str) -> IO[bytes]:
     # Returned open: the route streams it, then closes it.
     dest = tempfile.SpooledTemporaryFile(max_size=SPOOL_MAX_BYTES)  # noqa: SIM115
     try:
-        keys = await asyncio.to_thread(storage.list_keys, s3, S3_RESUME_BUCKET, prefix)
+        keys = await asyncio.to_thread(storage.list_user_files, s3, S3_RESUME_BUCKET, prefix)
         await asyncio.to_thread(
             archive.write_archive,
             dest,
@@ -230,7 +240,7 @@ async def delete_account(
                 )
 
             await _external(
-                "file storage", storage.delete_prefix, s3, S3_RESUME_BUCKET, prefix
+                "file storage", storage.delete_user_files, s3, S3_RESUME_BUCKET, prefix
             )
 
             if account and account.stripe_customer_id:

@@ -14,6 +14,7 @@ from shared.accounts import new_tombstone_id
 from shared.checkpoints import CHECKPOINT_TABLES, THREAD_OWNER_TABLES
 
 from ..deps import PgConnection
+from ..resume_upload.model import STALE_UPLOAD_INTERVAL
 from .model import (
     ACCOUNT_COLUMNS,
     BULLET_COLUMNS,
@@ -50,10 +51,14 @@ ERASED_TABLES = (
 # Billing ledger: kept for accounting, re-pointed at a tombstone user.
 REPOINTED_TABLES = ("balance_purchase", "token_usage")
 
-# A resume upload still PENDING/PROCESSING after this long has crashed (the
-# dispatcher drops a job whose account is gone), so it can't block deletion
-# forever. Sessions have no such window: the user can dismiss a stuck one.
-STALE_UPLOAD_INTERVAL = "30 minutes"
+# Uploads past STALE_UPLOAD_INTERVAL don't block deletion: they crashed (the
+# dispatcher drops a job whose account is gone). Sessions have no such
+# window: the user can dismiss a stuck one.
+
+# How long an account_deletion row outlives the Auth0 login it records: the
+# frontend's absolute session lifetime (3 days, nextjs-auth0's default), which
+# also covers Auth0's default 24-hour access tokens. Raise it if either grows.
+REVOCATION_WINDOW = "3 days"
 
 # in_flight_jobs() kinds, worded for the 409 message.
 JOB_KIND_LABELS = {
@@ -194,6 +199,35 @@ async def erase_account(conn: PgConnection, user_id: str) -> str | None:
         await _delete_threads(cursor, thread_ids)
         await cursor.execute('DELETE FROM "user" WHERE auth0_id = %s', (user_id,))
     return tombstone
+
+
+async def token_revoked(
+    conn: PgConnection, user_id: str, issued_at: float | None
+) -> bool:
+    """True when a session or token for `user_id` belongs to an account that
+    was deleted: while Auth0 still has the old login (auth0_deleted_at is
+    null) every one does; after that, those issued at or before the moment
+    Auth0 deleted it. A sign-up after that, even with the same social login
+    (same sub), is a new account and passes. `issued_at` is epoch seconds
+    (a token's iat, a session's createdAt); None counts as old."""
+    raise NotImplementedError
+
+
+async def mark_auth0_deleted(conn: PgConnection, user_id: str) -> None:
+    """Record that Auth0 confirmed the login is deleted."""
+    raise NotImplementedError
+
+
+async def pending_auth0_deletions(conn: PgConnection) -> list[str]:
+    """Deleted accounts whose Auth0 login hasn't been deleted yet."""
+    raise NotImplementedError
+
+
+async def purge_finished_deletions(conn: PgConnection) -> int:
+    """Drop account_deletion rows whose Auth0 login has been gone longer than
+    REVOCATION_WINDOW — every session from before has expired by then.
+    Returns how many were dropped."""
+    raise NotImplementedError
 
 
 async def forget_stripe_customer(

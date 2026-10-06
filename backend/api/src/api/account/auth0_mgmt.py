@@ -1,9 +1,9 @@
 """Minimal Auth0 Management API client: read and delete one user.
 
 Uses a client-credentials (machine-to-machine) application authorized for the
-tenant's Management API with `read:users` and `delete:users`. A fresh token is
-fetched per call — these are rare, user-initiated operations, so caching a
-24-hour token isn't worth the invalidation logic.
+tenant's Management API with `read:users` and `delete:users`. The token is
+cached in-process until shortly before it expires — Auth0's free plan caps how
+many machine-to-machine tokens a tenant can mint a month.
 """
 
 from typing import Any
@@ -19,6 +19,8 @@ from ..env_vars import (
 )
 
 TIMEOUT_SECONDS = 10.0
+# Refresh a cached token this long before Auth0 says it expires.
+TOKEN_REFRESH_MARGIN_S = 300.0
 
 # The parts of the Auth0 profile an export includes. Tokens, app_metadata and
 # user_metadata stay out: they're credentials or our own bookkeeping.
@@ -43,6 +45,16 @@ IDENTITY_FIELDS = ("provider", "connection", "isSocial")
 
 class Auth0ManagementError(Exception):
     """Auth0 didn't do what was asked (network failure, 4xx/5xx)."""
+
+
+class Auth0NotReady(Auth0ManagementError):
+    """The Management API can't be used as configured: credentials unset or
+    rejected, or the token lacks a scope we need."""
+
+
+def clear_token_cache() -> None:
+    """Forget cached tokens (tests; a rotated secret)."""
+    raise NotImplementedError
 
 
 class Auth0Management:
@@ -100,6 +112,12 @@ class Auth0Management:
                 )
         except httpx.HTTPError as e:
             raise Auth0ManagementError(f"{method} user failed: {e!r}") from e
+
+    async def ensure_scopes(self, *scopes: str) -> None:
+        """Fetch (or reuse) a token and check it carries `scopes`. Raises
+        Auth0NotReady otherwise — call it before starting anything that
+        needs Auth0 to finish."""
+        raise NotImplementedError
 
     async def get_user(self, user_id: str) -> dict[str, Any] | None:
         """The user's Auth0 profile, trimmed to PROFILE_FIELDS; None when
