@@ -15,6 +15,16 @@ resource "aws_iam_policy" "resland_user_policy" {
             "s3:DeleteObject"
         ]
         Resource = "${aws_s3_bucket.resland_user_resumes.arn}/*"
+      },
+      {
+        # Account export and deletion list a user's files under
+        # resumes/<auth0_id>/; without this, ListObjectsV2 is denied.
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.resland_user_resumes.arn
+        Condition = {
+          StringLike = { "s3:prefix" = ["resumes/*"] }
+        }
       }
     ]
   })
