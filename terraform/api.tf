@@ -16,6 +16,24 @@ variable "auth0_audience" {
   type = string
 }
 
+# Machine-to-machine app authorized for the Auth0 Management API with
+# read:users + delete:users — used by account export and deletion.
+variable "auth0_mgmt_client_id" {
+  type = string
+}
+
+variable "auth0_mgmt_client_secret" {
+  type      = string
+  sensitive = true
+}
+
+# Only when auth0_domain is a custom domain: the tenant's canonical
+# <tenant>.<region>.auth0.com domain, where the Management API lives.
+variable "auth0_mgmt_domain" {
+  type    = string
+  default = ""
+}
+
 variable "stripe_secret_key" {
   type      = string
   sensitive = true
@@ -59,5 +77,10 @@ module "api" {
     # Seeds site_settings.maintenance_mode on first read; /admin owns it after.
     MAINTENANCE_MODE      = "1"
     PYTHONUNBUFFERED      = "1"
+
+    # Auth0 Management API, for account export and deletion.
+    AUTH0_MGMT_CLIENT_ID     = var.auth0_mgmt_client_id
+    AUTH0_MGMT_CLIENT_SECRET = var.auth0_mgmt_client_secret
+    AUTH0_MGMT_DOMAIN        = var.auth0_mgmt_domain
   }
 }
