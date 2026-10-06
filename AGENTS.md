@@ -40,7 +40,10 @@ docs/                 Design docs (billing plan, UX specs)
   `shared.accounts`); everything else is deleted. A new table that references `user` (directly or
   through another user-owned table) must be added to `account.db.ERASED_TABLES` (or
   `REPOINTED_TABLES`) and to the data export in `account.model.EXPORT_SECTIONS` — live-schema tests
-  in `backend/api/tests/test_account_pg.py` fail until it is.
+  in `backend/api/tests/test_account_pg.py` fail until it is. Deletion holds `FOR UPDATE` on the user
+  row and refuses while a job is PENDING/PROCESSING, so an endpoint that flips an idle row back to
+  PROCESSING or writes under `resumes/<auth0_id>/` must call `api.user_row.share_user_row` in the same
+  transaction first (inserts into user tables are covered by their foreign key).
 
 ## Toolchain
 
