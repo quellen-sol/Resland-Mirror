@@ -153,6 +153,9 @@ step 4 gets sent back.
 ## Conventions
 
 - **Never commit to `master` directly.** Branch, push, open a PR; the human owner merges.
+- **Always open a PR for your changes** — don't wait to be asked. Once a change is done and tested,
+  branch, commit, push, and open a PR against `master`, then report the link. Uncommitted edits
+  or local-only commits aren't finished work.
 - Branch naming: `fix/<issue>-slug`, `feat/<issue>-slug`, `docs/<issue>-slug`, or the Devin agent
   convention `devin/<epoch>-slug`. Keep one issue per branch.
 - Commit messages: imperative subject, body explains *why*. Reference the issue (`Refs #63`).
