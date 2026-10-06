@@ -20,7 +20,7 @@ hosting and policy decisions, 2026-10-06. Section 8 lists what is still open.
     RabbitMQ.
   - AWS S3, `us-east-2`: resume files.
   - Vercel is not used.
-  - The AWS ECS/RDS/Amazon MQ stack in `terraform/` is not the live system
+  - The AWS ECS/RDS/Amazon MQ stack in `terraform/` has been torn down
     (see §5).
 - **Collected:**
   - a sign-in identity (Auth0)
@@ -211,7 +211,11 @@ should say those age out on their own schedules.
 **Accurate**
 - HTTPS for all traffic to the site and API.
 - **Encryption at rest:** Railway encrypts all volumes and backups with
-  AES-256. S3 encrypts new objects by default (SSE-S3).
+  AES-256. The S3 bucket has default SSE-S3 (AES-256) encryption (verified
+  2026-10-06).
+- **S3 access:** all four public-access-block settings are on, and there is no
+  bucket policy (verified 2026-10-06). Versioning is off, so deleted files
+  don't linger as old versions.
 - **Network isolation:** Postgres and RabbitMQ are reachable only over
   Railway's private network, which runs over encrypted WireGuard tunnels.
 - Railway holds SOC 2 Type II and offers a GDPR Article 28 DPA
@@ -222,16 +226,17 @@ should say those age out on their own schedules.
   descriptions, or transcripts (though the owner has direct database access).
 
 **Caveats**
-- The AWS stack in `terraform/` (ECS, an unencrypted and publicly reachable
-  RDS instance, a public Amazon MQ broker) is not the live system. `deploy.sh`
-  still pushes to ECR and redeploys ECS; an image was pushed 2026-09-27. If
-  those resources still exist, they are a second copy of the app and possibly
-  of old user data. Tear them down, or confirm they're gone.
-- The S3 bucket's encryption and public-access-block settings come from AWS
-  defaults, not from Terraform.
-- `.dockerignore` excludes only the root `.env`, so `docker build` bakes
-  `backend/dispatcher/.env` (API keys included) into the image. That matters
-  for the ECR path in `deploy.sh`, not for Railway builds from git.
+- The AWS stack in `terraform/` (ECS, RDS, Amazon MQ, a load balancer, the
+  `api` ECR repository) **no longer exists**. Checked in `us-east-2` on
+  2026-10-06: no RDS instances or snapshots, no MQ brokers, no `resland-live`
+  ECS cluster, no load balancers, no ECR repository. Only the S3 bucket is
+  live. `terraform/` (apart from `durable/`), `deploy.sh`, and the deploy notes
+  in `AGENTS.md` are stale.
+- The S3 settings above come from AWS defaults, not from Terraform, so
+  nothing in the repo stops them from changing.
+- `.dockerignore` excludes only the root `.env`, so a local `docker build`
+  bakes `backend/dispatcher/.env` (API keys included) into the image. Railway
+  builds from git, where `.env` is ignored, so production isn't affected.
 
 ## 6. What the site already promises
 
@@ -312,8 +317,9 @@ These must stay true, or the policy and the copy must change together:
    weekly Postgres backups.
 4. Sign Railway's DPA. Confirm the DPAs for Stripe, Auth0, OpenRouter,
    LangSmith, and AWS; most are incorporated into their terms automatically.
-5. Tear down, or confirm gone, the legacy AWS ECS/RDS/Amazon MQ stack, and
-   retire `deploy.sh`.
+5. Remove the stale AWS deploy path: `terraform/` outside `durable/`,
+   `deploy.sh`, and the ECS/ECR notes in `AGENTS.md`. The resources
+   themselves are already gone.
 6. Retention: add a TTL to the dead-letter queues and a `page_view` retention
    window.
 7. Self-host the Excalidraw fonts (`EXCALIDRAW_ASSET_PATH`), or list esm.sh.
