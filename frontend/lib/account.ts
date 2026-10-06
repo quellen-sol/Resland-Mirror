@@ -7,17 +7,23 @@ export const DELETE_CONFIRMATION = "DELETE";
 /** True once the confirmation box holds exactly DELETE_CONFIRMATION
  *  (surrounding spaces forgiven, case not). */
 export function isDeleteConfirmed(typed: string): boolean {
-  throw new Error("not implemented");
+  return typed.trim() === DELETE_CONFIRMATION;
 }
 
 /** The export's file name, matching what the API sends in
  *  Content-Disposition (UTC date): resland-data-YYYY-MM-DD.zip. */
 export function exportFilename(now: Date): string {
-  throw new Error("not implemented");
+  return `resland-data-${now.toISOString().slice(0, 10)}.zip`;
 }
 
 /** The `detail` string from a FastAPI error body, or null when the body
  *  isn't one (a load balancer's HTML error page, a structured detail). */
 export function apiErrorDetail(body: string): string | null {
-  throw new Error("not implemented");
+  try {
+    const parsed = JSON.parse(body) as { detail?: unknown } | null;
+    const detail = parsed?.detail;
+    return typeof detail === "string" && detail.trim() ? detail : null;
+  } catch {
+    return null;
+  }
 }

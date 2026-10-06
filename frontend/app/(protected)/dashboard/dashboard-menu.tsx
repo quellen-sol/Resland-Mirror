@@ -12,6 +12,7 @@ import {
   PenLine,
   ShieldCheck,
   Sparkles,
+  UserCog,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -40,6 +41,7 @@ const LINK_ICONS: Partial<Record<DashboardMenuItemKey, LucideIcon>> = {
   admin: ShieldCheck,
   "edit-profile": PenLine,
   billing: Zap,
+  account: UserCog,
   help: CircleHelp,
 };
 
