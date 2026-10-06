@@ -13,15 +13,21 @@ from ..env_vars import (
     S3_RESUME_BUCKET,
 )
 from . import model
+from .model import STALE_UPLOAD_INTERVAL
 
 
 async def upload_resume(
     file: UploadFile, user_id: str, amqp_client: AmqpClientDep, pg_conn: PgConnection
 ):
     async with pg_conn.cursor() as conn:
+        # A job older than STALE_UPLOAD_INTERVAL crashed (e.g. the API died
+        # after recording it but before storing the file) — don't let it
+        # block uploads forever.
         in_flight = await conn.execute(
-            "SELECT 1 FROM user_upload_job WHERE user_id = %s AND status IN ('PENDING', 'PROCESSING') LIMIT 1",
-            (user_id,),
+            "SELECT 1 FROM user_upload_job WHERE user_id = %s"
+            " AND status IN ('PENDING', 'PROCESSING')"
+            " AND created_at > now() - %s::interval LIMIT 1",
+            (user_id, STALE_UPLOAD_INTERVAL),
         )
         in_flight = await in_flight.fetchone()
         if in_flight:
