@@ -515,17 +515,27 @@ class TailorAgent(unittest.TestCase):
         )
 
     def test_text_reply_before_submit_is_nudged_back_to_tools(self):
-        # Questions written as plain text never reach the user — the graph
-        # sends the model back to its tools instead of ending the run.
+        # The shape of a real failed run: both get_* tools in one turn, then
+        # the interview questions written as plain text (finish_reason
+        # "stop"). They never reach the user, so the graph sends the model
+        # back to its tools instead of ending the run.
+        fetch_both = ai(
+            "I'll start by fetching the job description and your profile.",
+            tool_calls=[
+                {"name": name, "args": {}, "id": f"tc-{name}", "type": "tool_call"}
+                for name in ("get_job_description", "get_user_profile")
+            ],
+        )
         outcome, model = self._run(
             [
+                fetch_both,
                 ai("1. How many users?\n2. Want a summary?"),
                 self._ask("1. How many users?\n2. Want a summary?"),
             ]
         )
         self.assertEqual(outcome.status, "waiting")
         self.assertEqual(outcome.question, "1. How many users?\n2. Want a summary?")
-        nudge = model.calls[1][-1]
+        nudge = model.calls[2][-1]
         self.assertEqual(nudge.type, "human")
         self.assertEqual(nudge.content, tailor.NUDGE_MESSAGE)
 

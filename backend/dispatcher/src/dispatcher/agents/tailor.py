@@ -48,8 +48,8 @@ Workflow:
    result), and the needs nothing in the profile touches.
 5. Interview the user with ask_clarifying_question. The profile is a summary
    and the user remembers far more, so your questions decide how good the
-   resume can get. Send one message with 3-5 short questions, numbered, one
-   per line, most valuable first:
+   resume can get. Call ask_clarifying_question once with 3-5 short
+   questions, numbered, one per line, most valuable first:
    - Where a bullet probably relates, ask for the detail that would make the
      match obvious: scale, results, who relied on it, what made it hard, what
      the user personally owned.
