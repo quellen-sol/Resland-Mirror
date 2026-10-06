@@ -245,7 +245,12 @@ export default async function DashboardPage() {
                           .map((b) => b.bullet)
                           .join("\n") || undefined
                       }
-                      bullets={bulletsFor(exp.id)}
+                      // Plain fields only — the ORM row's Temporal created_at
+                      // can't cross into a client component.
+                      bullets={bulletsFor(exp.id).map(({ id, bullet }) => ({
+                        id,
+                        bullet,
+                      }))}
                     />
                   </span>
                 </div>
