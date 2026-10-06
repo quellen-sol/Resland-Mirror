@@ -29,6 +29,9 @@ class TailorStatusResponse(BaseModel):
     job_description: str
     company_name: str | None = None
     role: str | None = None
+    # The model the run was started with (null = system default) — lets the
+    # form refill every input when the user retries a failed run.
+    model: str | None = None
     pending_question: str | None = None
     result: str | None = None
 

@@ -157,6 +157,19 @@ class GetActiveTailor(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(resp.run_id, "r1")
         self.assertEqual(resp.status, "FAILED")
 
+    async def test_failed_run_carries_its_inputs_for_a_retry(self):
+        # The form refills from these, model included, so a failed run
+        # doesn't cost the user their pasted posting.
+        resp = await service.get_active_tailor(
+            _Pg([_Result(fetchone=_row(status="FAILED", company_name="Acme",
+                                       role="Engineer", model="openrouter:x/y"))]),
+            "u1",
+        )
+        self.assertEqual(resp.job_description, "JD")
+        self.assertEqual(resp.company_name, "Acme")
+        self.assertEqual(resp.role, "Engineer")
+        self.assertEqual(resp.model, "openrouter:x/y")
+
 
 class AnswerTailor(unittest.IsolatedAsyncioTestCase):
     async def test_missing_404(self):

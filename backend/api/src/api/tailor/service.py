@@ -53,6 +53,7 @@ def _to_status(res: db.UserTailorRunRow) -> model.TailorStatusResponse:
         job_description=res.job_description,
         company_name=res.company_name,
         role=res.role,
+        model=res.model,
         pending_question=res.pending_question,
         result=res.result,
     )
