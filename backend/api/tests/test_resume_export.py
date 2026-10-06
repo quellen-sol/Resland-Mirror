@@ -14,7 +14,9 @@ from shared.docgen import default_format_profile
 
 from api.resume_export import service
 
-from .helpers import _Pg, _Result
+from .helpers import _Pg, _Result, one
+
+USER_ROW = one((1,))  # share_user_row's lock found the account
 
 
 def _content_pg():
@@ -130,6 +132,7 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
         pg = _content_pg()
         pg.results.put(_Result([]))  # no existing generated row
         pg.results.put(_Result([]))  # no stored format → default
+        pg.results.put(USER_ROW)
         pg.results.put(_Result([(datetime.datetime(2025, 1, 2),)]))  # RETURNING
         s3 = self._s3()
         with (
@@ -149,6 +152,7 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
         pg = _content_pg()
         pg.results.put(_Result([("old-hash", datetime.datetime.now())]))
         pg.results.put(_Result([]))
+        pg.results.put(USER_ROW)
         pg.results.put(_Result([(datetime.datetime.now(),)]))
         s3 = self._s3()
         with (
@@ -190,6 +194,7 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
         pg = _content_pg()
         pg.results.put(_Result([(stored.to_json(),)]))  # stored fmt differs
         pg.results.put(_Result([(hash_now, datetime.datetime.now(datetime.timezone.utc))]))
+        pg.results.put(USER_ROW)
         pg.results.put(_Result([(datetime.datetime.now(datetime.timezone.utc),)]))
         s3 = self._s3()
         with (
@@ -208,6 +213,7 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
         pg = _content_pg()
         pg.results.put(_Result([]))  # no stored format → default profile
         pg.results.put(_Result([(hash_now, datetime.datetime.now(datetime.timezone.utc))]))
+        pg.results.put(USER_ROW)
         pg.results.put(_Result([(datetime.datetime.now(datetime.timezone.utc),)]))
         s3 = self._s3()
         s3.head_object.side_effect = ClientError(
@@ -219,6 +225,23 @@ class ExportResume(unittest.IsolatedAsyncioTestCase):
         ):
             resp = await service.export_resume(pg, "u1")
         self.assertTrue(resp.regenerated)
+
+    async def test_deleted_account_404s_before_writing_a_file(self):
+        # An export racing the account's deletion waits on the row lock,
+        # then finds the account gone — no file may land after the sweep.
+        pg = _content_pg()
+        pg.results.put(_Result([]))
+        pg.results.put(_Result([]))
+        pg.results.put(_Result([]))  # lock: no user row
+        s3 = self._s3()
+        with (
+            patch.object(service, "get_s3_client", return_value=s3),
+            patch.object(service, "render_docx", return_value=b"docx"),
+            self.assertRaises(HTTPException) as ctx,
+        ):
+            await service.export_resume(pg, "u1")
+        self.assertEqual(ctx.exception.status_code, 404)
+        s3.upload_fileobj.assert_not_called()
 
 
 if __name__ == "__main__":

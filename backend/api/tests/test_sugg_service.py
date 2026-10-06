@@ -18,7 +18,9 @@ from api.auth import require_auth0_id
 from api.bullet_point_sugg import db, model, router, service
 from api.deps import get_pg_conn
 
-from .helpers import _Amqp, _Pg, _Result
+from .helpers import _Amqp, _Pg, _Result, one
+
+USER_ROW = one((1,))  # share_user_row's lock found the account
 
 
 def _row(**over):
@@ -215,7 +217,7 @@ class AnswerSuggestion(unittest.IsolatedAsyncioTestCase):
     async def test_answer_requeues_with_text(self):
         order = []
         pg = _Pg(
-            [_Result(fetchone=_row(status="WAITING_FOR_INPUT")), _Result()]
+            [_Result(fetchone=_row(status="WAITING_FOR_INPUT")), USER_ROW, _Result()]
         )
         real_commit = pg.commit
 
@@ -230,6 +232,12 @@ class AnswerSuggestion(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(out, {"ok": True})
         self.assertEqual(order, ["commit", "publish"])
+        # The user row is locked before the session flips to PROCESSING.
+        lock_at = next(i for i, (q, _) in enumerate(pg.queries) if "FOR KEY SHARE" in q)
+        update_at = next(
+            i for i, (q, _) in enumerate(pg.queries) if "UPDATE user_suggestion" in q
+        )
+        self.assertLess(lock_at, update_at)
         update = [q for q, _ in pg.queries if "UPDATE user_suggestion" in q][0]
         self.assertIn("status = %s", update)
         body = json.loads(amqp.publisher.published[0].body)
@@ -243,6 +251,7 @@ class AnswerSuggestion(unittest.IsolatedAsyncioTestCase):
         pg = _Pg(
             [
                 _Result(fetchone=_row(status="WAITING_FOR_INPUT", result=stored)),
+                USER_ROW,
                 _Result(),
             ]
         )
@@ -251,6 +260,17 @@ class AnswerSuggestion(unittest.IsolatedAsyncioTestCase):
         )
         params = next(p for q, p in pg.queries if "UPDATE user_suggestion" in q)
         self.assertEqual(params, ("PROCESSING", None, stored, "s1"))
+
+    async def test_deleted_account_404s_without_queueing(self):
+        pg = _Pg([_Result(fetchone=_row(status="WAITING_FOR_INPUT")), _Result()])
+        amqp = _Amqp()
+        with self.assertRaises(HTTPException) as ctx:
+            await service.answer_suggestion(
+                "u1", "s1", model.AnswerRequest(text="hi"), pg, amqp
+            )
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(amqp.publisher.published, [])
+        self.assertFalse(any("UPDATE user_suggestion" in q for q, _ in pg.queries))
 
 
 class RetrySuggestion(unittest.IsolatedAsyncioTestCase):
@@ -270,7 +290,7 @@ class RetrySuggestion(unittest.IsolatedAsyncioTestCase):
     async def test_retry_commits_then_publishes_without_answer(self):
         order = []
         pg = _Pg(
-            [_Result(fetchone=_row(status="FAILED")), _Result()]
+            [_Result(fetchone=_row(status="FAILED")), USER_ROW, _Result()]
         )
         real_commit = pg.commit
 
@@ -295,11 +315,24 @@ class RetrySuggestion(unittest.IsolatedAsyncioTestCase):
 
     async def test_retry_keeps_options(self):
         stored = json.dumps([{"bullet_id": 1, "options": ["a", "b", "c"]}])
-        pg = _Pg([_Result(fetchone=_row(status="FAILED", result=stored)), _Result()])
+        pg = _Pg(
+            [_Result(fetchone=_row(status="FAILED", result=stored)), USER_ROW, _Result()]
+        )
         with patch.object(service, "require_balance", new=AsyncMock()):
             await service.retry_suggestion("u1", "s1", pg, _Amqp())
         params = next(p for q, p in pg.queries if "UPDATE user_suggestion" in q)
         self.assertEqual(params, ("PROCESSING", None, stored, "s1"))
+
+    async def test_deleted_account_404s_without_queueing(self):
+        pg = _Pg([_Result(fetchone=_row(status="FAILED")), _Result()])
+        amqp = _Amqp()
+        with (
+            patch.object(service, "require_balance", new=AsyncMock()),
+            self.assertRaises(HTTPException) as ctx,
+        ):
+            await service.retry_suggestion("u1", "s1", pg, amqp)
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(amqp.publisher.published, [])
 
     async def test_retry_gates_on_balance(self):
         pg = _Pg([_Result(fetchone=_row(status="FAILED")), _Result()])

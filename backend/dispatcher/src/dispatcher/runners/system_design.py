@@ -29,6 +29,7 @@ from ..env_vars import (
 from .db_ops import (
     complete_system_design_session,
     default_model_spec,
+    discard_orphaned_thread,
     fetch_system_design_session,
     fetch_system_design_transcript,
     record_token_usage,

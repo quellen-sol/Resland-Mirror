@@ -9,11 +9,13 @@ from ..env_vars import PG_URL, SUGGESTIONS_MODEL
 from .db_ops import (
     complete_suggestion,
     default_model_spec,
+    discard_orphaned_thread,
     fetch_suggestion_rows,
     record_token_usage,
     set_suggestion_failed,
     set_suggestion_question,
     set_suggestion_result,
+    suggestion_exists,
     usage_job_id,
 )
 from .generic import RunnerError

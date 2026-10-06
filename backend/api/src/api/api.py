@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from shared.amqp import AmqpClient
 
 from . import deps
+from .account.router import router as account_router
 from .admin.router import router as admin_router
 from .auth import (
     is_docs_request,
@@ -73,6 +74,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The data export's filename travels in Content-Disposition, which
+    # browsers hide from cross-origin fetch() unless it's exposed.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(resume_upload_router)
@@ -83,3 +87,4 @@ app.include_router(tailored_router)
 app.include_router(system_design_router)
 app.include_router(billing_router)
 app.include_router(admin_router)
+app.include_router(account_router)

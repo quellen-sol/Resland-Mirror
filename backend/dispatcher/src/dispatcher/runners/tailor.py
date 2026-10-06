@@ -9,6 +9,7 @@ from ..env_vars import PG_URL, TAILOR_MODEL
 from .db_ops import (
     complete_tailor_run,
     default_model_spec,
+    discard_orphaned_thread,
     fetch_tailor_profile,
     fetch_tailor_run,
     record_token_usage,

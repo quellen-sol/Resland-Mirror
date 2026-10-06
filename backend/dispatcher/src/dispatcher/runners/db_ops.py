@@ -190,6 +190,31 @@ def record_token_usage(
     return amount_cents
 
 
+# Tables whose row ids double as LangGraph thread ids.
+THREAD_OWNER_TABLES = (
+    "user_suggestion",
+    "user_tailor_run",
+    "user_system_design_session",
+)
+
+
+def delete_checkpoint_threads(pg_client: Connection, thread_ids: list[str]) -> None:
+    """Drop the LangGraph checkpoint rows of these threads. The tables only
+    exist once a dispatcher has run setup, so a missing table is skipped."""
+    raise NotImplementedError
+
+
+def suggestion_exists(pg_client: Connection, session_id: str) -> bool:
+    raise NotImplementedError
+
+
+def discard_orphaned_thread(pg_client: Connection, table: str, thread_id: str) -> bool:
+    """If `thread_id`'s row in `table` is gone — dismissed, or the account
+    deleted, while the agent ran — delete the checkpoints the agent wrote
+    after the row's own cleanup, and return True."""
+    raise NotImplementedError
+
+
 def default_model_spec(pg_client: Connection) -> str | None:
     """The admin-selected default model (is_default + enabled)."""
     row = pg_client.execute(
