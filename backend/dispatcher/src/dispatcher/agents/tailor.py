@@ -30,6 +30,9 @@ TAILOR_SYSTEM_PROMPT = f"""You tailor a user's resume to one job posting. Tailor
 A recruiter skimming the result should see within seconds that this person
 has done the work the posting describes. Your job is to find that work in the
 user's history, draw out the details that prove it, and put it first.
+The user has already chosen to apply, so never judge whether they fit the
+role or suggest they skip it; make the strongest honest case from what they
+have.
 
 Workflow:
 1. Call get_job_description. It also returns the target company_name and role
@@ -88,8 +91,10 @@ Tailoring the content:
   tracking systems and recruiters both find the match. Never stretch a term
   onto work it doesn't describe, never keyword-stuff, and never claim skills
   the user lacks.
-- You may drop bullets that don't serve this posting and omit experiences
-  that add nothing, but keep the strongest two to four experiences.
+- Keep every experience in the profile. Dropping a job leaves a gap in the
+  user's work history, and a less relevant role still shows tenure and
+  growth. Within each experience you may drop bullets that don't serve this
+  posting, but keep at least one.
 - summary: include it only when the user asked for one. Keep it to 2-3 lines
   aimed at this posting, built from the same facts as the bullets.
 - skills: reorder the user's real skills by relevance to the posting. Never
@@ -119,6 +124,11 @@ and end without another submit call.
 # model back to its tools this many times in a row, then gives up — every
 # retry is a billed LLM call.
 MAX_NUDGES = 2
+
+# Most graph steps one invocation (one user action) may take. LangGraph's own
+# default is 10007, so any loop of valid tool calls (a model resubmitting a
+# rejected resume, say) would otherwise bill thousands of LLM calls.
+RECURSION_LIMIT = 40
 
 NUDGE_MESSAGE = (
     "You ended your turn without calling a tool, and the user never sees text "
@@ -233,6 +243,66 @@ def _stalls_in_a_row(messages: list[AnyMessage]) -> int:
     return count
 
 
+def check_tailored_resume(resume: TailoredResume, profile: TailorProfile) -> str | None:
+    """The first problem with a tailored resume, or None when it's valid."""
+    bullet_to_exp: dict[int, int] = {}
+    # Profile order, one entry per experience: "49 (Senior Engineer at Acme)".
+    labels: dict[int, str] = {}
+    for row in profile.experiences:
+        if row.bullet_id is not None:
+            bullet_to_exp[row.bullet_id] = row.experience_id
+        labels.setdefault(
+            row.experience_id,
+            f"{row.experience_id} ({row.title} at {row.company_name})",
+        )
+
+    seen_exps: set[int] = set()
+    for exp in resume.experiences:
+        if exp.experience_id not in labels:
+            return f"Invalid experience id ({exp.experience_id}) in: {exp}"
+        if exp.experience_id in seen_exps:
+            return f"Duplicate experience id ({exp.experience_id})"
+        seen_exps.add(exp.experience_id)
+        seen: set[int] = set()
+        for bullet in exp.bullets:
+            if bullet.bullet_id in seen:
+                return f"Duplicate bullet id ({bullet.bullet_id}) in: {exp}"
+            seen.add(bullet.bullet_id)
+            if bullet_to_exp.get(bullet.bullet_id) != exp.experience_id:
+                return (
+                    f"Bullet id ({bullet.bullet_id}) does not belong to "
+                    f"experience id ({exp.experience_id})"
+                )
+
+    # Roles are never dropped: a missing job reads as a gap in the user's
+    # work history. Bullets within a role may go, but not all of them.
+    missing = [label for exp_id, label in labels.items() if exp_id not in seen_exps]
+    if missing:
+        return (
+            "Every experience must stay on the resume, or the user's work "
+            f"history shows a gap. Missing: {', '.join(missing)}. Add each "
+            "back, leading with its bullets that best fit this posting."
+        )
+    has_bullets = set(bullet_to_exp.values())
+    bare = [
+        labels[exp.experience_id]
+        for exp in resume.experiences
+        if not exp.bullets and exp.experience_id in has_bullets
+    ]
+    if bare:
+        return (
+            "; ".join(f"Experience {label} has no bullets" for label in bare)
+            + ". Keep at least one bullet for every experience."
+        )
+
+    known_skills = {s.name for s in profile.skills}
+    unknown = [s for s in resume.skills if s not in known_skills]
+    if unknown:
+        return f"Skills not present in the base profile: {unknown}"
+
+    return None
+
+
 @dataclass
 class TailorRunOutcome:
     status: Literal["completed", "waiting"]
@@ -272,35 +342,10 @@ def build_and_invoke_agent(
 
     @tool
     def verify_tailored_resume(resume: TailoredResume):
-        """Verify that experience_id and bullet_id values are intact and unchanged"""
-        bullet_to_exp: dict[int, int] = {}
-        for row in profile.experiences:
-            if row.bullet_id is not None:
-                bullet_to_exp[row.bullet_id] = row.experience_id
-        valid_exp_ids = {row.experience_id for row in profile.experiences}
-
-        if not resume.experiences:
-            return "Invalid resume: at least one experience is required"
-
-        for exp in resume.experiences:
-            if exp.experience_id not in valid_exp_ids:
-                return f"Invalid experience id ({exp.experience_id}) in: {exp}"
-            seen: set[int] = set()
-            for bullet in exp.bullets:
-                if bullet.bullet_id in seen:
-                    return f"Duplicate bullet id ({bullet.bullet_id}) in: {exp}"
-                seen.add(bullet.bullet_id)
-                if bullet_to_exp.get(bullet.bullet_id) != exp.experience_id:
-                    return (
-                        f"Bullet id ({bullet.bullet_id}) does not belong to "
-                        f"experience id ({exp.experience_id})"
-                    )
-
-        known_skills = {s.name for s in profile.skills}
-        unknown = [s for s in resume.skills if s not in known_skills]
-        if unknown:
-            return f"Skills not present in the base profile: {unknown}"
-
+        """Check the tailored resume: ids intact, every experience present
+        with at least one bullet, and skills taken from the profile"""
+        if problem := check_tailored_resume(resume, profile):
+            return problem
         return "All ids are valid. You may submit the tailored resume when ready."
 
     @tool
@@ -312,7 +357,11 @@ def build_and_invoke_agent(
 
     @tool
     def submit_tailored_resume(resume: TailoredResume):
-        """Submit the final tailored resume with this. Call exactly once."""
+        """Submit the final tailored resume with this. A resume that fails
+        verify_tailored_resume's checks is sent back instead of stored."""
+        # A bad submit is bounced back to the model rather than stored.
+        if problem := check_tailored_resume(resume, profile):
+            return f"Not submitted: {problem} Fix it and submit again."
         result_queue.put(resume)
         return "Tailored resume submitted successfully"
 
@@ -429,7 +478,10 @@ def build_and_invoke_agent(
         checkpointer = PostgresSaver(conn)
         agent = agent_builder.compile(checkpointer=checkpointer)
 
-        config: RunnableConfig = {"configurable": {"thread_id": run_id}}
+        config: RunnableConfig = {
+            "configurable": {"thread_id": run_id},
+            "recursion_limit": RECURSION_LIMIT,
+        }
         if answer is not None:
             try:
                 agent.invoke(input=Command(resume=answer), config=config)
