@@ -41,10 +41,19 @@ class FakeChatModel:
         return nxt() if callable(nxt) else nxt
 
 
-def ai(content="", tool_calls=None, in_tok=10, out_tok=5, cost=0.001, gen="gen-1"):
+def ai(
+    content="",
+    tool_calls=None,
+    in_tok=10,
+    out_tok=5,
+    cost=0.001,
+    gen="gen-1",
+    invalid_tool_calls=None,
+):
     return AIMessage(
         content=content,
         tool_calls=tool_calls or [],
+        invalid_tool_calls=invalid_tool_calls or [],
         usage_metadata={
             "input_tokens": in_tok,
             "output_tokens": out_tok,
@@ -440,6 +449,10 @@ class TailorAgent(unittest.TestCase):
     def _verify_call(self, resume):
         return tc("verify_tailored_resume", {"resume": resume})
 
+    def _ask(self, question="Want a summary?", **kw):
+        """A clarifying question — pauses the run so a test can stop there."""
+        return tc("ask_clarifying_question", {"question": question}, **kw)
+
     def test_submit_waits_for_feedback_then_done_completes(self):
         resume = {
             "summary": None,
@@ -490,23 +503,131 @@ class TailorAgent(unittest.TestCase):
         self.assertEqual(model.calls[0][-1].content, "done")
 
     def test_system_prompt_carries_shared_writing_rules(self):
-        _, model = self._run([ai("done")])
+        _, model = self._run([self._ask()])
         system = model.calls[0][0]
         self.assertEqual(system.type, "system")
         self.assertIn(writing.BULLET_WRITING_RULES, system.content)
 
     def test_checkpointer_connects_to_its_schema(self):
-        self._run([ai("done")])
+        self._run([self._ask()])
         self.assertEqual(
             self.pg.call_args.kwargs["options"], CHECKPOINT_CONN_OPTIONS
         )
+
+    def test_text_reply_before_submit_is_nudged_back_to_tools(self):
+        # The shape of a real failed run: both get_* tools in one turn, then
+        # the interview questions written as plain text (finish_reason
+        # "stop"). They never reach the user, so the graph sends the model
+        # back to its tools instead of ending the run.
+        fetch_both = ai(
+            "I'll start by fetching the job description and your profile.",
+            tool_calls=[
+                {"name": name, "args": {}, "id": f"tc-{name}", "type": "tool_call"}
+                for name in ("get_job_description", "get_user_profile")
+            ],
+        )
+        outcome, model = self._run(
+            [
+                fetch_both,
+                ai("1. How many users?\n2. Want a summary?"),
+                self._ask("1. How many users?\n2. Want a summary?"),
+            ]
+        )
+        self.assertEqual(outcome.status, "waiting")
+        self.assertEqual(outcome.question, "1. How many users?\n2. Want a summary?")
+        nudge = model.calls[2][-1]
+        self.assertEqual(nudge.type, "human")
+        self.assertEqual(nudge.content, tailor.NUDGE_MESSAGE)
+
+    def test_stalled_model_gives_up_after_max_nudges(self):
+        outcome, model = self._run(
+            [ai("Let me think.") for _ in range(tailor.MAX_NUDGES + 1)]
+        )
+        # The runner turns a completed outcome with no result into a failure.
+        self.assertEqual(outcome.status, "completed")
+        self.assertIsNone(outcome.result)
+        self.assertEqual(len(model.calls), tailor.MAX_NUDGES + 1)
+
+    def test_nudge_cap_resets_after_a_tool_call(self):
+        stall = [ai("Let me think.") for _ in range(tailor.MAX_NUDGES)]
+        outcome, _ = self._run(
+            [*stall, tc("get_job_description", {}), *stall, self._ask()]
+        )
+        self.assertEqual(outcome.status, "waiting")
+
+    def _broken_call(self, name="ask_clarifying_question", tc_id="bad-1"):
+        return ai(
+            invalid_tool_calls=[
+                {
+                    "type": "invalid_tool_call",
+                    "name": name,
+                    "args": '{"question": "1. How many',
+                    "id": tc_id,
+                    "error": "Unterminated string",
+                }
+            ]
+        )
+
+    def test_malformed_tool_call_gets_its_parse_error_back(self):
+        outcome, model = self._run([self._broken_call(), self._ask()])
+        self.assertEqual(outcome.status, "waiting")
+        # Every tool call id needs an answer, or the provider rejects the
+        # next request — the parse error doubles as the retry hint.
+        reply = model.calls[1][-1]
+        self.assertEqual(reply.type, "tool")
+        self.assertEqual(reply.tool_call_id, "bad-1")
+        self.assertEqual(reply.status, "error")
+        self.assertIn("Unterminated string", reply.content)
+
+    def test_repeated_malformed_calls_give_up_after_max_nudges(self):
+        # A model that keeps truncating its submit JSON would otherwise loop
+        # (and bill) until LangGraph's recursion limit.
+        outcome, model = self._run(
+            [
+                self._broken_call("submit_tailored_resume", tc_id=f"bad-{i}")
+                for i in range(tailor.MAX_NUDGES + 1)
+            ]
+        )
+        self.assertEqual(outcome.status, "completed")
+        self.assertIsNone(outcome.result)
+        self.assertEqual(len(model.calls), tailor.MAX_NUDGES + 1)
+
+    def test_malformed_calls_and_text_replies_share_one_cap(self):
+        outcome, model = self._run(
+            [self._broken_call(), ai("Let me think."), ai("Still thinking.")]
+        )
+        self.assertEqual(outcome.status, "completed")
+        self.assertEqual(len(model.calls), tailor.MAX_NUDGES + 1)
+
+    def test_retry_resumes_checkpoint_without_new_kickoff(self):
+        # A redelivered first turn — the crashed run left llm_call pending.
+        def boom():
+            raise RuntimeError("provider down")
+
+        with self.assertRaises(RuntimeError):
+            self._run([tc("get_job_description", {}), boom])
+
+        outcome, model = self._run([self._ask()])
+        self.assertEqual(outcome.status, "waiting")
+        humans = [m for m in model.calls[0] if getattr(m, "type", None) == "human"]
+        self.assertEqual(len(humans), 1)
+        self.assertIn("get_job_description", humans[0].content)
+
+    def test_redelivered_turn_at_a_question_asks_it_again(self):
+        # The turn finished but its ack never landed — the redelivery re-raises
+        # the pending question instead of dropping it for a second kickoff.
+        self._run([self._ask("1. How many users?")])
+        outcome, model = self._run([])
+        self.assertEqual(outcome.status, "waiting")
+        self.assertEqual(outcome.question, "1. How many users?")
+        self.assertEqual(model.calls, [])
 
     def test_tools_hand_back_job_description_and_profile(self):
         _, model = self._run(
             [
                 tc("get_job_description", {}),
                 tc("get_user_profile", {}),
-                ai("done"),
+                self._ask(),
             ]
         )
         self.assertIn("Python engineer", model.calls[1][-1].content)
@@ -556,7 +677,7 @@ class TailorAgent(unittest.TestCase):
         self.assertEqual(usage["generation_ids"], ["gen-1", "gen-2"])
 
     def _verify_feedback(self, resume):
-        _, model = self._run([self._verify_call(resume), ai("done")])
+        _, model = self._run([self._verify_call(resume), self._ask()])
         return _last_tool_msg(model).content
 
     def test_verify_requires_an_experience(self):

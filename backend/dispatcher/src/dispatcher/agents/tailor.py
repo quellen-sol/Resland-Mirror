@@ -6,6 +6,7 @@ from typing import Annotated, Literal, TypedDict
 
 from langchain.chat_models import init_chat_model
 from langchain.messages import (
+    AIMessage,
     AnyMessage,
     HumanMessage,
     SystemMessage,
@@ -47,8 +48,8 @@ Workflow:
    result), and the needs nothing in the profile touches.
 5. Interview the user with ask_clarifying_question. The profile is a summary
    and the user remembers far more, so your questions decide how good the
-   resume can get. Send one message with 3-5 short questions, numbered, one
-   per line, most valuable first:
+   resume can get. Call ask_clarifying_question once with 3-5 short
+   questions, numbered, one per line, most valuable first:
    - Where a bullet probably relates, ask for the detail that would make the
      match obvious: scale, results, who relied on it, what made it hard, what
      the user personally owned.
@@ -67,6 +68,9 @@ Workflow:
    need with specifics, and then ask just the summary question.
 6. Write the tailored resume, call verify_tailored_resume, fix anything it
    reports, then call submit_tailored_resume exactly once.
+
+Until you submit, end every turn with a tool call: the user sees only what
+you send through ask_clarifying_question and submit_tailored_resume.
 
 Tailoring the content:
 - Lead each experience with the bullets that answer the posting's top needs,
@@ -108,6 +112,20 @@ feedback. Treat it as guidance, revise (re-verify ids if they change), and
 submit the improved resume. If they indicate they're satisfied, reply briefly
 and end without another submit call.
 """
+
+# Text outside a tool call never reaches the user, so a reply without one
+# before the resume is submitted is a stalled turn, not an ending. So is a
+# tool call whose arguments didn't parse, at any point. The graph sends the
+# model back to its tools this many times in a row, then gives up — every
+# retry is a billed LLM call.
+MAX_NUDGES = 2
+
+NUDGE_MESSAGE = (
+    "You ended your turn without calling a tool, and the user never sees text "
+    "outside a tool call. To ask the user something, call "
+    "ask_clarifying_question. When the resume is ready, call "
+    "verify_tailored_resume and then submit_tailored_resume."
+)
 
 
 class FetchTailorRunRow(BaseModel):
@@ -193,6 +211,26 @@ class TailoredResume(BaseModel):
 
 class State(TypedDict):
     messages: Annotated[list[AnyMessage], operator.add]
+
+
+def _has_submitted(messages: list[AnyMessage]) -> bool:
+    return any(
+        tool_call["name"] == "submit_tailored_resume"
+        for msg in messages
+        if isinstance(msg, AIMessage)
+        for tool_call in msg.tool_calls
+    )
+
+
+def _stalls_in_a_row(messages: list[AnyMessage]) -> int:
+    """Model turns since its last parsed tool call — progress resets it."""
+    count = 0
+    for msg in reversed(messages):
+        if isinstance(msg, AIMessage):
+            if msg.tool_calls:
+                break
+            count += 1
+    return count
 
 
 @dataclass
@@ -311,21 +349,47 @@ def build_and_invoke_agent(
 
     def tool_node(state: State):
         """Performs the tool call"""
+        last_message = state["messages"][-1]
         result = []
-        for tool_call in state["messages"][-1].tool_calls:
+        for tool_call in last_message.tool_calls:
             tool = tools_by_name[tool_call["name"]]
             observation = tool.invoke(tool_call["args"])
             result.append(
                 ToolMessage(content=observation, tool_call_id=tool_call["id"])
             )
+        # Arguments that didn't parse still go back to the provider as tool
+        # calls, and every call needs an answer — the error is the retry hint.
+        for bad_call in last_message.invalid_tool_calls:
+            result.append(
+                ToolMessage(
+                    content=(
+                        f"Could not parse the arguments for {bad_call['name']}: "
+                        f"{bad_call['error']}. Call it again with valid JSON."
+                    ),
+                    tool_call_id=bad_call["id"],
+                    status="error",
+                )
+            )
         return {"messages": result}
 
-    def should_continue(state: State) -> Literal["tool_node", END]:
-        """Decide if we should continue the loop or stop based upon whether the LLM made a tool call"""
-        last_message = state["messages"][-1]
+    def should_continue(state: State) -> Literal["tool_node", "nudge", END]:
+        """Run the model's tool calls; before a submit, a reply with none is a
+        stall rather than an ending (after one, it's the user signing off)"""
+        messages = state["messages"]
+        last_message = messages[-1]
         if last_message.tool_calls:
             return "tool_node"
+        if _stalls_in_a_row(messages) > MAX_NUDGES:
+            return END
+        if last_message.invalid_tool_calls:
+            return "tool_node"
+        if not _has_submitted(messages):
+            return "nudge"
         return END
+
+    def nudge(state: State):
+        """Send a stalled model back to its tools"""
+        return {"messages": [HumanMessage(content=NUDGE_MESSAGE)]}
 
     def after_tools(state: State) -> Literal["llm_call", "feedback"]:
         """A submitted resume goes to user review; otherwise keep looping"""
@@ -349,10 +413,14 @@ def build_and_invoke_agent(
     agent_builder.add_node("llm_call", llm_call)
     agent_builder.add_node("tool_node", tool_node)
     agent_builder.add_node("feedback", feedback)
+    agent_builder.add_node("nudge", nudge)
 
     agent_builder.add_edge(START, "llm_call")
     agent_builder.add_edge("feedback", "llm_call")
-    agent_builder.add_conditional_edges("llm_call", should_continue, ["tool_node", END])
+    agent_builder.add_edge("nudge", "llm_call")
+    agent_builder.add_conditional_edges(
+        "llm_call", should_continue, ["tool_node", "nudge", END]
+    )
     agent_builder.add_conditional_edges("tool_node", after_tools, ["llm_call", "feedback"])
 
     with get_pg_client(
@@ -370,6 +438,10 @@ def build_and_invoke_agent(
                 # Command(resume) has nothing to feed. None resumes the
                 # pending nodes from the checkpoint instead.
                 agent.invoke(input=None, config=config)
+        elif agent.get_state(config).next:
+            # A redelivered first turn: the checkpoint still has pending nodes,
+            # so resume them — a fresh kickoff would restart the conversation.
+            agent.invoke(input=None, config=config)
         else:
             invoke_param = {
                 "messages": [
