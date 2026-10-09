@@ -2,6 +2,7 @@ import json
 import math
 import time
 from dataclasses import asdict
+from functools import partial
 
 from openrouter import OpenRouter, errors
 from psycopg import Connection
@@ -10,6 +11,13 @@ from shared.checkpoints import CHECKPOINT_TABLES
 from shared.docgen import FormatProfile
 
 from ..agents.docx_parser import UserDocxProfile
+from ..agents.memory import (
+    MAX_MEMORY_FACTS,
+    MemoryBank,
+    MemoryFact,
+    MemorySaveResult,
+    NewMemoryFact,
+)
 from ..agents.suggestions import FetchSuggestionRow, SuggestionsResult
 from ..agents.system_design import (
     FetchSystemDesignSessionRow,
@@ -449,6 +457,89 @@ def set_tailor_failed(pg_client: Connection, run_id: str):
             """,
             (run_id,),
         )
+
+
+def fetch_memory_facts(pg_client: Connection, user_id: str) -> list[MemoryFact]:
+    """The user's memory bank, grouped by topic, oldest first within one."""
+    with pg_client.cursor(row_factory=class_row(MemoryFact)) as cursor:
+        return cursor.execute(
+            """
+            SELECT id, topic, content FROM user_memory_fact
+            WHERE user_id = %s ORDER BY topic, id
+            """,
+            [user_id],
+        ).fetchall()
+
+
+def save_memory_facts(
+    pg_client: Connection,
+    user_id: str,
+    source: str,
+    facts: list[NewMemoryFact],
+) -> MemorySaveResult:
+    """Store facts in the user's bank. Safe to repeat: a tool node re-runs
+    when the graph resumes from an interrupt, so a fact that's already there
+    isn't stored twice, and a rewrite of a fact replaces it in place."""
+    result = MemorySaveResult()
+    with (
+        pg_client.transaction(),
+        pg_client.cursor(row_factory=class_row(MemoryFact)) as cursor,
+    ):
+        count = pg_client.execute(
+            "SELECT count(*) FROM user_memory_fact WHERE user_id = %s", [user_id]
+        ).fetchone()[0]
+        for fact in facts:
+            row = None
+            if fact.replaces_id is not None:
+                # Scoped to the user, so an id from someone else's bank (or
+                # one the user deleted mid-run) falls through to an insert.
+                row = cursor.execute(
+                    """
+                    UPDATE user_memory_fact
+                    SET topic = %s, content = %s, source = %s, updated_at = now()
+                    WHERE id = %s AND user_id = %s
+                    RETURNING id, topic, content
+                    """,
+                    (fact.topic, fact.content, source, fact.replaces_id, user_id),
+                ).fetchone()
+            if row is None:
+                row = cursor.execute(
+                    """
+                    SELECT id, topic, content FROM user_memory_fact
+                    WHERE user_id = %s AND topic = %s AND content = %s
+                    ORDER BY id LIMIT 1
+                    """,
+                    (user_id, fact.topic, fact.content),
+                ).fetchone()
+            if row is None:
+                if count >= MAX_MEMORY_FACTS:
+                    result.full += 1
+                    continue
+                row = cursor.execute(
+                    """
+                    INSERT INTO user_memory_fact (user_id, topic, content, source)
+                    VALUES (%s, %s, %s, %s)
+                    RETURNING id, topic, content
+                    """,
+                    (user_id, fact.topic, fact.content, source),
+                ).fetchone()
+                count += 1
+            result.saved.append(row)
+    return result
+
+
+def load_memory_bank(pg_client: Connection, user_id: str, source: str) -> MemoryBank:
+    """The user's bank for one agent run; facts it saves are marked `source`.
+    A bank that won't load is empty rather than fatal: memory only spares the
+    user repeat questions, so it's no reason to fail a run."""
+    try:
+        facts = fetch_memory_facts(pg_client, user_id)
+    except Exception as e:
+        print(f"Failed to load memory for {user_id}: {e}")
+        facts = []
+    return MemoryBank(
+        facts=facts, save=partial(save_memory_facts, pg_client, user_id, source)
+    )
 
 
 # Closes out the current phase: its elapsed seconds land in phase_durations.

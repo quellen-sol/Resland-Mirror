@@ -9,6 +9,7 @@ Run: .venv/bin/python -m unittest backend.dispatcher.tests.test_db_ops_pg -v
 import json
 import os
 import unittest
+from unittest.mock import patch
 
 import psycopg
 
@@ -24,6 +25,7 @@ from dispatcher.agents.docx_parser import (
     UserProjectEntry,
     UserSkillByCategory,
 )
+from dispatcher.agents.memory import MemoryFact, NewMemoryFact
 from dispatcher.agents.suggestions import BulletSuggestion, SuggestionsResult
 from dispatcher.agents.tailor import (
     TailoredBullet,
@@ -38,7 +40,7 @@ TEST_PG_URL = os.getenv(
     "TEST_PG_URL", "postgres://resland:resland@localhost:5432/resland_test"
 )
 
-# This suite truncates 14 tables in setUp(), so it needs the same guard the
+# This suite truncates 15 tables in setUp(), so it needs the same guard the
 # conftest fixtures use — otherwise it would nuke a non-test database.
 _DESTRUCTIVE_OK, _DESTRUCTIVE_REASON = destructive_db_ok(TEST_PG_URL)
 
@@ -70,7 +72,7 @@ class DbOpsPg(unittest.TestCase):
             ' user_base_experience_bullet, user_base_experience,'
             ' user_base_skill, user_base_education, user_base_project,'
             ' user_social_link, user_upload_job, model_pricing,'
-            ' token_usage, balance_purchase, "user" CASCADE'
+            ' token_usage, balance_purchase, user_memory_fact, "user" CASCADE'
         )
 
     # Seeds ------------------------------------------------------------
@@ -116,6 +118,21 @@ class DbOpsPg(unittest.TestCase):
             " VALUES (%s, %s, 'A job', %s)",
             (rid, uid, model),
         )
+
+    def _fact(self, uid="u1", topic="General", content="A fact", source="USER"):
+        row = self.conn.execute(
+            "INSERT INTO user_memory_fact (user_id, topic, content, source)"
+            " VALUES (%s, %s, %s, %s) RETURNING id",
+            (uid, topic, content, source),
+        ).fetchone()
+        return row[0]
+
+    def _facts(self, uid="u1"):
+        return self.conn.execute(
+            "SELECT id, topic, content, source FROM user_memory_fact"
+            " WHERE user_id = %s ORDER BY id",
+            (uid,),
+        ).fetchall()
 
     def _pricing(self, pid, enabled=True, is_default=False, sort_order=0):
         self.conn.execute(
@@ -495,6 +512,129 @@ class DbOpsPg(unittest.TestCase):
         self.assertEqual(status, "COMPLETED")
 
     # upserts -------------------------------------------------------------
+
+    # memory bank ------------------------------------------------------
+
+    def test_fetch_memory_facts_groups_by_topic_for_one_user(self):
+        self._user("u1")
+        self._user("u2")
+        b1 = self._fact("u1", "Engineer at Beta", "b1")
+        a1 = self._fact("u1", "Engineer at Acme", "a1")
+        b2 = self._fact("u1", "Engineer at Beta", "b2")
+        self._fact("u2", "Engineer at Acme", "someone else's")
+        self.assertEqual(
+            db_ops.fetch_memory_facts(self.conn, "u1"),
+            [
+                MemoryFact(id=a1, topic="Engineer at Acme", content="a1"),
+                MemoryFact(id=b1, topic="Engineer at Beta", content="b1"),
+                MemoryFact(id=b2, topic="Engineer at Beta", content="b2"),
+            ],
+        )
+
+    def test_save_memory_facts_stores_new_facts_with_their_source(self):
+        self._user("u1")
+        result = db_ops.save_memory_facts(
+            self.conn,
+            "u1",
+            "TAILOR",
+            [
+                NewMemoryFact(topic="General", content="Speaks Spanish."),
+                NewMemoryFact(topic="Preferences", content="Wants a summary."),
+            ],
+        )
+        rows = self._facts("u1")
+        self.assertEqual(
+            [(r[1], r[2], r[3]) for r in rows],
+            [
+                ("General", "Speaks Spanish.", "TAILOR"),
+                ("Preferences", "Wants a summary.", "TAILOR"),
+            ],
+        )
+        self.assertEqual([f.id for f in result.saved], [r[0] for r in rows])
+        self.assertEqual(result.full, 0)
+
+    def test_save_memory_facts_twice_stores_once(self):
+        # A resumed interrupt re-runs the tool node, so the same batch can
+        # arrive twice; the second save hands back the existing row.
+        self._user("u1")
+        facts = [NewMemoryFact(topic="General", content="Speaks Spanish.")]
+        first = db_ops.save_memory_facts(self.conn, "u1", "TAILOR", facts)
+        second = db_ops.save_memory_facts(self.conn, "u1", "TAILOR", facts)
+        self.assertEqual(len(self._facts("u1")), 1)
+        self.assertEqual(second.saved, first.saved)
+
+    def test_save_memory_facts_rewrites_a_replaced_fact_in_place(self):
+        self._user("u1")
+        fid = self._fact("u1", "Engineer at Acme", "2M events a day", "USER")
+        before = self.conn.execute(
+            "SELECT updated_at FROM user_memory_fact WHERE id = %s", (fid,)
+        ).fetchone()[0]
+        fix = NewMemoryFact(
+            topic="Engineer at Acme", content="3M events a day", replaces_id=fid
+        )
+        result = db_ops.save_memory_facts(self.conn, "u1", "SUGGESTION", [fix])
+        # Replaying the same rewrite is a no-op.
+        db_ops.save_memory_facts(self.conn, "u1", "SUGGESTION", [fix])
+        self.assertEqual(
+            self._facts("u1"),
+            [(fid, "Engineer at Acme", "3M events a day", "SUGGESTION")],
+        )
+        self.assertEqual(
+            result.saved,
+            [MemoryFact(id=fid, topic="Engineer at Acme", content="3M events a day")],
+        )
+        after = self.conn.execute(
+            "SELECT updated_at FROM user_memory_fact WHERE id = %s", (fid,)
+        ).fetchone()[0]
+        self.assertGreater(after, before)
+
+    def test_save_memory_facts_never_touches_another_users_fact(self):
+        self._user("u1")
+        self._user("u2")
+        theirs = self._fact("u2", "General", "Theirs")
+        db_ops.save_memory_facts(
+            self.conn,
+            "u1",
+            "TAILOR",
+            [NewMemoryFact(topic="General", content="Mine", replaces_id=theirs)],
+        )
+        self.assertEqual(self._facts("u2"), [(theirs, "General", "Theirs", "USER")])
+        # The fact still lands in the caller's own bank.
+        self.assertEqual([r[2] for r in self._facts("u1")], ["Mine"])
+
+    def test_save_memory_facts_adds_a_replacement_for_a_deleted_fact(self):
+        # The user can delete a fact on /memory mid-run.
+        self._user("u1")
+        gone = self._fact("u1")
+        self.conn.execute("DELETE FROM user_memory_fact WHERE id = %s", (gone,))
+        result = db_ops.save_memory_facts(
+            self.conn,
+            "u1",
+            "TAILOR",
+            [NewMemoryFact(topic="General", content="New", replaces_id=gone)],
+        )
+        self.assertEqual([r[2] for r in self._facts("u1")], ["New"])
+        self.assertNotEqual(result.saved[0].id, gone)
+
+    def test_save_memory_facts_stops_adding_at_the_cap(self):
+        self._user("u1")
+        kept = self._fact("u1", "General", "one")
+        self._fact("u1", "General", "two")
+        with patch.object(db_ops, "MAX_MEMORY_FACTS", 2):
+            result = db_ops.save_memory_facts(
+                self.conn,
+                "u1",
+                "TAILOR",
+                [
+                    NewMemoryFact(topic="General", content="three"),
+                    NewMemoryFact(topic="General", content="ONE", replaces_id=kept),
+                    # Already in the bank, so it doesn't need room.
+                    NewMemoryFact(topic="General", content="two"),
+                ],
+            )
+        self.assertEqual(result.full, 1)
+        self.assertEqual([r[2] for r in self._facts("u1")], ["ONE", "two"])
+        self.assertEqual([f.content for f in result.saved], ["ONE", "two"])
 
     def test_upsert_resume_format_insert_then_update(self):
         self._user()

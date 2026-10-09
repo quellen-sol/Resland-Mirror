@@ -10,6 +10,7 @@ from .db_ops import (
     complete_suggestion,
     default_model_spec,
     fetch_suggestion_rows,
+    load_memory_bank,
     record_token_usage,
     set_suggestion_failed,
     set_suggestion_question,
@@ -65,9 +66,16 @@ class SuggestionsRunner(LocalThreadJobRunner):
                     if not model_spec:
                         model_spec = SUGGESTIONS_MODEL
 
+                    memory = load_memory_bank(pg_conn, user_id, "SUGGESTION")
                     try:
                         outcome = build_and_invoke_agent(
-                            session_id, answer, rows, model_spec, usage, prompt
+                            session_id,
+                            answer,
+                            rows,
+                            model_spec,
+                            usage,
+                            prompt,
+                            memory=memory,
                         )
                     except Exception as e:
                         # Leave the session resumable — the checkpointed graph is

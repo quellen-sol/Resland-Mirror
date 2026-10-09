@@ -11,6 +11,7 @@ from .db_ops import (
     default_model_spec,
     fetch_tailor_profile,
     fetch_tailor_run,
+    load_memory_bank,
     record_token_usage,
     set_tailor_question,
     set_tailor_result,
@@ -75,9 +76,16 @@ class TailorRunner(LocalThreadJobRunner):
                     if not profile.experiences:
                         raise RunnerError("No experience to tailor")
 
+                    memory = load_memory_bank(pg_conn, run.user_id, "TAILOR")
                     try:
                         outcome = build_and_invoke_agent(
-                            run_id, answer, run, profile, model_spec, usage
+                            run_id,
+                            answer,
+                            run,
+                            profile,
+                            model_spec,
+                            usage,
+                            memory=memory,
                         )
                     except Exception as e:
                         # Leave the run resumable — the checkpointed graph can be

@@ -15,6 +15,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "cn";
+import MemoryNote from "@/components/memory-note";
 import ModelSelect from "@/components/model-select";
 import {
   ApiError,
@@ -497,6 +498,7 @@ export default function SuggestionDialog({
                   </Button>
                 )}
               </div>
+              {asking && <MemoryNote />}
             </div>
           )}
 
