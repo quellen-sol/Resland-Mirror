@@ -30,7 +30,7 @@ free data structures and algorithms study center.
   cost the provider reports. An append-only ledger keyed per conversation turn makes a
   redelivered queue message free. Payments go through Stripe (prepaid balance, webhook
   driven).
-- **Tested.** About 770 backend tests across three Python packages, plus a fixture corpus of
+- **Tested.** About 1,000 backend tests across four Python packages, plus a fixture corpus of
   hard PDF layouts. CI runs the backend suites against a real Postgres on every pull request.
 
 ## Features
@@ -38,9 +38,12 @@ free data structures and algorithms study center.
 | Feature | What happens |
 |---|---|
 | **Resume import** | Upload a PDF or DOCX. A parser agent turns it into a structured profile: jobs, bullets, skills, education, projects. |
-| **Bullet coaching** | Pick a job or a single bullet. The agent asks 2-4 targeted questions ("About how many orders a day did the checkout service handle?"), then writes three different rewrites per bullet. Apply one, or ask for another round. |
+| **Bullet coaching** | Pick a job or a single bullet. The agent asks up to four targeted questions ("About how many orders a day did the checkout service handle?"), then writes three different rewrites per bullet. Apply one, or ask for another round. |
 | **Tailoring** | Paste a job posting. The agent works out what the posting values most, asks about the matching work in your history, and rewrites and reorders your resume around it. You review it, ask for revisions, then save, edit and export. |
+| **Memory bank** | The facts you give in those interviews are saved, so later coaching and tailoring runs use them instead of asking again. You can review and edit them on the Memory page. |
 | **Export** | Rebuilds a `.docx` from your profile, or from a tailored version, using the formatting captured from your original upload. |
+| **Tailor with Claude** | A personal MCP server lets Claude Code or Claude Desktop tailor your resume against your Resland account on your own Claude plan, with the same writing rules and memory bank as the site's agent. |
+| **Your data** | Download everything Resland stores about you as a zip, or delete your account and its Auth0 login. |
 | **System design interviews** | A 45-minute mock interview in four timed phases, with an Excalidraw canvas for your diagram. An interviewer agent runs it, then a separate grader scores you against a six-part rubric and gives a letter grade, a hire signal and written feedback. |
 | **DSA study center** | 28 topics, each worked example written in TypeScript, Python, Go, C# and Java. Every example is also a test: all five versions are run and their output is checked. |
 
@@ -54,8 +57,9 @@ free data structures and algorithms study center.
 | Documents | pdfminer.six, python-docx, custom layout analysis and `.docx` renderer |
 | Messaging | RabbitMQ 4 via aio-pika (topic exchanges, durable queues, dead-letter queues) |
 | Data | PostgreSQL 18, schema defined as a Prisma-Next contract |
-| Auth | Auth0 (Next.js session, JWT bearer tokens to the API) |
-| Infra | AWS: ECS Fargate, Amazon MQ, RDS, S3, ALB, Route 53, ACM. Terraform. Docker. |
+| Auth | Auth0 (Next.js session, JWT bearer tokens to the API, device flow for the MCP server) |
+| MCP | MCP Python SDK (stdio server for Claude Code and Claude Desktop) |
+| Infra | Vercel (frontend). AWS: ECS Fargate, Amazon MQ, RDS, S3, ALB, Route 53, ACM. Terraform. Docker. |
 | Tooling | uv workspace, pnpm, ruff, pytest, `node --test`, GitHub Actions |
 
 ## Architecture
@@ -63,6 +67,8 @@ free data structures and algorithms study center.
 ```mermaid
 flowchart LR
     user(["Browser"])
+    claude(["Claude Code / Desktop"])
+    mcp["resland-mcp<br/>(local, stdio)"]
 
     subgraph web["Next.js frontend"]
         rsc["Server components<br/>and server actions"]
@@ -86,6 +92,8 @@ flowchart LR
     user --> client
     rsc -- "Prisma-Next" --> pg
     client -- "Bearer JWT" --> api
+    claude --> mcp
+    mcp -- "Bearer JWT" --> api
     api -. "JWKS" .-> auth0
     rsc -. "session" .-> auth0
     api --> pg
@@ -105,13 +113,19 @@ with two entrypoints (`uv run api` and `uv run dispatcher`).
   the Prisma-Next ORM, and simple profile edits go through server actions. Anything that
   costs money or starts an agent goes through the API.
 - **API** ([`backend/api/`](backend/api/)). Verifies the Auth0 JWT, checks the user's balance,
-  writes the job row, and publishes a message. It never waits on a model.
+  writes the job row, and publishes a message. It never waits on a model. It also serves
+  the account export and deletion, and the profile, memory and tailored-resume endpoints
+  the MCP server uses.
 - **Dispatcher** ([`backend/dispatcher/`](backend/dispatcher/)). One consumer per queue. Each
   job runs on a worker thread, writes its progress and results back to the job's row, and
   records what it cost.
 - **Shared** ([`backend/shared/`](backend/shared/)). The AMQP client and job message
-  dataclasses, the document IR and `.docx` renderer, and the system design rubric and
-  diagram analysis. Both services import it.
+  dataclasses, the document IR and `.docx` renderer, the writing and memory rules, and the
+  system design rubric and diagram analysis. Both services import it, and so does the MCP
+  server.
+
+The fourth Python package, [`backend/resland-mcp/`](backend/resland-mcp/), isn't deployed.
+It runs on the user's own machine (see [Tailoring with Claude](#tailoring-with-claude-mcp-server)).
 
 ### Lifecycle of a job
 
@@ -185,9 +199,15 @@ The multi-turn agents (suggestions, tailor, system design) share one shape:
 - Job postings, resumes and candidate notes are wrapped as data in the prompts. Any
   instructions inside them are ignored.
 - The resume-writing agents share one set of writing rules
-  ([`writing.py`](backend/dispatcher/src/dispatcher/agents/writing.py)): never invent metrics,
+  ([`shared/writing.py`](backend/shared/src/shared/writing.py)): never invent metrics,
   tools or scope, no placeholder numbers, and none of the words that make a resume read as
   machine-written.
+- **The interviewing agents remember answers.** Coaching and tailoring read the user's
+  memory bank along with the profile, and save the lasting facts from each answer with a
+  `remember_facts` tool, so a later run doesn't ask again. The whole bank goes into every
+  run's context, so it's capped at 200 facts. A batch with a bad entry is rejected whole,
+  so the model can resend it without duplicating the good ones. Limits and prompt rules are
+  in [`shared/memory.py`](backend/shared/src/shared/memory.py).
 
 ```mermaid
 flowchart TD
@@ -195,7 +215,7 @@ flowchart TD
     llm -->|"tool calls"| tools["tool_node"]
     tools -->|"ask_clarifying_question"| ask["⏸ interrupt: question to the user"]
     tools -->|"submit passed validation"| review["⏸ interrupt: result to the user"]
-    tools -->|"read / verify tools"| llm
+    tools -->|"read / verify / remember tools"| llm
     ask -->|"answer arrives as the next message"| llm
     review -->|"user asks for changes"| llm
     llm -->|"no tool call before submitting<br/>(tailor only)"| nudge["nudge"]
@@ -248,8 +268,8 @@ user's own resume.
 
 | | |
 |---|---|
-| **Tools** | `get_user_bullet_points`, `ask_clarifying_question`, `verify_final_suggestions`, `submit_suggestions` |
-| **Flow** | Read the job and its bullets → ask 2-4 specific questions about scale, results, ownership and difficulty (at most one follow-up round) → write three options per bullet, each leading with a different true strength of the work → verify → submit → wait for review |
+| **Tools** | `get_user_bullet_points`, `ask_clarifying_question`, `remember_facts`, `verify_final_suggestions`, `submit_suggestions` |
+| **Flow** | Read the job, its bullets and the memory bank → ask up to 4 specific questions about scale, results, ownership and difficulty that memory doesn't already answer (at most one follow-up round) → save the lasting facts to memory → write three options per bullet, each leading with a different true strength of the work → verify → submit → wait for review |
 | **Review** | Applying an option writes it to the profile and ends the session. Any reply ("shorter", "lead with the cost savings") gets a fresh set of three, with the earlier options still in context. |
 | **Checks** | Every bullet id belongs to the session, exactly three options per bullet, no blank options, and no duplicates after ignoring case, spacing and a trailing period. |
 
@@ -260,8 +280,8 @@ user's own resume.
 
 | | |
 |---|---|
-| **Tools** | `get_job_description`, `get_user_profile`, `ask_clarifying_question`, `verify_tailored_resume`, `submit_tailored_resume` |
-| **Flow** | Read the posting the way its hiring manager would and pick the 4-6 things it values most → map them onto the profile (bullets that already prove a need, bullets that relate but say too little, needs nothing covers) → ask 3-5 questions tied to the posting → rewrite bullets so the matching work comes first, reorder skills, write a summary if asked → verify → submit |
+| **Tools** | `get_job_description`, `get_user_profile`, `ask_clarifying_question`, `remember_facts`, `verify_tailored_resume`, `submit_tailored_resume` |
+| **Flow** | Read the posting the way its hiring manager would and pick the 4-6 things it values most → map them onto the profile and memory (what already proves a need, bullets that relate but say too little, needs nothing covers) → ask up to 5 questions tied to the posting that memory doesn't already answer → save the lasting facts to memory → rewrite bullets so the matching work comes first, reorder skills, write a summary if asked → verify → submit |
 | **Review** | The user can ask for revisions in plain language. The agent revises and resubmits on the same checkpointed thread. Saving copies the result into an editable tailored resume that exports to `.docx`. |
 | **Checks** | Every experience in the profile is still present, so the work history shows no gaps. Each experience keeps at least one bullet. Every bullet id stays under the experience it came from. Every skill comes from the user's profile. |
 
@@ -316,6 +336,24 @@ the diagram as a graph diff. That keeps long interviews from re-sending the whol
 every turn. In the deep dive, simple heuristics about the design are added as hints for the
 interviewer to check against the diagram.
 
+## Tailoring with Claude (MCP server)
+
+[`backend/resland-mcp/`](backend/resland-mcp/) is a personal MCP server for Claude Code and
+Claude Desktop. Claude does the writing on the user's own Claude plan, so nothing goes
+through OpenRouter and nothing is charged to the Resland balance.
+
+- It runs locally over stdio and signs in with Auth0's device flow, so every call reaches
+  the API as the user (`GET /profile`, `GET`/`POST /memory`, `/tailored`).
+- Its tools read the profile and memory bank, add facts to memory, and save, edit and export
+  tailored resumes to the same board the site uses.
+- A `get_tailoring_guide` tool and a `tailor` prompt serve the site's own bullet-writing and
+  memory rules from `shared`, so Claude follows the same rules as the tailor agent.
+- Contract tests drive its tools against the real API routes and a live Postgres, so a
+  change to those endpoints can't silently break it.
+
+Setup (an Auth0 Native app, `resland-mcp login`, `claude mcp add`) is in its
+[README](backend/resland-mcp/README.md).
+
 ## Billing and cost controls
 
 LLM usage is billed against a prepaid balance. More detail in
@@ -338,11 +376,15 @@ LLM usage is billed against a prepaid balance. More detail in
 
 ```
 backend/
-  api/          FastAPI app: auth, uploads, job submission, tailored resumes, billing, admin
+  api/          FastAPI app: auth, uploads, job submission, tailored resumes, memory,
+                billing, admin, account export and deletion
   dispatcher/   AMQP consumers, job runners, LangGraph agents, PDF/DOCX layout parsers
-  shared/       AMQP client and job types, .docx renderer, PDF IR, system design rubric
+  shared/       AMQP client and job types, .docx renderer, PDF IR, writing and memory
+                rules, system design rubric
+  resland-mcp/  Personal MCP server for tailoring with Claude Code or Claude Desktop
 frontend/
-  app/          Next.js routes: dashboard, tailor, tailored, system-design, dsa, billing, admin
+  app/          Next.js routes: dashboard, tailor, tailored, memory, system-design, dsa,
+                billing, account, admin
   content/dsa/  Study center topics, with runnable examples in five languages
   prisma/       contract.prisma, the database schema for the whole system
 terraform/      AWS infrastructure (ECS, Amazon MQ, RDS, S3, DNS)
@@ -357,7 +399,8 @@ The schema is one [Prisma-Next contract](frontend/prisma/contract.prisma) shared
 languages: the frontend uses the generated ORM, and the Python services write plain SQL
 with psycopg. The main groups of tables:
 
-- **Profile.** `user`, experiences, bullets, skills, education, projects, social links.
+- **Profile.** `user`, experiences, bullets, skills, education, projects, social links, and
+  the memory bank (`user_memory_fact`).
 - **Agent sessions.** `user_suggestion`, `user_tailor_run`, `user_system_design_session`
   and its messages. Each row holds the status, the pending question and the result the UI
   polls for.
@@ -370,9 +413,20 @@ LangGraph's checkpoint tables live in their own `langgraph` schema. The dispatch
 them on startup, so they stay outside the contract and Prisma's schema sync never touches
 them.
 
+**Deleting an account** ([`backend/api/src/api/account/`](backend/api/src/api/account/))
+erases every row and S3 file the user owns, but keeps `balance_purchase` and `token_usage`,
+re-pointed at a placeholder user with no personal data, so revenue and usage totals still
+add up. It locks the user row and refuses while a job is still running. An
+`account_deletion` row that holds only the Auth0 id lets a background sweeper retry deleting
+the Auth0 login, and makes the API and the frontend refuse sessions issued before the
+deletion. Live-schema tests fail if a new table that references a user isn't added to the
+erase and export lists, so nothing new can be left behind.
+
 ## Infrastructure
 
-The API and dispatcher run on AWS in `us-east-2`, defined in [`terraform/`](terraform/):
+The frontend is hosted on Vercel, which also builds a preview deployment for every pull
+request. The API and dispatcher run on AWS in `us-east-2`, defined in
+[`terraform/`](terraform/):
 
 - **ECS Fargate.** One service for the API behind an ALB with an ACM certificate, and one
   for the dispatcher. Both come from a reusable module and the same image.
@@ -414,6 +468,7 @@ known pitfalls.
 cd backend/shared     && uv run pytest --cov
 cd backend/api        && uv run pytest --cov
 cd backend/dispatcher && uv run pytest --cov
+cd backend/resland-mcp && uv run pytest --cov
 cd frontend           && pnpm test && pnpm lint && npx tsc --noEmit
 ```
 
@@ -424,7 +479,8 @@ cd frontend           && pnpm test && pnpm lint && npx tsc --noEmit
   interrupt and resume paths, the validators, stalls, crash recovery and billing.
 - The PDF parser is tested against a generated corpus of hard layouts (sidebars, two
   columns, icon grids, entries split across pages, CJK names, scanned pages with no text)
-  plus real resumes. Separate fidelity tests check that DOCX and PDF formatting survive a
-  round trip through the renderer.
+  plus real-world resume layouts (a Canva export and a Google Docs export) whose text was
+  rewritten as a fictional persona. Separate fidelity tests check that DOCX and PDF
+  formatting survive a round trip through the renderer.
 - CI ([`.github/workflows/pr-ci.yml`](.github/workflows/pr-ci.yml)) applies the schema to
-  Postgres 18 and runs all three backend suites on every pull request.
+  Postgres 18 and runs all four backend suites on every pull request.
