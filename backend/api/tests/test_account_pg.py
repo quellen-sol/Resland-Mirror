@@ -64,6 +64,7 @@ def pii(tag):
         "job": f"Senior Engineer at Initech ({tag})",
         "answer": f"My private interview answer ({tag})",
         "bullet": f"Scaled the payments ledger ({tag})",
+        "fact": f"The ledger handled 2M payments a day ({tag})",
     }
 
 
@@ -288,6 +289,11 @@ async def seed_user(pg, uid, *, tag="alpha", stripe_customer="cus_1"):
     await pg.execute(
         "INSERT INTO user_dsa_progress (user_id, topic) VALUES (%s, 'two-pointers')",
         (uid,),
+    )
+    await pg.execute(
+        "INSERT INTO user_memory_fact (user_id, topic, content, source)"
+        " VALUES (%s, 'Engineer at Initech', %s, 'TAILOR')",
+        (uid, p["fact"]),
     )
     return {
         "experience": exp,
@@ -1104,6 +1110,9 @@ async def test_export_contains_every_row_and_file(pg, checkpoint_tables, externa
         p["answer"],
     ]
     assert [d["topic"] for d in data["dsa_progress"]] == ["two-pointers"]
+    assert [(m["topic"], m["content"], m["source"]) for m in data["memory"]] == [
+        ("Engineer at Initech", p["fact"], "TAILOR")
+    ]
     assert sorted(p["id"] for p in data["purchases"]) == sorted(
         [mine["paid_checkout"], mine["open_checkout"]]
     )

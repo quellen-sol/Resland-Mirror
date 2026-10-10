@@ -27,6 +27,7 @@ import {
 } from "@/lib/api";
 import ApiUnavailable from "@/components/api-unavailable";
 import HelpTip from "@/components/help-tip";
+import MemoryNote from "@/components/memory-note";
 import { groupSkills } from "@/lib/skills";
 
 const MAX_JD_CHARS = 10_000;
@@ -538,6 +539,7 @@ export default function TailorForm({
                       Cancel
                     </Button>
                   </div>
+                  <MemoryNote />
                 </CardContent>
               </Card>
             )}

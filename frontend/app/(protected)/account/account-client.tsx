@@ -153,8 +153,8 @@ export default function AccountClient({ accessToken }: { accessToken: string }) 
           </CardTitle>
           <CardDescription className="text-zinc-400">
             A .zip with everything Resland stores about you: your profile,
-            tailored resumes, suggestions, mock interview transcripts and
-            reports, purchases and charges, and the files you uploaded or
+            memory, tailored resumes, suggestions, mock interview transcripts
+            and reports, purchases and charges, and the files you uploaded or
             exported. A README inside explains each part.
           </CardDescription>
         </CardHeader>
@@ -172,10 +172,10 @@ export default function AccountClient({ accessToken }: { accessToken: string }) 
             <Trash2 className="size-4" /> Delete Your Account
           </CardTitle>
           <CardDescription className="text-zinc-400">
-            Permanently deletes your profile, uploaded and generated resumes,
-            tailored resumes, suggestions, mock interviews and study progress,
-            and removes your sign-in. Records of your purchases and charges
-            are kept for our accounting, no longer linked to you. This
+            Permanently deletes your profile, memory, uploaded and generated
+            resumes, tailored resumes, suggestions, mock interviews and study
+            progress, and removes your sign-in. Records of your purchases and
+            charges are kept for our accounting, no longer linked to you. This
             can&apos;t be undone.
           </CardDescription>
         </CardHeader>

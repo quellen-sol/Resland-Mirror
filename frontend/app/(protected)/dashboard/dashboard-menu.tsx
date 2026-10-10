@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import {
+  Brain,
   CircleHelp,
   Files,
   GraduationCap,
@@ -40,6 +41,7 @@ const LINK_ICONS: Partial<Record<DashboardMenuItemKey, LucideIcon>> = {
   dsa: GraduationCap,
   admin: ShieldCheck,
   "edit-profile": PenLine,
+  memory: Brain,
   billing: Zap,
   account: UserCog,
   help: CircleHelp,

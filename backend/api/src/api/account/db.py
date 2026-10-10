@@ -47,6 +47,7 @@ ERASED_TABLES = (
     "user_generated_resume",
     "user_upload_job",
     "user_dsa_progress",
+    "user_memory_fact",
 )
 
 # Billing ledger: kept for accounting, re-pointed at a tombstone user.

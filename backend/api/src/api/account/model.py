@@ -197,6 +197,12 @@ EXPORT_SECTIONS: tuple[ExportSection, ...] = (
         "dsa_progress", "user_dsa_progress", ("topic", "created_at"), "created_at"
     ),
     ExportSection(
+        "memory",
+        "user_memory_fact",
+        ("id", "topic", "content", "source", "created_at", "updated_at"),
+        "topic, id",
+    ),
+    ExportSection(
         "purchases",
         "balance_purchase",
         ("id", "cents", "amount_cents", "currency", "status", "created_at"),

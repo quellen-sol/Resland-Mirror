@@ -1,0 +1,122 @@
+[
+  {
+    "id": "table.user_memory_fact",
+    "label": "Create table \"user_memory_fact\"",
+    "summary": "Creates table \"user_memory_fact\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "user_memory_fact"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"user_memory_fact\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_memory_fact\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"user_memory_fact\"",
+        "sql": "CREATE TABLE \"public\".\"user_memory_fact\" (\n  \"content\" text NOT NULL,\n  \"created_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"id\" SERIAL NOT NULL,\n  \"source\" text NOT NULL,\n  \"topic\" text NOT NULL,\n  \"updated_at\" timestamptz DEFAULT (now()) NOT NULL,\n  \"user_id\" text NOT NULL,\n  PRIMARY KEY (\"id\"),\n  CONSTRAINT \"user_memory_fact_source_check_e8ce388e\" CHECK (\"source\" IN ('TAILOR', 'SUGGESTION', 'USER'))\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"user_memory_fact\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_memory_fact\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "index.user_memory_fact.user_memory_fact_user_id_idx_6c952402",
+    "label": "Create index \"user_memory_fact_user_id_idx_6c952402\" on \"user_memory_fact\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "index",
+        "name": "user_memory_fact_user_id_idx_6c952402",
+        "table": "user_memory_fact"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure index \"user_memory_fact_user_id_idx_6c952402\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_memory_fact_user_id_idx_6c952402\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create index \"user_memory_fact_user_id_idx_6c952402\"",
+        "sql": "CREATE INDEX \"user_memory_fact_user_id_idx_6c952402\" ON \"public\".\"user_memory_fact\" (\"user_id\")",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify index \"user_memory_fact_user_id_idx_6c952402\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"user_memory_fact_user_id_idx_6c952402\""
+        ]
+      }
+    ]
+  },
+  {
+    "id": "foreignKey.user_memory_fact.user_memory_fact_user_id_fkey",
+    "label": "Add foreign key \"user_memory_fact_user_id_fkey\" on \"user_memory_fact\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "foreignKey",
+        "name": "user_memory_fact_user_id_fkey",
+        "table": "user_memory_fact"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure FK \"user_memory_fact_user_id_fkey\" does not exist",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_memory_fact_user_id_fkey",
+          "public",
+          "\"public\".\"user_memory_fact\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add FK \"user_memory_fact_user_id_fkey\"",
+        "sql": "ALTER TABLE \"public\".\"user_memory_fact\"\nADD CONSTRAINT \"user_memory_fact_user_id_fkey\"\nFOREIGN KEY (\"user_id\")\nREFERENCES \"public\".\"user\" (\"auth0_id\")"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify FK \"user_memory_fact_user_id_fkey\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"pg_constraint\" AS \"c\" INNER JOIN \"pg_namespace\" AS \"n\" ON \"n\".\"oid\" = \"c\".\"connamespace\" WHERE (\"c\".\"conname\" = $1 AND \"n\".\"nspname\" = $2 AND \"c\".\"conrelid\" = to_regclass($3))) AS \"result\"",
+        "params": [
+          "user_memory_fact_user_id_fkey",
+          "public",
+          "\"public\".\"user_memory_fact\""
+        ]
+      }
+    ]
+  }
+]

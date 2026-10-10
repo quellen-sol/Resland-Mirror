@@ -64,6 +64,10 @@
       "model": "UserGeneratedResume",
       "namespace": "public"
     },
+    "user_memory_fact": {
+      "model": "UserMemoryFact",
+      "namespace": "public"
+    },
     "user_resume_format": {
       "model": "UserResumeFormat",
       "namespace": "public"
@@ -115,6 +119,23 @@
               {
                 "name": "FAILED",
                 "value": "FAILED"
+              }
+            ]
+          },
+          "MemorySource": {
+            "codecId": "pg/text@1",
+            "members": [
+              {
+                "name": "TAILOR",
+                "value": "TAILOR"
+              },
+              {
+                "name": "SUGGESTION",
+                "value": "SUGGESTION"
+              },
+              {
+                "name": "USER",
+                "value": "USER"
               }
             ]
           },
@@ -1689,6 +1710,109 @@
               },
               "namespaceId": "public",
               "table": "user_generated_resume"
+            }
+          },
+          "UserMemoryFact": {
+            "fields": {
+              "content": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "created_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/int4@1",
+                  "kind": "scalar"
+                }
+              },
+              "source": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                },
+                "valueSet": {
+                  "entityKind": "enum",
+                  "entityName": "MemorySource",
+                  "namespaceId": "public",
+                  "plane": "domain"
+                }
+              },
+              "topic": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
+              "updated_at": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "kind": "scalar"
+                }
+              },
+              "user_id": {
+                "nullable": false,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              }
+            },
+            "relations": {
+              "user": {
+                "cardinality": "N:1",
+                "on": {
+                  "localFields": [
+                    "user_id"
+                  ],
+                  "targetFields": [
+                    "auth0_id"
+                  ]
+                },
+                "to": {
+                  "model": "User",
+                  "namespace": "public"
+                }
+              }
+            },
+            "storage": {
+              "fields": {
+                "content": {
+                  "column": "content"
+                },
+                "created_at": {
+                  "column": "created_at"
+                },
+                "id": {
+                  "column": "id"
+                },
+                "source": {
+                  "column": "source"
+                },
+                "topic": {
+                  "column": "topic"
+                },
+                "updated_at": {
+                  "column": "updated_at"
+                },
+                "user_id": {
+                  "column": "user_id"
+                }
+              },
+              "namespaceId": "public",
+              "table": "user_memory_fact"
             }
           },
           "UserResumeFormat": {
@@ -3898,6 +4022,104 @@
               },
               "uniques": []
             },
+            "user_memory_fact": {
+              "checks": [
+                {
+                  "expression": "\"source\" IN ('TAILOR', 'SUGGESTION', 'USER')",
+                  "name": "user_memory_fact_source_check_e8ce388e",
+                  "prefix": "user_memory_fact_source_check"
+                }
+              ],
+              "columns": {
+                "content": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "created_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "id": {
+                  "codecId": "pg/int4@1",
+                  "default": {
+                    "expression": "autoincrement()",
+                    "kind": "function"
+                  },
+                  "nativeType": "int4",
+                  "nullable": false
+                },
+                "source": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false,
+                  "valueSet": {
+                    "entityKind": "valueSet",
+                    "entityName": "MemorySource",
+                    "namespaceId": "public",
+                    "plane": "storage"
+                  }
+                },
+                "topic": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                },
+                "updated_at": {
+                  "codecId": "pg/timestamptz-temporal@1",
+                  "default": {
+                    "expression": "now()",
+                    "kind": "function"
+                  },
+                  "nativeType": "timestamptz",
+                  "nullable": false
+                },
+                "user_id": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": false
+                }
+              },
+              "foreignKeys": [
+                {
+                  "source": {
+                    "columns": [
+                      "user_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user_memory_fact"
+                  },
+                  "target": {
+                    "columns": [
+                      "auth0_id"
+                    ],
+                    "namespaceId": "public",
+                    "tableName": "user"
+                  }
+                }
+              ],
+              "indexes": [
+                {
+                  "columns": [
+                    "user_id"
+                  ],
+                  "name": "user_memory_fact_user_id_idx_6c952402",
+                  "prefix": "user_memory_fact_user_id_idx",
+                  "unique": false
+                }
+              ],
+              "primaryKey": {
+                "columns": [
+                  "id"
+                ]
+              },
+              "uniques": []
+            },
             "user_resume_format": {
               "columns": {
                 "captured_at": {
@@ -4770,6 +4992,14 @@
                 "FAILED"
               ]
             },
+            "MemorySource": {
+              "kind": "valueSet",
+              "values": [
+                "TAILOR",
+                "SUGGESTION",
+                "USER"
+              ]
+            },
             "PurchaseStatus": {
               "kind": "valueSet",
               "values": [
@@ -4871,7 +5101,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "2a58999b51b3503b8c6569732cb669bc995b8dc9956278b249faa686b3f7b57c"
+    "storageHash": "376e701151882455ac9a9290b31faefbaf5d512847d139694f39f2a9a7745c4f"
   },
   "capabilities": {
     "postgres": {

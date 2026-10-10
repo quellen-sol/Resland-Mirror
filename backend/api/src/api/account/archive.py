@@ -49,6 +49,8 @@ Your data as JSON. Dates are UTC (ISO 8601); money is in US cents.
                    Your mock interviews: notes, estimates, diagram, the full
                    transcript (messages), and the graded report.
   dsa_progress     DSA Study Center topics you marked as studied.
+  memory           Facts about your work that tailoring and suggestions
+                   saved from your answers, or that you added on /memory.
   purchases        Your balance purchases.
   usage            Each AI action you were charged for, and what it cost.
 
