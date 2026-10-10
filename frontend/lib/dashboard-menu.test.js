@@ -14,6 +14,7 @@ test("non-admin menu omits the admin link but keeps every other item", () => {
     "edit-profile",
     "memory",
     "billing",
+    "account",
     "help",
     "sign-out",
   ]);
@@ -32,6 +33,7 @@ test("admin menu inserts the admin link between export and edit-profile", () => 
     "edit-profile",
     "memory",
     "billing",
+    "account",
     "help",
     "sign-out",
   ]);
@@ -42,4 +44,9 @@ test("every navigational item carries an href", () => {
     if (item.key === "upload" || item.key === "export") continue;
     assert.match(item.href ?? "", /^\//, `${item.key} should link somewhere`);
   }
+});
+
+test("the account page is reachable from the menu", () => {
+  const item = getDashboardMenuItems(false).find((i) => i.key === "account");
+  assert.equal(item?.href, "/account");
 });

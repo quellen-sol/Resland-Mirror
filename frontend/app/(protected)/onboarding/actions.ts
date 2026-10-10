@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { getUser } from "@/lib/db";
+import { getUser, signedOutTarget } from "@/lib/db";
 import { db } from "@/prisma/db";
 
 export interface BulletInput {
@@ -61,7 +61,7 @@ function orNull(value: string): string | null {
 
 export async function completeOnboarding() {
   const user = await getUser();
-  if (!user) redirect("/auth/login");
+  if (!user) redirect(await signedOutTarget());
   if (!user.has_onboarded) {
     await db.orm.public.User.where({ auth0_id: user.auth0_id }).update({
       has_onboarded: true,
@@ -71,7 +71,7 @@ export async function completeOnboarding() {
 
 export async function saveManualProfile(input: SaveProfileInput) {
   const user = await getUser();
-  if (!user) redirect("/auth/login");
+  if (!user) redirect(await signedOutTarget());
 
   await db.orm.public.User.where({ auth0_id: user.auth0_id }).update({
     full_name: orNull(input.fullName),

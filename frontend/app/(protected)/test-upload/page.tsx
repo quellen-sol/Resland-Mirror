@@ -1,4 +1,4 @@
-import { getUser } from "@/lib/db";
+import { getUser, signedOutTarget } from "@/lib/db";
 import { getAccessTokenOrLogin } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import {
@@ -15,7 +15,7 @@ export default async function TestUploadPage() {
   const user = await getUser();
 
   if (!user) {
-    redirect("/auth/login");
+    redirect(await signedOutTarget());
   }
   const accessToken = await getAccessTokenOrLogin("/test-upload");
 

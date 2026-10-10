@@ -200,6 +200,19 @@ async def test_event_without_metadata_is_noop(pg, user, stripe_events):
     assert await get_balance(pg) == 0
 
 
+async def test_apply_paid_checkout_credits_once(pg, user):
+    """The webhook's credit path, shared with account deletion (which uses it
+    for a paid checkout whose webhook never arrived)."""
+    session = completed_event()["data"]["object"]
+    assert await service.apply_paid_checkout(pg, session) == 500
+    assert await service.apply_paid_checkout(pg, session) is None
+    assert await get_balance(pg) == 500
+    assert (await purchase_row(pg, "cs_1"))[0] == "COMPLETED"
+    unpaid = completed_event(session_id="cs_2", payment_status="unpaid")
+    assert await service.apply_paid_checkout(pg, unpaid["data"]["object"]) is None
+    assert await purchase_row(pg, "cs_2") is None
+
+
 async def test_unpaid_completed_stays_pending(pg, user, stripe_events):
     """Async payment methods complete checkout with payment_status='unpaid' —
     crediting there would pay out on a payment that can still fail."""

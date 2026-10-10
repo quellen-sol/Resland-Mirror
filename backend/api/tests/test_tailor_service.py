@@ -189,7 +189,7 @@ class AnswerTailor(unittest.IsolatedAsyncioTestCase):
 
     async def test_answer_requeues_with_text(self):
         pg = _Pg(
-            [_Result(fetchone=_row(status="WAITING_FOR_INPUT")), _Result()]
+            [_Result(fetchone=_row(status="WAITING_FOR_INPUT")), one((1,)), _Result()]
         )
         amqp = _Amqp()
         out = await service.answer_tailor(
@@ -209,6 +209,7 @@ class AnswerTailor(unittest.IsolatedAsyncioTestCase):
                 _Result(
                     fetchone=_row(status="WAITING_FOR_INPUT", result='{"x":1}')
                 ),
+                one((1,)),
                 _Result(),
             ]
         )
@@ -221,10 +222,29 @@ class AnswerTailor(unittest.IsolatedAsyncioTestCase):
         params = next(p for q, p in pg.queries if "UPDATE user_tailor_run" in q)
         self.assertEqual(params, ("PROCESSING", None, "r1"))
 
+    async def test_deleted_account_404s_without_queueing(self):
+        pg = _Pg([_Result(fetchone=_row(status="WAITING_FOR_INPUT")), _Result()])
+        amqp = _Amqp()
+        with self.assertRaises(HTTPException) as ctx:
+            await service.answer_tailor(
+                "u1", "r1", model.AnswerRequest(text="hi"), pg, amqp
+            )
+        self.assertEqual(ctx.exception.status_code, 404)
+        self.assertEqual(amqp.publisher.published, [])
+        self.assertFalse(any("UPDATE user_tailor_run" in q for q, _ in pg.queries))
+
 
 class DismissTailor(unittest.IsolatedAsyncioTestCase):
+    async def test_someone_elses_run_leaves_its_thread_alone(self):
+        pg = _Pg([[]])  # DELETE ... RETURNING found no row of theirs
+        out = await service.dismiss_tailor("u1", "r-other", pg)
+        self.assertEqual(out, {"ok": True})
+        deletes = [q for q, _ in pg.queries if "DELETE FROM" in q]
+        self.assertEqual(len(deletes), 1)
+        self.assertIn("user_tailor_run", deletes[0])
+
     async def test_deletes_run_and_checkpoints(self):
-        pg = _Pg()
+        pg = _Pg([[("r1",)]])
         out = await service.dismiss_tailor("u1", "r1", pg)
         self.assertEqual(out, {"ok": True})
         deletes = [(q, p) for q, p in pg.queries if "DELETE FROM" in q]

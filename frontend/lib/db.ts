@@ -1,10 +1,42 @@
 import { redirect } from "next/navigation";
+import type { SessionData } from "@auth0/nextjs-auth0/types";
 import { auth0 } from "./auth0";
+import { isRevokedByDeletion } from "./account";
 import { db } from "../prisma/db";
+
+/** True when the session belongs to an account that was deleted (an
+ *  account_deletion row exists and the session predates the deletion). Such
+ *  a session is signed out: no user row is read or re-created for it, or a
+ *  device still signed in elsewhere could rebuild the deleted account. */
+export async function isRevokedSession(session: SessionData): Promise<boolean> {
+    const deletion = await db.orm.public.AccountDeletion
+        .where((d) => d.auth0_id.eq(session.user.sub))
+        .first();
+    if (!deletion) return false;
+    return isRevokedByDeletion(
+        session.internal?.createdAt,
+        deletion.auth0_deleted_at == null
+            ? null
+            : new Date(String(deletion.auth0_deleted_at)),
+    );
+}
+
+/** Where to send someone getUser() returned nothing for: a deleted
+ *  account's session is signed out (clearing its cookie) instead of being
+ *  sent back through login. */
+export async function signedOutTarget(): Promise<string> {
+    const session = await auth0.getSession();
+    return session && (await isRevokedSession(session))
+        ? "/auth/logout"
+        : "/auth/login";
+}
 
 export async function getUser() {
     const session = await auth0.getSession();
     if (!session || !session.user.email) {
+        return null;
+    }
+    if (await isRevokedSession(session)) {
         return null;
     }
 
@@ -32,7 +64,7 @@ export async function upsertUser() {
 /** User row or a redirect — sends brand-new accounts to onboarding. */
 export async function requireOnboardedUser() {
     const user = await getUser();
-    if (!user) redirect("/auth/login");
+    if (!user) redirect(await signedOutTarget());
     if (!user.has_onboarded) redirect("/onboarding");
     return user;
 }

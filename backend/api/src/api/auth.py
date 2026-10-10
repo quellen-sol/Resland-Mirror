@@ -7,34 +7,48 @@ from jwt import PyJWKClient
 from psycopg import AsyncConnection
 from psycopg.rows import TupleRow
 
+from .account.db import token_revoked
 from .deps import PgConnection
 from .env_vars import AUTH0_AUDIENCE, AUTH0_DOMAIN, PG_URL
 
 _jwks = PyJWKClient(f"https://{AUTH0_DOMAIN}/.well-known/jwks.json")
 
 
-def _verify_token(token: str) -> str:
+def _verify_claims(token: str) -> dict:
     key = _jwks.get_signing_key_from_jwt(token)
-    claims = jwt.decode(
+    return jwt.decode(
         token,
         key.key,
         algorithms=["RS256"],
         audience=AUTH0_AUDIENCE,
         issuer=f"https://{AUTH0_DOMAIN}/",
     )
-    return claims["sub"]
+
+
+def _verify_token(token: str) -> str:
+    return _verify_claims(token)["sub"]
 
 
 async def require_auth0_id(
+    pg_conn: PgConnection,
     authorization: Annotated[str | None, Header()] = None,
 ) -> str:
+    """The token's `sub`, once its signature checks out and it doesn't
+    belong to a deleted account (see account.db.token_revoked). Shares the
+    request's connection with the route."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing bearer token")
     try:
         # JWKS fetch is blocking I/O — keep it off the event loop
-        return await asyncio.to_thread(_verify_token, authorization[7:])
+        claims = await asyncio.to_thread(_verify_claims, authorization[7:])
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid access token") from e
+    sub = claims["sub"]
+    # A still-valid token from before the account was deleted (another
+    # device, an open tab) must not keep working against a fresh account.
+    if await token_revoked(pg_conn, sub, claims.get("iat")):
+        raise HTTPException(status_code=401, detail="This account was deleted")
+    return sub
 
 
 # Annotated alias so routes can declare `user_id: Auth0UserId` — FastAPI

@@ -9,6 +9,7 @@ export type DashboardMenuItemKey =
   | "edit-profile"
   | "memory"
   | "billing"
+  | "account"
   | "help"
   | "sign-out";
 
@@ -31,6 +32,7 @@ const DASHBOARD_MENU_ITEMS: DashboardMenuItem[] = [
   { key: "edit-profile", label: "Edit Profile", href: "/edit-profile" },
   { key: "memory", label: "Memory", href: "/memory" },
   { key: "billing", label: "Billing", href: "/billing" },
+  { key: "account", label: "Account & Data", href: "/account" },
   { key: "help", label: "Help & FAQ", href: "/help" },
   { key: "sign-out", label: "Sign Out", href: "/auth/logout" },
 ];

@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { getUser } from "@/lib/db";
+import { getUser, signedOutTarget } from "@/lib/db";
 import { db } from "@/prisma/db";
 import type { SaveProfileInput } from "../onboarding/actions";
 
@@ -12,7 +12,7 @@ function orNull(value: string): string | null {
 
 export async function saveProfileEdit(input: SaveProfileInput) {
   const user = await getUser();
-  if (!user) redirect("/auth/login");
+  if (!user) redirect(await signedOutTarget());
 
   await db.transaction(async (tx) => {
     await tx.orm.public.User.where({ auth0_id: user.auth0_id }).update({

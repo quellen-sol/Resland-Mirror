@@ -276,7 +276,7 @@ class Export(unittest.IsolatedAsyncioTestCase):
     async def test_export_regenerates_when_stale(self):
         s3 = MagicMock()
         s3.generate_presigned_url.return_value = "https://x/docx"
-        pg = _Pg([one(_tailored_row()), _Result(), one(_tailored_row(generated_at=datetime(2025, 1, 2, tzinfo=UTC)))])
+        pg = _Pg([one(_tailored_row()), one((1,)), _Result(), one(_tailored_row(generated_at=datetime(2025, 1, 2, tzinfo=UTC)))])
         for p in self._patches(s3):
             p.start()
             self.addCleanup(p.stop)
@@ -295,6 +295,17 @@ class Export(unittest.IsolatedAsyncioTestCase):
             self.addCleanup(p.stop)
         resp = await service.export_tailored(pg, "u1", "t1")
         self.assertFalse(resp.regenerated)
+        s3.upload_fileobj.assert_not_called()
+
+    async def test_deleted_account_404s_before_writing_a_file(self):
+        s3 = MagicMock()
+        pg = _Pg([one(_tailored_row()), _Result()])  # lock: no user row
+        for p in self._patches(s3):
+            p.start()
+            self.addCleanup(p.stop)
+        with self.assertRaises(HTTPException) as ctx:
+            await service.export_tailored(pg, "u1", "t1")
+        self.assertEqual(ctx.exception.status_code, 404)
         s3.upload_fileobj.assert_not_called()
 
 

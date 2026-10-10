@@ -35,6 +35,19 @@ docs/                 Design docs (billing plan, UX specs)
   and out of the contract. Raw SQL goes through `shared.checkpoints.CHECKPOINT_TABLES`.
 - `token_usage` is an append-only ledger, one row per job (`@@unique([job_kind, job_id])`), recording
   `model` + charged `amount_cents`; billing/admin aggregates read from it.
+- **Account deletion** (`DELETE /account`, `backend/api/src/api/account/`) keeps `balance_purchase` and
+  `token_usage` rows but re-points them at a PII-free tombstone user (`deleted|<uuid4>`, see
+  `shared.accounts`); everything else is deleted. A new table that references `user` (directly or
+  through another user-owned table) must be added to `account.db.ERASED_TABLES` (or
+  `REPOINTED_TABLES`) and to the data export in `account.model.EXPORT_SECTIONS` — live-schema tests
+  in `backend/api/tests/test_account_pg.py` fail until it is. Deletion holds `FOR UPDATE` on the user
+  row and refuses while a job is PENDING/PROCESSING, so an endpoint that flips an idle row back to
+  PROCESSING or writes under `resumes/<auth0_id>/` must call `api.user_row.share_user_row` in the same
+  transaction first (inserts into user tables are covered by their foreign key). The erase also
+  writes an `account_deletion` row (Auth0 id only): an API background sweeper retries the Auth0
+  login deletion from it, and until it's purged (3 days after Auth0 confirms) the API's
+  `require_auth0_id` and the frontend's `getUser()` refuse sessions/tokens of the deleted login —
+  never re-create a `user` row for a session without going through `getUser()`.
 
 ## Toolchain
 

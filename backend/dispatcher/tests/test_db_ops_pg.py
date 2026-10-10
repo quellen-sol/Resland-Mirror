@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import psycopg
 
+from shared.checkpoints import CHECKPOINT_TABLES
 from shared.docgen import FormatProfile
 from shared.testing import destructive_db_ok
 
@@ -32,6 +33,7 @@ from dispatcher.agents.tailor import (
     TailoredExperience,
     TailoredResume,
 )
+from dispatcher.pg import do_pg_setup
 from dispatcher.runners import db_ops
 
 # Default to a *_test database so the safe path is the default path; the
@@ -698,7 +700,8 @@ class DbOpsPg(unittest.TestCase):
                 )
             ],
         )
-        db_ops.upsert_user_profile(self.conn, "u1", profile)
+        self._user()
+        self.assertTrue(db_ops.upsert_user_profile(self.conn, "u1", profile))
 
         row = self.conn.execute(
             'SELECT full_name, email, summary FROM "user" WHERE auth0_id=%s',
@@ -787,6 +790,185 @@ class DbOpsPg(unittest.TestCase):
             ).fetchone()[0],
             0,
         )
+
+
+    # Deleted accounts + checkpoint threads ------------------------------
+
+    def _profile(self, name="Jane"):
+        return UserDocxProfile(
+            summary="A summary",
+            basic_info=UserProfileBasicInfo(
+                name=name, email="j@x.com", phone="555", location="NYC"
+            ),
+            experience=[
+                UserProfileExperienceEntry(
+                    company="NewCo",
+                    position="Eng",
+                    start_date="2024",
+                    end_date="",
+                    bullets=[UserExperienceBullet(text="b1")],
+                )
+            ],
+            skills=[UserSkillByCategory(category="Langs", skills=["Go"])],
+            education=[],
+            projects=[],
+        )
+
+    def _checkpoint(self, thread_id):
+        for table, cols, vals in (
+            (
+                "langgraph.checkpoints",
+                "(thread_id, checkpoint_ns, checkpoint_id, checkpoint, metadata)",
+                "(%s, '', 'c1', '{}', '{}')",
+            ),
+            (
+                "langgraph.checkpoint_blobs",
+                "(thread_id, checkpoint_ns, channel, version, type)",
+                "(%s, '', 'messages', '1', 'empty')",
+            ),
+            (
+                "langgraph.checkpoint_writes",
+                (
+                    "(thread_id, checkpoint_ns, checkpoint_id, task_id, idx,"
+                    " channel, blob)"
+                ),
+                "(%s, '', 'c1', 't1', 0, 'messages', '')",
+            ),
+        ):
+            self.conn.execute(
+                f"INSERT INTO {table} {cols} VALUES {vals}", (thread_id,)
+            )
+
+    def _threads(self, *thread_ids):
+        """{table: sorted thread ids present} for the given ids."""
+        found = {}
+        for table in CHECKPOINT_TABLES:
+            rows = self.conn.execute(
+                f"SELECT DISTINCT thread_id FROM {table}"
+                " WHERE thread_id = ANY(%s) ORDER BY thread_id",
+                (list(thread_ids),),
+            ).fetchall()
+            found[table] = [r[0] for r in rows]
+        return found
+
+    def _with_checkpoint_tables(self):
+        do_pg_setup(TEST_PG_URL)
+        for table in CHECKPOINT_TABLES:
+            self.conn.execute(f"DELETE FROM {table}")
+
+    def test_upsert_user_profile_never_recreates_a_deleted_user(self):
+        # The account was deleted while its resume was being parsed: the
+        # parse result must not resurrect the person (an upsert would).
+        self.assertFalse(
+            db_ops.upsert_user_profile(self.conn, "gone", self._profile())
+        )
+        self.assertIsNone(
+            self.conn.execute(
+                'SELECT 1 FROM "user" WHERE auth0_id = %s', ("gone",)
+            ).fetchone()
+        )
+        for table in (
+            "user_social_link",
+            "user_base_experience",
+            "user_base_experience_bullet",
+            "user_base_skill",
+        ):
+            n = self.conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            self.assertEqual(n, 0, table)
+
+    def test_upsert_user_profile_drops_replaced_suggestions_checkpoints(self):
+        """Re-upload deletes the user's suggestion rows; their LangGraph
+        threads used to stay behind forever."""
+        self._with_checkpoint_tables()
+        self._user()
+        self._user("u2")
+        exp = self._experience()
+        bullet = self._bullet(exp)
+        self._suggestion("s-old", "u1", exp, bullet)
+        other_exp = self._experience("u2")
+        self._bullet(other_exp)
+        self._suggestion("s-other", "u2", other_exp)
+        for thread in ("s-old", "s-other", "unrelated"):
+            self._checkpoint(thread)
+
+        self.assertTrue(
+            db_ops.upsert_user_profile(self.conn, "u1", self._profile())
+        )
+
+        for table, threads in self._threads(
+            "s-old", "s-other", "unrelated"
+        ).items():
+            self.assertEqual(threads, ["s-other", "unrelated"], table)
+        self.assertIsNone(
+            self.conn.execute(
+                "SELECT 1 FROM user_suggestion WHERE id = 's-old'"
+            ).fetchone()
+        )
+
+    def test_upsert_resume_format_skips_a_deleted_user(self):
+        db_ops.upsert_resume_format(
+            self.conn, "gone", FormatProfile(columns=2), "job-1"
+        )
+        n = self.conn.execute(
+            "SELECT count(*) FROM user_resume_format"
+        ).fetchone()[0]
+        self.assertEqual(n, 0)
+
+    def test_suggestion_exists(self):
+        self._user()
+        exp = self._experience()
+        self._suggestion("s1", "u1", exp)
+        self.assertTrue(db_ops.suggestion_exists(self.conn, "s1"))
+        self.assertFalse(db_ops.suggestion_exists(self.conn, "nope"))
+
+    def test_delete_checkpoint_threads_only_touches_given_threads(self):
+        self._with_checkpoint_tables()
+        for thread in ("a", "b", "keep"):
+            self._checkpoint(thread)
+        db_ops.delete_checkpoint_threads(self.conn, ["a", "b"])
+        for table, threads in self._threads("a", "b", "keep").items():
+            self.assertEqual(threads, ["keep"], table)
+        # Nothing to delete is fine too.
+        db_ops.delete_checkpoint_threads(self.conn, [])
+
+    def test_delete_checkpoint_threads_without_checkpoint_tables(self):
+        # Before any dispatcher ran setup the schema doesn't exist — the
+        # cleanup must not fail the caller's transaction.
+        self.conn.execute("DROP SCHEMA IF EXISTS langgraph CASCADE")
+        try:
+            db_ops.delete_checkpoint_threads(self.conn, ["a"])
+        finally:
+            do_pg_setup(TEST_PG_URL)
+
+    def test_discard_orphaned_thread(self):
+        self._with_checkpoint_tables()
+        self._user()
+        exp = self._experience()
+        self._suggestion("live", "u1", exp)
+        self._tailor_run("r-live", "u1")
+        for thread in ("live", "gone", "r-live", "r-gone"):
+            self._checkpoint(thread)
+
+        self.assertFalse(
+            db_ops.discard_orphaned_thread(self.conn, "user_suggestion", "live")
+        )
+        self.assertTrue(
+            db_ops.discard_orphaned_thread(self.conn, "user_suggestion", "gone")
+        )
+        self.assertFalse(
+            db_ops.discard_orphaned_thread(self.conn, "user_tailor_run", "r-live")
+        )
+        self.assertTrue(
+            db_ops.discard_orphaned_thread(self.conn, "user_tailor_run", "r-gone")
+        )
+        for table, threads in self._threads(
+            "live", "gone", "r-live", "r-gone"
+        ).items():
+            self.assertEqual(threads, ["live", "r-live"], table)
+
+    def test_discard_orphaned_thread_rejects_other_tables(self):
+        with self.assertRaises(ValueError):
+            db_ops.discard_orphaned_thread(self.conn, "user", "x")
 
 
 if __name__ == "__main__":

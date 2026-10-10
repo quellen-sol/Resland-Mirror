@@ -53,7 +53,12 @@ class ResumeRunner(LocalThreadJobRunner):
                     [user_id],
                 ).fetchone()
                 if not user_result:
-                    raise RunnerError("User not found")
+                    # The account was deleted after the upload was queued.
+                    # End cleanly so the message is acked, not dead-lettered.
+                    print(
+                        f"Resume job {self.job_data['job_id']}: account gone, dropped"
+                    )
+                    return
 
                 # Pull document from s3
                 if not self.job_data.get("s3_key"):
@@ -98,7 +103,12 @@ class ResumeRunner(LocalThreadJobRunner):
                     raise RunnerError("No profile found in queue")
                 profile = profile_queue.get()
                 # Upsert all relevant info to pg
-                upsert_user_profile(pg_client, user_id, profile)
+                if not upsert_user_profile(pg_client, user_id, profile):
+                    print(
+                        f"Resume job {self.job_data['job_id']}: account deleted"
+                        " while parsing, dropped"
+                    )
+                    return
 
                 # Capture the layout so the resume can be regenerated later
                 if source_doc is not None and capture_fmt is not None:
