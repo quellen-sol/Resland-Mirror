@@ -1,3 +1,4 @@
+import asyncio
 import io
 import uuid
 from contextlib import suppress
@@ -18,6 +19,7 @@ from ..env_vars import AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, S3_RESUME_BUCKE
 from ..resume_export import service as resume_export
 from ..tailor import db as tailor_db
 from ..tailor.model import MAX_TAILOR_FIELD_CHARS
+from ..user_row import share_user_row
 from . import db, model
 
 GENERATED_TAILORED_KEY_TEMPLATE = "resumes/{user_id}/tailored/{tailored_id}.docx"
@@ -144,6 +146,56 @@ async def save_from_run(pg_conn: PgConnection, user_id: str, run_id: str) -> str
         content=content.model_dump_json(),
     )
     return tailored_id
+
+
+async def create_tailored(
+    pg_conn: PgConnection, user_id: str, req: model.CreateTailoredRequest
+) -> model.CreateTailoredResponse:
+    """Save a tailored resume written outside the tailor agent (the personal
+    MCP server) as a board entry. Experience ids resolve against the user's
+    base profile like a run's do, so the snapshot's company/title/dates are
+    the profile's own."""
+    exp_ids = [e.experience_id for e in req.experiences]
+    if len(set(exp_ids)) != len(exp_ids):
+        raise HTTPException(status_code=422, detail="Each experience_id may appear once")
+    exp_meta = await _experience_meta(pg_conn, user_id, exp_ids)
+    unknown = [i for i in exp_ids if i not in exp_meta]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown experience ids {unknown}: use the ids from GET /profile",
+        )
+
+    experiences = []
+    for exp in req.experiences:
+        company_name, title, start_date, end_date = exp_meta[exp.experience_id]
+        experiences.append(
+            model.TailoredExperienceContent(
+                company_name=company_name,
+                title=title,
+                start_date=start_date,
+                end_date=end_date,
+                bullets=[b.strip() for b in exp.bullets if b.strip()],
+            )
+        )
+    content = model.TailoredContent(
+        summary=_clean(req.summary, model.MAX_TAILORED_BULLET_CHARS),
+        experiences=experiences,
+        skill_groups=_group_skills(req.skills, await _skill_categories(pg_conn, user_id)),
+    )
+
+    tailored_id = str(uuid.uuid4())
+    await db.create_tailored_resume(
+        pg_conn,
+        tailored_id=tailored_id,
+        user_id=user_id,
+        tailor_run_id=None,
+        company_name=_clean(req.company_name),
+        role=_clean(req.role),
+        job_description=req.job_description,
+        content=content.model_dump_json(),
+    )
+    return model.CreateTailoredResponse(id=tailored_id)
 
 
 def _to_list_item(row: db.UserTailoredResumeRow) -> model.TailoredResumeListItem:
@@ -291,8 +343,18 @@ async def export_tailored(
     )
     if stale:
         docx_bytes = render_docx(content, fmt)
-        s3_client.upload_fileobj(io.BytesIO(docx_bytes), S3_RESUME_BUCKET, s3_key)
-        await db.set_tailored_generated(pg_conn, tailored_id, s3_key, source_hash)
+        # Hold the account row while the file lands, so it can't appear
+        # after an account deletion swept the user's files.
+        async with pg_conn.transaction():
+            await share_user_row(pg_conn, user_id)
+            # Off the event loop: the row lock is held until this lands.
+            await asyncio.to_thread(
+                s3_client.upload_fileobj,
+                io.BytesIO(docx_bytes),
+                S3_RESUME_BUCKET,
+                s3_key,
+            )
+            await db.set_tailored_generated(pg_conn, tailored_id, s3_key, source_hash)
         regenerated = True
 
     url = s3_client.generate_presigned_url(

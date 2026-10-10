@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { getUser } from "@/lib/db";
+import { getUser, signedOutTarget } from "@/lib/db";
 import { getAccessTokenOrLogin } from "@/lib/auth";
 import OnboardingFlow from "./onboarding-flow";
 
@@ -10,7 +10,7 @@ export default async function OnboardingPage() {
   const user = await getUser();
 
   if (!user) {
-    redirect("/auth/login");
+    redirect(await signedOutTarget());
   }
   if (user.has_onboarded) {
     redirect("/dashboard");

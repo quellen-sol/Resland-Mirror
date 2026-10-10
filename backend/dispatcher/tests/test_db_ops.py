@@ -20,6 +20,8 @@ except ImportError:
 
     pytest = _PytestStub()
 
+from shared.accounts import is_tombstone_id
+
 from dispatcher.runners import db_ops
 
 MODEL = "openrouter:test/model"
@@ -137,6 +139,52 @@ def test_zero_tokens_no_row(pg, user):
     count = pg.execute("SELECT COUNT(*) FROM token_usage").fetchone()[0]
     assert count == 0
     assert balance(pg) == 1000
+
+
+def _ledger_owners(pg):
+    return [
+        r[0]
+        for r in pg.execute("SELECT user_id FROM token_usage ORDER BY id").fetchall()
+    ]
+
+
+def test_usage_after_account_deletion_lands_on_a_tombstone(pg, user):
+    """A job that finishes after its account was deleted still records what
+    it cost — under a fresh tombstone, never by re-creating the person."""
+    pg.execute("DELETE FROM \"user\" WHERE auth0_id = 'u1'")
+    charged = charge(pg)
+    assert charged == pytest.approx(1.41)
+
+    (owner,) = _ledger_owners(pg)
+    assert is_tombstone_id(owner)
+    assert balance(pg, "u1") is None  # the person stays deleted
+    row = pg.execute(
+        'SELECT full_name, email, phone, location, summary, balance_cents,'
+        ' site_admin, stripe_customer_id FROM "user" WHERE auth0_id = %s',
+        (owner,),
+    ).fetchone()
+    assert row == (None, None, None, None, None, 0, False, None)
+
+
+def test_redelivered_usage_after_deletion_makes_one_tombstone(pg, user):
+    pg.execute("DELETE FROM \"user\" WHERE auth0_id = 'u1'")
+    first = charge(pg)
+    second = charge(pg)
+    assert second == pytest.approx(first)
+    assert len(_ledger_owners(pg)) == 1
+    tombstones = pg.execute(
+        "SELECT COUNT(*) FROM \"user\" WHERE auth0_id LIKE 'deleted|%'"
+    ).fetchone()[0]
+    assert tombstones == 1
+
+
+def test_live_user_is_never_given_a_tombstone(pg, user):
+    charge(pg)
+    assert _ledger_owners(pg) == ["u1"]
+    tombstones = pg.execute(
+        "SELECT COUNT(*) FROM \"user\" WHERE auth0_id LIKE 'deleted|%'"
+    ).fetchone()[0]
+    assert tombstones == 0
 """Unit tests for token-usage cost resolution in dispatcher.runners.db_ops.
 
 Run from the repo root with the workspace venv:

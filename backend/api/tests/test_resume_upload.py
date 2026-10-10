@@ -12,6 +12,7 @@ import docx
 from fastapi import HTTPException, UploadFile
 
 from api.resume_upload import router, service
+from api.resume_upload.model import STALE_UPLOAD_INTERVAL
 from shared.amqp import RESUME_EXCHANGE_NAME
 
 from .helpers import _Amqp, _Pg, _Result
@@ -38,6 +39,16 @@ class UploadResume(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(ctx.exception.status_code, 409)
 
+    async def test_in_flight_check_ignores_crashed_uploads(self):
+        # A job row stuck PENDING (the API died before storing its file)
+        # mustn't block uploads forever.
+        pg = _Pg([[(1,)]])
+        with self.assertRaises(HTTPException):
+            await service.upload_resume(_file(_docx_bytes()), "u1", _Amqp(), pg)
+        query, params = pg.queries[0]
+        self.assertIn("created_at > now() - %s::interval", query)
+        self.assertEqual(params, ("u1", STALE_UPLOAD_INTERVAL))
+
     async def test_non_docx_400(self):
         pg = _Pg([[]])  # no in-flight
         png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
@@ -63,35 +74,60 @@ class UploadResume(unittest.IsolatedAsyncioTestCase):
                 await service.upload_resume(_file(b"???"), "u1", _Amqp(), pg)
         self.assertEqual(ctx.exception.status_code, 400)
 
-    async def test_s3_failure_500(self):
+    async def test_s3_failure_500_and_job_marked_failed(self):
         pg = _Pg([[]])
         s3 = MagicMock()
         s3.upload_fileobj.side_effect = RuntimeError("s3 down")
+        amqp = _Amqp()
         with (
             patch.object(service, "get_s3_client", return_value=s3),
             self.assertRaises(HTTPException) as ctx,
         ):
-            await service.upload_resume(
-                _file(_docx_bytes()), "u1", _Amqp(), pg
-            )
+            await service.upload_resume(_file(_docx_bytes()), "u1", amqp, pg)
         self.assertEqual(ctx.exception.status_code, 500)
+        self.assertEqual(amqp.publisher.published, [])
+        # The PENDING row must not linger and block the next upload (or
+        # account deletion).
+        failed = [p for q, p in pg.queries if "UPDATE user_upload_job" in q]
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(failed[0][0], "FAILED")
 
-    async def test_happy_path_publishes_and_inserts(self):
+    async def test_publish_failure_marks_job_failed(self):
+        pg = _Pg([[]])
+        amqp = _Amqp()
+        amqp.publisher.publish = AsyncMock(side_effect=RuntimeError("amqp down"))
+        with (
+            patch.object(service, "get_s3_client", return_value=MagicMock()),
+            self.assertRaises(RuntimeError),
+        ):
+            await service.upload_resume(_file(_docx_bytes()), "u1", amqp, pg)
+        failed = [p for q, p in pg.queries if "UPDATE user_upload_job" in q]
+        self.assertEqual(failed[0][0], "FAILED")
+
+    async def test_happy_path_inserts_then_uploads_then_publishes(self):
         pg = _Pg([[], _Result()])  # no in-flight, then INSERT
         s3 = MagicMock()
-        amqp = _Amqp()
+        order = []
+        # The job row must exist before the file does: an account deletion
+        # racing the upload then either sees the job (409) or the insert
+        # fails first — never a file left behind in S3.
+        s3.upload_fileobj.side_effect = lambda *a: order.append(
+            ("s3", len(pg.queries))
+        )
+        amqp = _Amqp(order)
         with patch.object(service, "get_s3_client", return_value=s3):
             resp = await service.upload_resume(
                 _file(_docx_bytes()), "u1", amqp, pg
             )
         self.assertTrue(resp.job_id)
-        s3.upload_fileobj.assert_called_once()
+        insert_at = next(
+            i for i, (q, _) in enumerate(pg.queries) if "INSERT INTO user_upload_job" in q
+        )
+        self.assertEqual(order, [("s3", insert_at + 1), "publish"])
         key = s3.upload_fileobj.call_args.args[2]
-        self.assertEqual(key, f"resumes/u1/resume_doc.docx")
+        self.assertEqual(key, "resumes/u1/resume_doc.docx")
         self.assertEqual(amqp.calls, [(RESUME_EXCHANGE_NAME, "#")])
-        insert = pg.queries[-1][0]
-        self.assertIn("INSERT INTO user_upload_job", insert)
-        params = pg.queries[-1][1]
+        params = pg.queries[insert_at][1]
         self.assertEqual(params[0], resp.job_id)
         self.assertEqual(params[1], "u1")
         self.assertEqual(params[3], "PENDING")

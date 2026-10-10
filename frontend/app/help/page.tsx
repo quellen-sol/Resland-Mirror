@@ -62,7 +62,7 @@ const SECTIONS: {
       ],
       [
         "How do I tailor my resume to a job?",
-        "Open Tailor Resume from the dashboard menu and paste the job description. Resland asks a few questions about the experience that matters most for the role, then reorders and rewrites your bullets to fit it. Results aren't saved on their own, so click Save to Tailored Resumes to keep one. You can edit and export it later from your Tailored Resumes board.",
+        "Open Tailor Resume from the dashboard menu and paste the job description. Resland asks a few questions about the experience that matters most for the role, then reorders and rewrites your bullets to fit it. It saves the facts from your answers to Memory (in the dashboard menu), so later runs only ask about what's new. Results aren't saved on their own, so click Save to Tailored Resumes to keep one. You can edit and export it later from your Tailored Resumes board.",
       ],
       [
         "Can I copy a bullet point?",
@@ -147,6 +147,14 @@ const SECTIONS: {
       [
         "What format are exports?",
         "Resumes export as editable Word (.docx) documents so you can make final tweaks before sending them out.",
+      ],
+      [
+        "How do I download or delete my data?",
+        "Open Account & Data from the dashboard menu. Download My Data gives you a .zip of everything Resland stores about your account: your profile, memory, tailored resumes, suggestions, interview transcripts, purchases, and the files you uploaded. Delete Account permanently erases your profile, files and history and removes your sign-in. Records of purchases and charges are kept for accounting, no longer linked to you.",
+      ],
+      [
+        "What happens to my balance if I delete my account?",
+        "It's lost. Unused balance isn't refunded when you delete your account, and the page shows how much you have before you confirm. As long as you keep your account, your balance never expires.",
       ],
     ],
   },

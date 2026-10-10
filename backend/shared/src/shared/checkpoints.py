@@ -23,6 +23,15 @@ CHECKPOINT_TABLES = tuple(
     for t in ("checkpoints", "checkpoint_blobs", "checkpoint_writes")
 )
 
+# App tables whose row ids double as LangGraph thread ids: a suggestion
+# session, a tailor run, a system design interview. Deleting one of these rows
+# should delete its thread too.
+THREAD_OWNER_TABLES = (
+    "user_suggestion",
+    "user_tailor_run",
+    "user_system_design_session",
+)
+
 # libpq startup options for a checkpointer connection: PostgresSaver uses
 # unqualified table names, so search_path is what lands them in the schema.
 CHECKPOINT_CONN_OPTIONS = f"-c search_path={CHECKPOINT_SCHEMA}"

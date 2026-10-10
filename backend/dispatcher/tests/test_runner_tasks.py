@@ -13,9 +13,10 @@ import time
 import unittest
 from unittest.mock import MagicMock, patch
 
+from dispatcher.agents import memory
 from dispatcher.agents import suggestions as sugg_agents
 from dispatcher.agents import tailor as tailor_agents
-from dispatcher.runners import resume, suggestions, tailor
+from dispatcher.runners import db_ops, resume, suggestions, tailor
 
 
 def _poll_until(handle, status, timeout=5.0):
@@ -81,6 +82,10 @@ def _tailor_profile(**over):
     return tailor_agents.TailorProfile(**base)
 
 
+MEMORY_FACTS = [memory.MemoryFact(id=4, topic="Engineer at Acme", content="2M a day.")]
+NEW_FACTS = [memory.NewMemoryFact(topic="General", content="Speaks Spanish.")]
+
+
 def _tailor_run(**over):
     base = dict(
         id="run-1",
@@ -104,7 +109,11 @@ class ResumeRunnerTask(unittest.TestCase):
             patch.object(resume, "parse_pdf", return_value=kw.get("src") or MagicMock(name="src")),
             patch.object(resume, "capture_format_profile", return_value=kw.get("fmt") or "FMT"),
             patch.object(resume, "capture_format_profile_pdf", return_value=kw.get("fmt") or "FMT"),
-            patch.object(resume, "upsert_user_profile"),
+            patch.object(
+                resume,
+                "upsert_user_profile",
+                return_value=kw.get("profile_written", True),
+            ),
             patch.object(resume, "upsert_resume_format"),
             patch.object(resume, "puremagic", kw.get("puremagic") or MagicMock(**{"from_string.return_value": ".docx"})),
         ]
@@ -126,14 +135,38 @@ class ResumeRunnerTask(unittest.TestCase):
         status, _ = self._run("oops")
         self.assertEqual(status, "FAILED")
 
-    def test_user_not_found_fails(self):
+    def test_deleted_user_is_dropped_not_dead_lettered(self):
+        # The account was deleted after the upload was queued: ack the job
+        # (COMPLETED) instead of dead-lettering it, and touch nothing.
         conn = MagicMock()
         conn.execute.return_value.fetchone.return_value = None
+        s3 = MagicMock()
         status, _ = self._run(
             {"job_id": "j1", "user_id": "u1", "s3_key": "k"},
             pg=_pg_cm(conn),
+            s3=s3,
         )
-        self.assertEqual(status, "FAILED")
+        self.assertEqual(status, "COMPLETED")
+        s3.get_object.assert_not_called()
+        resume.upsert_user_profile.assert_not_called()
+
+    def test_user_deleted_mid_parse_stops_before_the_format(self):
+        conn = MagicMock()
+        conn.execute.return_value.fetchone.return_value = ("auth0|u1",)
+        s3 = MagicMock()
+        s3.get_object.return_value = {"Body": io.BytesIO(b"docx-bytes")}
+        q = queue.Queue()
+        q.put(MagicMock(name="profile"))
+        status, _ = self._run(
+            {"job_id": "j1", "user_id": "u1", "s3_key": "k"},
+            pg=_pg_cm(conn),
+            s3=s3,
+            agent_q=q,
+            profile_written=False,
+        )
+        self.assertEqual(status, "COMPLETED")
+        resume.capture_format_profile.assert_not_called()
+        resume.upsert_resume_format.assert_not_called()
 
     def test_missing_s3_key_fails(self):
         conn = MagicMock()
@@ -246,8 +279,11 @@ class SuggestionsRunnerTask(unittest.TestCase):
         agent_exc=None,
         agent_fn=None,
         complete_ret=True,
+        exists=True,
+        memory_fetch=lambda *_: MEMORY_FACTS,
     ):
         conn = MagicMock()
+        self.conn = conn
         agent = MagicMock()
         if agent_exc is not None:
             agent.side_effect = agent_exc
@@ -257,6 +293,10 @@ class SuggestionsRunnerTask(unittest.TestCase):
             agent.return_value = outcome
         with (
             patch.object(suggestions, "get_pg_client", return_value=_pg_cm(conn)),
+            patch.object(suggestions, "suggestion_exists", return_value=exists),
+            patch.object(
+                suggestions, "discard_orphaned_thread", return_value=False
+            ) as discard,
             patch.object(suggestions, "fetch_suggestion_rows", return_value=rows or []),
             patch.object(suggestions, "default_model_spec", return_value=None),
             patch.object(suggestions, "build_and_invoke_agent", agent),
@@ -267,10 +307,18 @@ class SuggestionsRunnerTask(unittest.TestCase):
                 suggestions, "complete_suggestion", return_value=complete_ret
             ) as complete,
             patch.object(suggestions, "record_token_usage") as record,
+            # The real load_memory_bank, over patched queries.
+            patch.object(
+                db_ops, "fetch_memory_facts", side_effect=memory_fetch
+            ) as fetch_memory,
+            patch.object(db_ops, "save_memory_facts") as save_memory,
         ):
             handle = suggestions.SuggestionsRunner(job_data).run()
             status = _poll_until(handle, "COMPLETED")
+        self.fetch_memory = fetch_memory
+        self.save_memory = save_memory
         self.complete = complete
+        self.discard = discard
         return status, agent, set_q, set_r, record, set_f
 
     def test_empty_job_data_fails(self):
@@ -289,9 +337,32 @@ class SuggestionsRunnerTask(unittest.TestCase):
         status, *_ = self._run({"session_id": 42})
         self.assertEqual(status, "FAILED")
 
-    def test_session_not_found_fails(self):
-        status, *_ = self._run({"session_id": "s1"}, rows=[])
+    def test_session_without_bullets_fails(self):
+        # The row exists but the bullet join is empty — a real failure the
+        # user should see, not a vanished session.
+        status, *_ = self._run({"session_id": "s1"}, rows=[], exists=True)
         self.assertEqual(status, "FAILED")
+
+    def test_deleted_session_is_dropped_not_dead_lettered(self):
+        # Dismissed, or the account deleted, before the job ran: ack it
+        # rather than dead-letter a message carrying the user's text.
+        status, agent, _, _, record, set_f = self._run(
+            {"session_id": "s1", "answer": "my private answer"},
+            rows=[],
+            exists=False,
+        )
+        self.assertEqual(status, "COMPLETED")
+        agent.assert_not_called()
+        set_f.assert_not_called()
+        record.assert_not_called()
+
+    def test_finished_job_cleans_up_a_thread_orphaned_mid_run(self):
+        outcome = sugg_agents.SuggestionRunOutcome(status="waiting", question="Q")
+        status, *_ = self._run(
+            {"session_id": "s1"}, rows=[_sugg_row()], outcome=outcome
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.discard.assert_called_once_with(self.conn, "user_suggestion", "s1")
 
     def test_waiting_outcome_sets_question(self):
         outcome = sugg_agents.SuggestionRunOutcome(status="waiting", question="Team size?")
@@ -303,6 +374,21 @@ class SuggestionsRunnerTask(unittest.TestCase):
         self.assertEqual(set_q.call_args.args[2], "Team size?")
         self.assertIsNone(set_q.call_args.args[3])
         set_r.assert_not_called()
+
+    def test_agent_reads_and_writes_the_users_memory_bank(self):
+        def _agent(*args, memory):
+            self.assertEqual(memory.facts, MEMORY_FACTS)
+            memory.save(NEW_FACTS)
+            return sugg_agents.SuggestionRunOutcome(status="waiting", question="Q?")
+
+        status, *_ = self._run(
+            {"session_id": "s1"}, rows=[_sugg_row()], agent_fn=_agent
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.fetch_memory.assert_called_once_with(self.conn, "u1")
+        self.save_memory.assert_called_once_with(
+            self.conn, "u1", "SUGGESTION", NEW_FACTS
+        )
 
     def test_review_wait_stores_options_with_question(self):
         # A submit pauses on the review interrupt — the options are stored
@@ -390,7 +476,7 @@ class SuggestionsRunnerTask(unittest.TestCase):
         self.assertIsNone(agent.call_args.args[5])
 
     def test_usage_is_recorded_with_suggestion_kind(self):
-        def fake_agent(session_id, answer, rows, model_spec, usage, prompt):
+        def fake_agent(session_id, answer, rows, model_spec, usage, prompt, memory):
             usage["input_tokens"] = 100
             usage["output_tokens"] = 20
             usage["cost_usd"] = 0.01
@@ -409,7 +495,7 @@ class SuggestionsRunnerTask(unittest.TestCase):
         self.assertEqual(kwargs["cost_usd"], 0.01)
 
     def test_each_turn_is_recorded_under_its_own_key(self):
-        def fake_agent(session_id, answer, rows, model_spec, usage, prompt):
+        def fake_agent(session_id, answer, rows, model_spec, usage, prompt, memory):
             usage["input_tokens"] = 100
             usage["output_tokens"] = 20
             return sugg_agents.SuggestionRunOutcome(status="waiting", question="Q")
@@ -436,7 +522,17 @@ class SuggestionsRunnerTask(unittest.TestCase):
 
 
 class TailorRunnerTask(unittest.TestCase):
-    def _run(self, job_data, run=None, profile=None, outcome=None, agent_exc=None, agent_fn=None, complete_ret=True):
+    def _run(
+        self,
+        job_data,
+        run=None,
+        profile=None,
+        outcome=None,
+        agent_exc=None,
+        agent_fn=None,
+        complete_ret=True,
+        memory_fetch=lambda *_: MEMORY_FACTS,
+    ):
         conn = MagicMock()
         agent = MagicMock()
         if agent_exc is not None:
@@ -445,8 +541,12 @@ class TailorRunnerTask(unittest.TestCase):
             agent.side_effect = agent_fn
         else:
             agent.return_value = outcome
+        self.conn = conn
         with (
             patch.object(tailor, "get_pg_client", return_value=_pg_cm(conn)),
+            patch.object(
+                tailor, "discard_orphaned_thread", return_value=False
+            ) as discard,
             patch.object(tailor, "fetch_tailor_run", return_value=run),
             patch.object(tailor, "fetch_tailor_profile", return_value=profile),
             patch.object(tailor, "default_model_spec", return_value=None),
@@ -455,9 +555,17 @@ class TailorRunnerTask(unittest.TestCase):
             patch.object(tailor, "set_tailor_result") as set_r,
             patch.object(tailor, "complete_tailor_run", return_value=complete_ret) as complete,
             patch.object(tailor, "record_token_usage") as record,
+            # The real load_memory_bank, over patched queries.
+            patch.object(
+                db_ops, "fetch_memory_facts", side_effect=memory_fetch
+            ) as fetch_memory,
+            patch.object(db_ops, "save_memory_facts") as save_memory,
         ):
             handle = tailor.TailorRunner(job_data).run()
             status = _poll_until(handle, "COMPLETED")
+        self.fetch_memory = fetch_memory
+        self.save_memory = save_memory
+        self.discard = discard
         return status, set_q, set_r, complete, record
 
     def test_missing_run_id_fails(self):
@@ -472,9 +580,24 @@ class TailorRunnerTask(unittest.TestCase):
         status, *_ = self._run({"run_id": 7})
         self.assertEqual(status, "FAILED")
 
-    def test_run_not_found_fails(self):
-        status, *_ = self._run({"run_id": "r1"}, run=None)
-        self.assertEqual(status, "FAILED")
+    def test_deleted_run_is_dropped_not_dead_lettered(self):
+        status, set_q, set_r, _, record = self._run(
+            {"run_id": "r1", "answer": "my private answer"}, run=None
+        )
+        self.assertEqual(status, "COMPLETED")
+        set_q.assert_not_called()
+        set_r.assert_not_called()
+        record.assert_not_called()
+
+    def test_finished_job_cleans_up_a_thread_orphaned_mid_run(self):
+        status, *_ = self._run(
+            {"run_id": "r1"},
+            run=_tailor_run(),
+            profile=_tailor_profile(),
+            outcome=tailor_agents.TailorRunOutcome(status="waiting", question="Q"),
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.discard.assert_called_once_with(self.conn, "user_tailor_run", "r1")
 
     def test_no_experiences_fails(self):
         status, *_ = self._run(
@@ -483,6 +606,42 @@ class TailorRunnerTask(unittest.TestCase):
             profile=_tailor_profile(experiences=[]),
         )
         self.assertEqual(status, "FAILED")
+
+    def test_agent_reads_and_writes_the_users_memory_bank(self):
+        def _agent(*args, memory):
+            self.assertEqual(memory.facts, MEMORY_FACTS)
+            memory.save(NEW_FACTS)
+            return tailor_agents.TailorRunOutcome(status="waiting", question="Q?")
+
+        status, *_ = self._run(
+            {"run_id": "r1"},
+            run=_tailor_run(),
+            profile=_tailor_profile(),
+            agent_fn=_agent,
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.fetch_memory.assert_called_once_with(self.conn, "u1")
+        # Facts land in the run owner's bank, marked as learned by tailoring.
+        self.save_memory.assert_called_once_with(self.conn, "u1", "TAILOR", NEW_FACTS)
+
+    def test_a_bank_that_wont_load_runs_without_memory(self):
+        # Memory only spares the user repeat questions; it never sinks a run.
+        def _agent(*args, memory):
+            self.assertEqual(memory.facts, [])
+            return tailor_agents.TailorRunOutcome(status="waiting", question="Q?")
+
+        def _missing_table(*_):
+            raise RuntimeError('relation "user_memory_fact" does not exist')
+
+        status, set_q, *_ = self._run(
+            {"run_id": "r1"},
+            run=_tailor_run(),
+            profile=_tailor_profile(),
+            agent_fn=_agent,
+            memory_fetch=_missing_table,
+        )
+        self.assertEqual(status, "COMPLETED")
+        self.assertEqual(set_q.call_args.args[2], "Q?")
 
     def test_waiting_outcome_sets_question(self):
         outcome = tailor_agents.TailorRunOutcome(status="waiting", question="Summary?")
@@ -570,7 +729,7 @@ class TailorRunnerTask(unittest.TestCase):
         self.assertEqual(set_q.call_args.args[2], tailor.RESUME_AFTER_ERROR_MESSAGE)
 
     def test_agent_usage_is_recorded(self):
-        def _agent(run_id, answer, run, profile, model_spec, usage):
+        def _agent(run_id, answer, run, profile, model_spec, usage, memory):
             usage["input_tokens"] = 1
             usage["output_tokens"] = 1
             usage["cost_usd"] = 0.5
@@ -592,7 +751,7 @@ class TailorRunnerTask(unittest.TestCase):
         self.assertEqual(kw["generation_ids"], ["gen-1"])
 
     def test_answer_turn_is_recorded_under_its_own_key(self):
-        def _agent(run_id, answer, run, profile, model_spec, usage):
+        def _agent(run_id, answer, run, profile, model_spec, usage, memory):
             usage["input_tokens"] = 1
             usage["output_tokens"] = 1
             return tailor_agents.TailorRunOutcome(status="waiting", question="Q")

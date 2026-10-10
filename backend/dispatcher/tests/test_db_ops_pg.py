@@ -9,9 +9,11 @@ Run: .venv/bin/python -m unittest backend.dispatcher.tests.test_db_ops_pg -v
 import json
 import os
 import unittest
+from unittest.mock import patch
 
 import psycopg
 
+from shared.checkpoints import CHECKPOINT_TABLES
 from shared.docgen import FormatProfile
 from shared.testing import destructive_db_ok
 
@@ -24,12 +26,14 @@ from dispatcher.agents.docx_parser import (
     UserProjectEntry,
     UserSkillByCategory,
 )
+from dispatcher.agents.memory import MemoryFact, NewMemoryFact
 from dispatcher.agents.suggestions import BulletSuggestion, SuggestionsResult
 from dispatcher.agents.tailor import (
     TailoredBullet,
     TailoredExperience,
     TailoredResume,
 )
+from dispatcher.pg import do_pg_setup
 from dispatcher.runners import db_ops
 
 # Default to a *_test database so the safe path is the default path; the
@@ -38,7 +42,7 @@ TEST_PG_URL = os.getenv(
     "TEST_PG_URL", "postgres://resland:resland@localhost:5432/resland_test"
 )
 
-# This suite truncates 14 tables in setUp(), so it needs the same guard the
+# This suite truncates 15 tables in setUp(), so it needs the same guard the
 # conftest fixtures use — otherwise it would nuke a non-test database.
 _DESTRUCTIVE_OK, _DESTRUCTIVE_REASON = destructive_db_ok(TEST_PG_URL)
 
@@ -70,7 +74,7 @@ class DbOpsPg(unittest.TestCase):
             ' user_base_experience_bullet, user_base_experience,'
             ' user_base_skill, user_base_education, user_base_project,'
             ' user_social_link, user_upload_job, model_pricing,'
-            ' token_usage, balance_purchase, "user" CASCADE'
+            ' token_usage, balance_purchase, user_memory_fact, "user" CASCADE'
         )
 
     # Seeds ------------------------------------------------------------
@@ -116,6 +120,21 @@ class DbOpsPg(unittest.TestCase):
             " VALUES (%s, %s, 'A job', %s)",
             (rid, uid, model),
         )
+
+    def _fact(self, uid="u1", topic="General", content="A fact", source="USER"):
+        row = self.conn.execute(
+            "INSERT INTO user_memory_fact (user_id, topic, content, source)"
+            " VALUES (%s, %s, %s, %s) RETURNING id",
+            (uid, topic, content, source),
+        ).fetchone()
+        return row[0]
+
+    def _facts(self, uid="u1"):
+        return self.conn.execute(
+            "SELECT id, topic, content, source FROM user_memory_fact"
+            " WHERE user_id = %s ORDER BY id",
+            (uid,),
+        ).fetchall()
 
     def _pricing(self, pid, enabled=True, is_default=False, sort_order=0):
         self.conn.execute(
@@ -496,6 +515,129 @@ class DbOpsPg(unittest.TestCase):
 
     # upserts -------------------------------------------------------------
 
+    # memory bank ------------------------------------------------------
+
+    def test_fetch_memory_facts_groups_by_topic_for_one_user(self):
+        self._user("u1")
+        self._user("u2")
+        b1 = self._fact("u1", "Engineer at Beta", "b1")
+        a1 = self._fact("u1", "Engineer at Acme", "a1")
+        b2 = self._fact("u1", "Engineer at Beta", "b2")
+        self._fact("u2", "Engineer at Acme", "someone else's")
+        self.assertEqual(
+            db_ops.fetch_memory_facts(self.conn, "u1"),
+            [
+                MemoryFact(id=a1, topic="Engineer at Acme", content="a1"),
+                MemoryFact(id=b1, topic="Engineer at Beta", content="b1"),
+                MemoryFact(id=b2, topic="Engineer at Beta", content="b2"),
+            ],
+        )
+
+    def test_save_memory_facts_stores_new_facts_with_their_source(self):
+        self._user("u1")
+        result = db_ops.save_memory_facts(
+            self.conn,
+            "u1",
+            "TAILOR",
+            [
+                NewMemoryFact(topic="General", content="Speaks Spanish."),
+                NewMemoryFact(topic="Preferences", content="Wants a summary."),
+            ],
+        )
+        rows = self._facts("u1")
+        self.assertEqual(
+            [(r[1], r[2], r[3]) for r in rows],
+            [
+                ("General", "Speaks Spanish.", "TAILOR"),
+                ("Preferences", "Wants a summary.", "TAILOR"),
+            ],
+        )
+        self.assertEqual([f.id for f in result.saved], [r[0] for r in rows])
+        self.assertEqual(result.full, 0)
+
+    def test_save_memory_facts_twice_stores_once(self):
+        # A resumed interrupt re-runs the tool node, so the same batch can
+        # arrive twice; the second save hands back the existing row.
+        self._user("u1")
+        facts = [NewMemoryFact(topic="General", content="Speaks Spanish.")]
+        first = db_ops.save_memory_facts(self.conn, "u1", "TAILOR", facts)
+        second = db_ops.save_memory_facts(self.conn, "u1", "TAILOR", facts)
+        self.assertEqual(len(self._facts("u1")), 1)
+        self.assertEqual(second.saved, first.saved)
+
+    def test_save_memory_facts_rewrites_a_replaced_fact_in_place(self):
+        self._user("u1")
+        fid = self._fact("u1", "Engineer at Acme", "2M events a day", "USER")
+        before = self.conn.execute(
+            "SELECT updated_at FROM user_memory_fact WHERE id = %s", (fid,)
+        ).fetchone()[0]
+        fix = NewMemoryFact(
+            topic="Engineer at Acme", content="3M events a day", replaces_id=fid
+        )
+        result = db_ops.save_memory_facts(self.conn, "u1", "SUGGESTION", [fix])
+        # Replaying the same rewrite is a no-op.
+        db_ops.save_memory_facts(self.conn, "u1", "SUGGESTION", [fix])
+        self.assertEqual(
+            self._facts("u1"),
+            [(fid, "Engineer at Acme", "3M events a day", "SUGGESTION")],
+        )
+        self.assertEqual(
+            result.saved,
+            [MemoryFact(id=fid, topic="Engineer at Acme", content="3M events a day")],
+        )
+        after = self.conn.execute(
+            "SELECT updated_at FROM user_memory_fact WHERE id = %s", (fid,)
+        ).fetchone()[0]
+        self.assertGreater(after, before)
+
+    def test_save_memory_facts_never_touches_another_users_fact(self):
+        self._user("u1")
+        self._user("u2")
+        theirs = self._fact("u2", "General", "Theirs")
+        db_ops.save_memory_facts(
+            self.conn,
+            "u1",
+            "TAILOR",
+            [NewMemoryFact(topic="General", content="Mine", replaces_id=theirs)],
+        )
+        self.assertEqual(self._facts("u2"), [(theirs, "General", "Theirs", "USER")])
+        # The fact still lands in the caller's own bank.
+        self.assertEqual([r[2] for r in self._facts("u1")], ["Mine"])
+
+    def test_save_memory_facts_adds_a_replacement_for_a_deleted_fact(self):
+        # The user can delete a fact on /memory mid-run.
+        self._user("u1")
+        gone = self._fact("u1")
+        self.conn.execute("DELETE FROM user_memory_fact WHERE id = %s", (gone,))
+        result = db_ops.save_memory_facts(
+            self.conn,
+            "u1",
+            "TAILOR",
+            [NewMemoryFact(topic="General", content="New", replaces_id=gone)],
+        )
+        self.assertEqual([r[2] for r in self._facts("u1")], ["New"])
+        self.assertNotEqual(result.saved[0].id, gone)
+
+    def test_save_memory_facts_stops_adding_at_the_cap(self):
+        self._user("u1")
+        kept = self._fact("u1", "General", "one")
+        self._fact("u1", "General", "two")
+        with patch.object(db_ops, "MAX_MEMORY_FACTS", 2):
+            result = db_ops.save_memory_facts(
+                self.conn,
+                "u1",
+                "TAILOR",
+                [
+                    NewMemoryFact(topic="General", content="three"),
+                    NewMemoryFact(topic="General", content="ONE", replaces_id=kept),
+                    # Already in the bank, so it doesn't need room.
+                    NewMemoryFact(topic="General", content="two"),
+                ],
+            )
+        self.assertEqual(result.full, 1)
+        self.assertEqual([r[2] for r in self._facts("u1")], ["ONE", "two"])
+        self.assertEqual([f.content for f in result.saved], ["ONE", "two"])
+
     def test_upsert_resume_format_insert_then_update(self):
         self._user()
         db_ops.upsert_resume_format(
@@ -558,7 +700,8 @@ class DbOpsPg(unittest.TestCase):
                 )
             ],
         )
-        db_ops.upsert_user_profile(self.conn, "u1", profile)
+        self._user()
+        self.assertTrue(db_ops.upsert_user_profile(self.conn, "u1", profile))
 
         row = self.conn.execute(
             'SELECT full_name, email, summary FROM "user" WHERE auth0_id=%s',
@@ -647,6 +790,185 @@ class DbOpsPg(unittest.TestCase):
             ).fetchone()[0],
             0,
         )
+
+
+    # Deleted accounts + checkpoint threads ------------------------------
+
+    def _profile(self, name="Jane"):
+        return UserDocxProfile(
+            summary="A summary",
+            basic_info=UserProfileBasicInfo(
+                name=name, email="j@x.com", phone="555", location="NYC"
+            ),
+            experience=[
+                UserProfileExperienceEntry(
+                    company="NewCo",
+                    position="Eng",
+                    start_date="2024",
+                    end_date="",
+                    bullets=[UserExperienceBullet(text="b1")],
+                )
+            ],
+            skills=[UserSkillByCategory(category="Langs", skills=["Go"])],
+            education=[],
+            projects=[],
+        )
+
+    def _checkpoint(self, thread_id):
+        for table, cols, vals in (
+            (
+                "langgraph.checkpoints",
+                "(thread_id, checkpoint_ns, checkpoint_id, checkpoint, metadata)",
+                "(%s, '', 'c1', '{}', '{}')",
+            ),
+            (
+                "langgraph.checkpoint_blobs",
+                "(thread_id, checkpoint_ns, channel, version, type)",
+                "(%s, '', 'messages', '1', 'empty')",
+            ),
+            (
+                "langgraph.checkpoint_writes",
+                (
+                    "(thread_id, checkpoint_ns, checkpoint_id, task_id, idx,"
+                    " channel, blob)"
+                ),
+                "(%s, '', 'c1', 't1', 0, 'messages', '')",
+            ),
+        ):
+            self.conn.execute(
+                f"INSERT INTO {table} {cols} VALUES {vals}", (thread_id,)
+            )
+
+    def _threads(self, *thread_ids):
+        """{table: sorted thread ids present} for the given ids."""
+        found = {}
+        for table in CHECKPOINT_TABLES:
+            rows = self.conn.execute(
+                f"SELECT DISTINCT thread_id FROM {table}"
+                " WHERE thread_id = ANY(%s) ORDER BY thread_id",
+                (list(thread_ids),),
+            ).fetchall()
+            found[table] = [r[0] for r in rows]
+        return found
+
+    def _with_checkpoint_tables(self):
+        do_pg_setup(TEST_PG_URL)
+        for table in CHECKPOINT_TABLES:
+            self.conn.execute(f"DELETE FROM {table}")
+
+    def test_upsert_user_profile_never_recreates_a_deleted_user(self):
+        # The account was deleted while its resume was being parsed: the
+        # parse result must not resurrect the person (an upsert would).
+        self.assertFalse(
+            db_ops.upsert_user_profile(self.conn, "gone", self._profile())
+        )
+        self.assertIsNone(
+            self.conn.execute(
+                'SELECT 1 FROM "user" WHERE auth0_id = %s', ("gone",)
+            ).fetchone()
+        )
+        for table in (
+            "user_social_link",
+            "user_base_experience",
+            "user_base_experience_bullet",
+            "user_base_skill",
+        ):
+            n = self.conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            self.assertEqual(n, 0, table)
+
+    def test_upsert_user_profile_drops_replaced_suggestions_checkpoints(self):
+        """Re-upload deletes the user's suggestion rows; their LangGraph
+        threads used to stay behind forever."""
+        self._with_checkpoint_tables()
+        self._user()
+        self._user("u2")
+        exp = self._experience()
+        bullet = self._bullet(exp)
+        self._suggestion("s-old", "u1", exp, bullet)
+        other_exp = self._experience("u2")
+        self._bullet(other_exp)
+        self._suggestion("s-other", "u2", other_exp)
+        for thread in ("s-old", "s-other", "unrelated"):
+            self._checkpoint(thread)
+
+        self.assertTrue(
+            db_ops.upsert_user_profile(self.conn, "u1", self._profile())
+        )
+
+        for table, threads in self._threads(
+            "s-old", "s-other", "unrelated"
+        ).items():
+            self.assertEqual(threads, ["s-other", "unrelated"], table)
+        self.assertIsNone(
+            self.conn.execute(
+                "SELECT 1 FROM user_suggestion WHERE id = 's-old'"
+            ).fetchone()
+        )
+
+    def test_upsert_resume_format_skips_a_deleted_user(self):
+        db_ops.upsert_resume_format(
+            self.conn, "gone", FormatProfile(columns=2), "job-1"
+        )
+        n = self.conn.execute(
+            "SELECT count(*) FROM user_resume_format"
+        ).fetchone()[0]
+        self.assertEqual(n, 0)
+
+    def test_suggestion_exists(self):
+        self._user()
+        exp = self._experience()
+        self._suggestion("s1", "u1", exp)
+        self.assertTrue(db_ops.suggestion_exists(self.conn, "s1"))
+        self.assertFalse(db_ops.suggestion_exists(self.conn, "nope"))
+
+    def test_delete_checkpoint_threads_only_touches_given_threads(self):
+        self._with_checkpoint_tables()
+        for thread in ("a", "b", "keep"):
+            self._checkpoint(thread)
+        db_ops.delete_checkpoint_threads(self.conn, ["a", "b"])
+        for table, threads in self._threads("a", "b", "keep").items():
+            self.assertEqual(threads, ["keep"], table)
+        # Nothing to delete is fine too.
+        db_ops.delete_checkpoint_threads(self.conn, [])
+
+    def test_delete_checkpoint_threads_without_checkpoint_tables(self):
+        # Before any dispatcher ran setup the schema doesn't exist — the
+        # cleanup must not fail the caller's transaction.
+        self.conn.execute("DROP SCHEMA IF EXISTS langgraph CASCADE")
+        try:
+            db_ops.delete_checkpoint_threads(self.conn, ["a"])
+        finally:
+            do_pg_setup(TEST_PG_URL)
+
+    def test_discard_orphaned_thread(self):
+        self._with_checkpoint_tables()
+        self._user()
+        exp = self._experience()
+        self._suggestion("live", "u1", exp)
+        self._tailor_run("r-live", "u1")
+        for thread in ("live", "gone", "r-live", "r-gone"):
+            self._checkpoint(thread)
+
+        self.assertFalse(
+            db_ops.discard_orphaned_thread(self.conn, "user_suggestion", "live")
+        )
+        self.assertTrue(
+            db_ops.discard_orphaned_thread(self.conn, "user_suggestion", "gone")
+        )
+        self.assertFalse(
+            db_ops.discard_orphaned_thread(self.conn, "user_tailor_run", "r-live")
+        )
+        self.assertTrue(
+            db_ops.discard_orphaned_thread(self.conn, "user_tailor_run", "r-gone")
+        )
+        for table, threads in self._threads(
+            "live", "gone", "r-live", "r-gone"
+        ).items():
+            self.assertEqual(threads, ["live", "r-live"], table)
+
+    def test_discard_orphaned_thread_rejects_other_tables(self):
+        with self.assertRaises(ValueError):
+            db_ops.discard_orphaned_thread(self.conn, "user", "x")
 
 
 if __name__ == "__main__":

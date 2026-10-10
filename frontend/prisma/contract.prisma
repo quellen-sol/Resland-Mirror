@@ -192,6 +192,31 @@ model UserTailorRun {
   @@index([user_id])
 }
 
+enum MemorySource {
+  TAILOR
+  SUGGESTION
+  USER
+}
+
+// The user's memory bank: facts about their work that the tailor and
+// suggestion agents learned from interview answers (or the user typed in), so
+// later runs use them instead of asking again. `topic` names what a fact is
+// about in words ("Senior Engineer at Acme", "Preferences") rather than an FK,
+// because base experience rows are rebuilt on every resume re-upload.
+model UserMemoryFact {
+  id         Int          @id @default(autoincrement())
+  user_id    String
+  user       User         @relation(fields: [user_id], references: [auth0_id])
+  topic      String
+  content    String
+  source     MemorySource
+  created_at DateTime     @default(now())
+  updated_at DateTime     @default(now())
+
+  @@map("user_memory_fact")
+  @@index([user_id])
+}
+
 // A saved tailored resume on the board — a self-contained snapshot of the
 // tailor result. Base rows are rebuilt on every resume re-upload, so the
 // snapshot keeps the tailored copy intact.
@@ -445,6 +470,20 @@ model UserDsaProgress {
   @@map("user_dsa_progress")
   @@unique([user_id, topic])
   @@index([user_id])
+}
+
+// Accounts erased through DELETE /account. Holds only the Auth0 id, and only
+// until the Auth0 login is gone (an API sweeper retries that) and every
+// session issued before the deletion has expired (3 days). Until then the
+// API and the frontend reject sessions and tokens issued before requested_at,
+// so a still-signed-in device can't rebuild the account. No FK: the user row
+// is already gone.
+model AccountDeletion {
+  auth0_id         String    @id
+  requested_at     DateTime  @default(now())
+  auth0_deleted_at DateTime?
+
+  @@map("account_deletion")
 }
 
 // Where a visit came from, decided on its first page. Later pages in the same
