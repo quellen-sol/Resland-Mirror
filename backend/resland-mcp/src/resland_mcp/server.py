@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from .api import ReslandApi
 from .config import Settings
-from .prompts import INSTRUCTIONS, tailor_prompt
+from .prompts import INSTRUCTIONS, TAILORING_GUIDE, tailor_prompt
 
 PdfConverter = Callable[[Path], Awaitable[Path]]
 
@@ -109,6 +109,14 @@ def create_server(
 
     def link(tailored_id: str) -> str:
         return f"{settings.app_url}/tailored/{tailored_id}"
+
+    @server.tool()
+    async def get_tailoring_guide() -> str:
+        """Resland's rules for tailoring a resume to a job posting: the
+        workflow (interview the user before writing), how to rewrite bullets
+        honestly, and how to use the memory bank. Call it before tailoring
+        a resume or rewriting bullets, and follow it."""
+        return TAILORING_GUIDE
 
     @server.tool()
     async def get_profile() -> dict[str, Any]:

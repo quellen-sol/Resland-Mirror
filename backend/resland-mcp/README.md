@@ -14,15 +14,18 @@ server to your own Claude app, and Claude calls it.
 
 | Tool | What it does |
 |---|---|
+| `get_tailoring_guide` | The rules the site's tailor agent follows (the server tells Claude to read it first) |
 | `get_profile` | Your base profile, with experience and bullet ids |
 | `list_memory` / `remember_facts` | Read and add to your memory bank (shared with the site's agents) |
 | `save_tailored_resume` | Save a tailored resume to your board (`POST /tailored`) |
 | `list_tailored_resumes` / `get_tailored_resume` / `update_tailored_resume` | Work with saved ones |
 | `export_tailored_resume` | Download the DOCX (in your uploaded resume's layout), or a PDF via LibreOffice |
 
-Plus a `tailor` prompt: `/resland:tailor` in Claude Code (paste the posting
-when Claude asks), or pick it from the prompts menu in Claude Desktop. It
-carries the same bullet-writing and memory rules the site's tailor agent uses
+Plus a `tailor` prompt: `/resland:tailor` in the Claude Code CLI (paste the
+posting when Claude asks). Claude Desktop doesn't list MCP prompts as
+commands, so there just ask, e.g. "Use Resland to tailor my resume to this
+posting"; Claude pulls the same rules through `get_tailoring_guide`. Both
+carry the bullet-writing and memory rules the site's tailor agent uses
 (`shared.writing`, `shared.memory`).
 
 ## One-time Auth0 setup
