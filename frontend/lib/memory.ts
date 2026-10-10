@@ -2,7 +2,7 @@
 // user's interview answers, plus any the user added on /memory. Later runs
 // read them back instead of asking again.
 
-// Keep in sync with backend/dispatcher/src/dispatcher/agents/memory.py.
+// Keep in sync with backend/shared/src/shared/memory.py.
 export const MAX_MEMORY_FACTS = 200;
 export const MAX_TOPIC_CHARS = 120;
 export const MAX_FACT_CHARS = 500;

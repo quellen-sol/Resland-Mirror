@@ -12,6 +12,13 @@ async def list_tailored(user_id: Auth0UserId, pg_conn: PgConnection):
     return await service.list_tailored(pg_conn=pg_conn, user_id=user_id)
 
 
+@router.post("/tailored", response_model=model.CreateTailoredResponse)
+async def create_tailored(
+    user_id: Auth0UserId, req: model.CreateTailoredRequest, pg_conn: PgConnection
+):
+    return await service.create_tailored(pg_conn=pg_conn, user_id=user_id, req=req)
+
+
 @router.get("/tailored/{tailored_id}", response_model=model.TailoredResumeResponse)
 async def get_tailored(user_id: Auth0UserId, tailored_id: str, pg_conn: PgConnection):
     return await service.get_tailored(

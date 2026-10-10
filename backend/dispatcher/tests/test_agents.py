@@ -18,9 +18,10 @@ import docx
 from langchain.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphRecursionError
+from shared import writing
 from shared.checkpoints import CHECKPOINT_CONN_OPTIONS
 
-from dispatcher.agents import docx_parser, memory, suggestions, tailor, writing
+from dispatcher.agents import docx_parser, memory, suggestions, tailor
 
 
 class FakeChatModel:

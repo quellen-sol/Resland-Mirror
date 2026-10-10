@@ -1,0 +1,47 @@
+[project]
+name = "resland-mcp"
+version = "0.1.0"
+description = "Personal MCP server: tailor resumes with your own Claude plan against your Resland account"
+readme = "README.md"
+authors = [
+    { name = "quellen-sol", email = "52678959+quellen-sol@users.noreply.github.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "httpx2>=2.10.0",
+    "mcp>=2.3.0,<3",
+    "shared",
+]
+
+[project.scripts]
+resland-mcp = "resland_mcp:main"
+
+[dependency-groups]
+dev = [
+    # The contract test drives the tools against the API's real routes.
+    "api",
+    "pytest>=8.4,<9",
+    "pytest-cov>=6.2,<7",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+api = { workspace = true }
+shared = { workspace = true }

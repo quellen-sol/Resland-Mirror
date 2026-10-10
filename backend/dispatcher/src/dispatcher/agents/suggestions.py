@@ -20,10 +20,10 @@ from psycopg.rows import dict_row
 from pydantic import BaseModel
 from shared.checkpoints import CHECKPOINT_CONN_OPTIONS
 from shared.pg import get_pg_client
+from shared.writing import BULLET_WRITING_RULES
 
 from ..env_vars import PG_URL
 from .memory import MEMORY_RULES, MemoryBank, make_remember_tool
-from .writing import BULLET_WRITING_RULES
 
 # Every suggested bullet carries exactly this many alternative rewrites. The
 # prompt, tool docstrings, and UI copy say "three" — change them together.
