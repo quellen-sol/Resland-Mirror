@@ -13,6 +13,7 @@ testing playbooks in `.devin/skills/`.
 backend/api/          FastAPI app (auth, billing/Stripe, uploads, job submission)   -> pytest
 backend/dispatcher/   AMQP consumers + LangGraph agents (tailor, suggestions, parsers) -> pytest
 backend/shared/       Shared library: AMQP client, job dataclasses, pdfdoc, db helpers -> pytest
+backend/resland-mcp/  Personal MCP server (Claude Code/Desktop): profile, memory, tailored board -> pytest
 frontend/             Next.js 16 app (UI, Auth0, Prisma-Next contract)              -> node --test
 terraform/            Infra definitions
 compose.yml           Local stack: api, dispatcher, amqp (rabbitmq:4-management), postgres:18
@@ -90,6 +91,7 @@ Run per package (they are separate uv packages):
 cd backend/shared     && uv run pytest --cov
 cd backend/api        && uv run pytest --cov
 cd backend/dispatcher && uv run pytest --cov
+cd backend/resland-mcp && uv run pytest --cov
 cd frontend           && pnpm test          # node --test (explicit file list in package.json)
 ```
 
@@ -108,6 +110,10 @@ cd frontend           && pnpm test          # node --test (explicit file list in
   must be recreated (or the database created by hand) for the test DB to appear.
 - `resland_test` starts **empty**: apply the schema to it too (the `resland_test` line in Local
   bring-up) — without it the live-PG fixtures *fail* on missing tables instead of skipping.
+- `backend/resland-mcp` is an API client: it calls `GET /profile`, `GET`/`POST /memory`, and
+  `/tailored` with the user's own Auth0 token, so changing those request/response models breaks it.
+  `tests/test_contract_pg.py` drives its tools against the real routes to catch that. Its Auth0
+  setup (a Native app with the Device Code grant) is in its README.
 - Real LLM calls need `OPENROUTER_API_KEY`; without it agents settle into
   `WAITING_FOR_INPUT`/`pending_question`, which is still a valid end-to-end proof of the pipeline.
 
@@ -142,7 +148,7 @@ cd frontend           && pnpm test          # node --test (explicit file list in
 `.github/workflows/pr-ci.yml` runs a single `backend-tests` job:
 Postgres 18 service → `pnpm install --frozen-lockfile` (frontend install exists **only** to provide
 the Prisma CLI) → `pnpm prisma db init` → `uv lock` → `uv run --frozen pytest --cov` for
-**shared, api, dispatcher** in that order.
+**shared, api, dispatcher, resland-mcp** in that order.
 
 Notes for agents:
 - CI runs `uv lock` before testing because dev-group additions have landed without a re-locked
@@ -162,8 +168,8 @@ For any non-trivial change, work in this order — it keeps the contract explici
 3. **Tests** — write the tests against those stubs first. They should fail for the right reason, not
    because the module doesn't import.
 4. **Fully implemented logic** — fill the stubs in until the tests pass.
-5. **Then test everything** — all three backend suites (`shared`, `api`, `dispatcher`) plus frontend
-   lint/`tsc`, and the full-stack flows where they apply.
+5. **Then test everything** — all the backend suites (`shared`, `api`, `dispatcher`, `resland-mcp`)
+   plus frontend lint/`tsc`, and the full-stack flows where they apply.
 
 Steps 1-3 are cheap and catch design mistakes while they're still free; a PR that jumped straight to
 step 4 gets sent back.
