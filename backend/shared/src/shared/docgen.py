@@ -116,6 +116,10 @@ _ALIGNMENTS = {
     "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
 }
 
+# ECMA-376 2nd edition renamed `w:jc` left/right to start/end. Newer Word and
+# Google Docs write them, but python-docx only maps the old names.
+_JC_ALIASES = {"start": "left", "end": "right"}
+
 
 def _known_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
     names = {f.name for f in fields(cls)}
@@ -383,6 +387,21 @@ def _last_text_run(para: Paragraph):
     return _first_text_run(para)
 
 
+def _para_alignment(para: Paragraph):
+    """`para.alignment` read off the raw `w:jc`, since python-docx raises on
+    values it has no member for: start/end read as left/right, anything
+    else (`numTab`) as undeclared."""
+    pPr = para._p.pPr
+    jc = pPr.jc if pPr is not None else None
+    if jc is None:
+        return None
+    val = jc.get(qn("w:val"))
+    try:
+        return WD_ALIGN_PARAGRAPH.from_xml(_JC_ALIASES.get(val, val))
+    except ValueError:
+        return None
+
+
 def _para_style(para: Paragraph) -> RoleStyle:
     """Resolve a paragraph's effective look: direct run props fall back to
     the paragraph style. Unknown values stay None — the renderer then falls
@@ -413,7 +432,7 @@ def _run_style(run, para: Paragraph) -> RoleStyle:
         getattr(getattr(style_font, "color", None), "rgb", None),
     )
 
-    alignment = para.alignment
+    alignment = _para_alignment(para)
     if alignment is None and style is not None:
         alignment = getattr(style, "alignment", None)
 
