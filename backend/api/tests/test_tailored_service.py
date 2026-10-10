@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from api.tailor import db as tailor_db
 from api.tailored import db, model, service
 from fastapi import HTTPException
+from pydantic import ValidationError
 from shared.docgen import ResumeContent
 
 from .helpers import _Pg, _Result, one
@@ -161,6 +162,97 @@ class SaveFromRun(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as ctx:
             await service.save_from_run(pg, "u1", "r1")
         self.assertEqual(ctx.exception.status_code, 409)
+
+
+def _create_req(**over):
+    base = {
+        "company_name": "  Acme ",
+        "role": "Senior Engineer",
+        "job_description": "JD",
+        "summary": "Tailored summary",
+        "experiences": [
+            {"experience_id": 2, "bullets": ["Led x", "  ", "Built y"]},
+            {"experience_id": 1, "bullets": ["Ran z"]},
+        ],
+        "skills": ["Go", "Python", "Terraform"],
+    }
+    base.update(over)
+    return model.CreateTailoredRequest(**base)
+
+
+class Create(unittest.IsolatedAsyncioTestCase):
+    async def test_resolves_profile_fields_and_groups_skills(self):
+        pg = _Pg(
+            [
+                # _experience_meta — in id order, not the request's order
+                _Result(
+                    [
+                        (1, "Initech", "Engineer", "2019", "2022"),
+                        (2, "Acme", "Senior Engineer", "2022", None),
+                    ]
+                ),
+                _Result([("Python", "Languages"), ("Go", "Languages")]),
+                _Result(rowcount=1),
+            ]
+        )
+        resp = await service.create_tailored(pg, "u1", _create_req())
+        self.assertTrue(resp.id)
+
+        params = next(p for q, p in pg.queries if "INSERT" in q)
+        # No run behind it, and company/role cleaned like a run's.
+        self.assertEqual(params[0], resp.id)
+        self.assertEqual(params[1:6], ("u1", None, "Acme", "Senior Engineer", "JD"))
+        content = json.loads(params[6])
+        self.assertEqual(content["summary"], "Tailored summary")
+        # The request's experience order wins; blank bullets are dropped.
+        self.assertEqual(
+            [(e["company_name"], e["title"], e["end_date"], e["bullets"]) for e in content["experiences"]],
+            [
+                ("Acme", "Senior Engineer", None, ["Led x", "Built y"]),
+                ("Initech", "Engineer", "2022", ["Ran z"]),
+            ],
+        )
+        # Skills not in the base profile land in an uncategorized group.
+        self.assertEqual(
+            content["skill_groups"],
+            [
+                {"category": "Languages", "skills": ["Go", "Python"]},
+                {"category": None, "skills": ["Terraform"]},
+            ],
+        )
+
+    async def test_unknown_experience_id_422(self):
+        pg = _Pg([_Result([(1, "Initech", "Engineer", "2019", "2022")])])
+        with self.assertRaises(HTTPException) as ctx:
+            await service.create_tailored(pg, "u1", _create_req())
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertIn("2", ctx.exception.detail)
+        self.assertFalse(any("INSERT" in q for q, _ in pg.queries))
+
+    async def test_duplicate_experience_id_422(self):
+        req = _create_req(
+            experiences=[
+                {"experience_id": 1, "bullets": ["a"]},
+                {"experience_id": 1, "bullets": ["b"]},
+            ]
+        )
+        pg = _Pg()
+        with self.assertRaises(HTTPException) as ctx:
+            await service.create_tailored(pg, "u1", req)
+        self.assertEqual(ctx.exception.status_code, 422)
+        self.assertEqual(pg.queries, [])
+
+    def test_request_needs_an_experience_and_a_job_description(self):
+        with self.assertRaises(ValidationError):
+            _create_req(experiences=[])
+        with self.assertRaises(ValidationError):
+            _create_req(job_description="")
+        with self.assertRaises(ValidationError):
+            _create_req(
+                experiences=[
+                    {"experience_id": 1, "bullets": ["x" * (model.MAX_TAILORED_BULLET_CHARS + 1)]}
+                ]
+            )
 
 
 class GetAndList(unittest.IsolatedAsyncioTestCase):

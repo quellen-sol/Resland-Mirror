@@ -22,6 +22,8 @@ from .billing.router import router as billing_router
 from .bullet_point_sugg.router import router as bullet_sugg_router
 from . import site_settings
 from .env_vars import AMQP_URL
+from .memory.router import router as memory_router
+from .profile.router import router as profile_router
 from .resume_export.router import router as resume_export_router
 from .resume_upload.router import router as resume_upload_router
 from .system_design.router import router as system_design_router
@@ -99,3 +101,5 @@ app.include_router(system_design_router)
 app.include_router(billing_router)
 app.include_router(admin_router)
 app.include_router(account_router)
+app.include_router(profile_router)
+app.include_router(memory_router)
