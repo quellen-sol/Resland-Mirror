@@ -1,7 +1,7 @@
 [project]
 name = "api"
 version = "0.1.0"
-description = "Add your description here"
+description = "Resland API: auth, uploads, job submission, billing and account management"
 readme = "README.md"
 authors = [
     { name = "quellen-sol", email = "52678959+quellen-sol@users.noreply.github.com" }
