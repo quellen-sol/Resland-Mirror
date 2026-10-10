@@ -5,6 +5,7 @@ site_settings table — these tests stub the cached read.
 Run: .venv/bin/python -m unittest backend.api.tests.test_api_app -v
 """
 
+import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,12 +21,38 @@ class Lifespan(unittest.IsolatedAsyncioTestCase):
         client = MagicMock()
         client.setup = AsyncMock()
         client.close = AsyncMock()
-        with patch.object(api, "AmqpClient", return_value=client):
+        with (
+            patch.object(api, "AmqpClient", return_value=client),
+            patch.object(api.account_sweeper, "run_forever", new=AsyncMock()),
+        ):
             async with api.lifespan(api.app):
                 client.setup.assert_awaited_once()
                 self.assertIs(deps.amqp_client, client)
         client.close.assert_awaited_once()
         self.assertIsNone(deps.amqp_client)
+
+    async def test_deletion_sweeper_runs_for_the_apps_lifetime(self):
+        client = MagicMock()
+        client.setup = AsyncMock()
+        client.close = AsyncMock()
+        started = asyncio.Event()
+        cancelled = asyncio.Event()
+
+        async def sweeper():
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled.set()
+                raise
+
+        with (
+            patch.object(api, "AmqpClient", return_value=client),
+            patch.object(api.account_sweeper, "run_forever", new=sweeper),
+        ):
+            async with api.lifespan(api.app):
+                await asyncio.wait_for(started.wait(), 1)
+        self.assertTrue(cancelled.is_set())
 
 
 class MaintenanceMode(unittest.IsolatedAsyncioTestCase):

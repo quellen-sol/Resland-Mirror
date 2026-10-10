@@ -29,6 +29,7 @@ from ..env_vars import (
 from .db_ops import (
     complete_system_design_session,
     default_model_spec,
+    discard_orphaned_thread,
     fetch_system_design_session,
     fetch_system_design_transcript,
     record_token_usage,
@@ -96,7 +97,11 @@ class SystemDesignRunner(LocalThreadJobRunner):
 
                     session = fetch_system_design_session(pg_conn, session_id)
                     if not session:
-                        raise RunnerError("System design session not found")
+                        # Dismissed, or the account deleted, before the turn
+                        # ran: ack it instead of dead-lettering a message
+                        # that carries the candidate's text.
+                        print(f"Interview {session_id} no longer exists, dropped")
+                        return
 
                     if turn_id and session.last_turn_id == turn_id:
                         # Redelivery of a turn that already finished.
@@ -144,7 +149,8 @@ class SystemDesignRunner(LocalThreadJobRunner):
                                 return
                             session = fetch_system_design_session(pg_conn, session_id)
                             if not session:
-                                raise RunnerError("System design session vanished")
+                                print(f"Interview {session_id} deleted before grading")
+                                return
                         self._grade(
                             pg_conn,
                             session,
@@ -167,6 +173,15 @@ class SystemDesignRunner(LocalThreadJobRunner):
                         )
                 finally:
                     if user_id and session_id:
+                        # Dismissed (or the account deleted) while the agent
+                        # ran: its checkpoints outlived the row's cleanup.
+                        try:
+                            if discard_orphaned_thread(
+                                pg_conn, "user_system_design_session", session_id
+                            ):
+                                print(f"Interview {session_id} deleted mid-run")
+                        except Exception as e:
+                            print(f"Orphaned-thread check failed: {e}")
                         self._bill(pg_conn, user_id, session_id, model_spec, usage, "")
                         if grader_spec != model_spec:
                             self._bill(

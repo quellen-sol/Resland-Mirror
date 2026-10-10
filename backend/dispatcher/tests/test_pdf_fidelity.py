@@ -358,7 +358,7 @@ class FixtureParse(unittest.TestCase):
 
 @unittest.skipUnless(HAS_PDFMINER, "pdfminer.six not installed")
 class FixtureCapture(unittest.TestCase):
-    """capture_format_profile_pdf on the real uploaded pdf."""
+    """capture_format_profile_pdf on the Canva pdf."""
 
     @classmethod
     def setUpClass(cls):
@@ -616,9 +616,9 @@ def _food_service_content() -> ResumeContent:
 
 @unittest.skipUnless(HAS_PDFMINER, "pdfminer.six not installed")
 class FoodServiceFixture(unittest.TestCase):
-    """Second real-pdf fixture — exercises the extractor and capture on a
-    layout with literal bullet glyphs, per-line dates, no location, and
-    three pages."""
+    """Second real-world layout (a Google Docs export) — exercises the
+    extractor and capture on a layout with literal bullet glyphs, per-line
+    dates, no location, and three pages."""
 
     @classmethod
     def setUpClass(cls):

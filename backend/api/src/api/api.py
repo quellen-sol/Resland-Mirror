@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 from collections.abc import Generator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -8,6 +10,8 @@ from fastapi.responses import JSONResponse
 from shared.amqp import AmqpClient
 
 from . import deps
+from .account import sweeper as account_sweeper
+from .account.router import router as account_router
 from .admin.router import router as admin_router
 from .auth import (
     is_docs_request,
@@ -18,6 +22,8 @@ from .billing.router import router as billing_router
 from .bullet_point_sugg.router import router as bullet_sugg_router
 from . import site_settings
 from .env_vars import AMQP_URL
+from .memory.router import router as memory_router
+from .profile.router import router as profile_router
 from .resume_export.router import router as resume_export_router
 from .resume_upload.router import router as resume_upload_router
 from .system_design.router import router as system_design_router
@@ -30,9 +36,17 @@ async def lifespan(app: FastAPI) -> Generator[None, Any, None]:
     # One shared client for the process — setup declares topology idempotently.
     deps.amqp_client = AmqpClient(AMQP_URL)
     await deps.amqp_client.setup()
-    yield
-    await deps.amqp_client.close()
-    deps.amqp_client = None
+    # Retries Auth0 login deletions that didn't finish and purges old
+    # account_deletion rows (see account.sweeper).
+    sweeper = asyncio.create_task(account_sweeper.run_forever())
+    try:
+        yield
+    finally:
+        sweeper.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await sweeper
+        await deps.amqp_client.close()
+        deps.amqp_client = None
 
 
 app = FastAPI(lifespan=lifespan)
@@ -73,6 +87,9 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The data export's filename travels in Content-Disposition, which
+    # browsers hide from cross-origin fetch() unless it's exposed.
+    expose_headers=["Content-Disposition"],
 )
 
 app.include_router(resume_upload_router)
@@ -83,3 +100,6 @@ app.include_router(tailored_router)
 app.include_router(system_design_router)
 app.include_router(billing_router)
 app.include_router(admin_router)
+app.include_router(account_router)
+app.include_router(profile_router)
+app.include_router(memory_router)

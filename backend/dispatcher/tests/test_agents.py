@@ -10,6 +10,7 @@ Run: .venv/bin/python -m unittest backend.dispatcher.tests.test_agents -v
 """
 
 import io
+import json
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -17,9 +18,10 @@ import docx
 from langchain.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.errors import GraphRecursionError
+from shared import writing
 from shared.checkpoints import CHECKPOINT_CONN_OPTIONS
 
-from dispatcher.agents import docx_parser, suggestions, tailor, writing
+from dispatcher.agents import docx_parser, memory, suggestions, tailor
 
 
 class FakeChatModel:
@@ -181,6 +183,35 @@ def _usage():
     }
 
 
+def _bank(facts=()):
+    """A memory bank holding `facts` (MemoryFact kwargs) whose save is a
+    mock reporting nothing stored."""
+    return memory.MemoryBank(
+        facts=[memory.MemoryFact(**f) for f in facts],
+        save=MagicMock(return_value=memory.MemorySaveResult()),
+    )
+
+
+ACME_FACT = {
+    "id": 4,
+    "topic": "Engineer at Acme",
+    "content": "The order sync handled about 2M events a day.",
+}
+
+
+def _remember(*facts, tc_id="tc-1"):
+    """A remember_facts call saving (topic, content[, replaces_id]) tuples."""
+    entries = [
+        {
+            "topic": f[0],
+            "content": f[1],
+            **({"replaces_id": f[2]} if len(f) > 2 else {}),
+        }
+        for f in facts
+    ]
+    return tc("remember_facts", {"facts": entries}, tc_id=tc_id)
+
+
 def _last_tool_msg(model):
     """The most recent ToolMessage the model was shown."""
     for msg in reversed(model.calls[-1]):
@@ -200,6 +231,7 @@ def _opts(bullet_id=7, options=("a", "b", "c")):
 
 class SuggestionAgent(unittest.TestCase):
     def setUp(self):
+        self.bank = _bank()
         self.saver = InMemorySaver()
         self.saver_patch, self.pg_patch = _patch_infra(suggestions, self.saver)
         self.pg = self.pg_patch.start()
@@ -224,6 +256,7 @@ class SuggestionAgent(unittest.TestCase):
                 "openrouter:test/model",
                 usage if usage is not None else _usage(),
                 prompt,
+                memory=self.bank,
             )
         return outcome, model_cls.return_value
 
@@ -440,9 +473,43 @@ class SuggestionAgent(unittest.TestCase):
         self.assertEqual(outcome.status, "waiting")
         self.assertEqual(outcome.result.suggestions[0].options, ["a", "b", "c"])
 
+    def test_bullet_points_tool_carries_the_memory_bank(self):
+        self.bank = _bank([ACME_FACT])
+        _, model = self._run(
+            [
+                tc("get_user_bullet_points", {}),
+                tc("submit_suggestions", _opts(), tc_id="tc-2"),
+            ]
+        )
+        payload = json.loads(model.calls[1][-1].content)
+        self.assertEqual(payload["bullet_points"][0]["bullet"], "Built the thing")
+        self.assertEqual(payload["memory"], [ACME_FACT])
+
+    def test_system_prompt_carries_memory_rules(self):
+        _, model = self._run([ai("done")])
+        self.assertIn(memory.MEMORY_RULES, model.calls[0][0].content)
+
+    def test_remember_facts_saves_through_the_bank(self):
+        _, model = self._run(
+            [
+                _remember(("Engineer at Acme", "Led a team of 4.")),
+                tc("submit_suggestions", _opts(), tc_id="tc-2"),
+            ]
+        )
+        self.assertIn("remember_facts", [t.name for t in model.bound_tools])
+        self.assertEqual(
+            self.bank.save.call_args.args[0],
+            [
+                memory.NewMemoryFact(
+                    topic="Engineer at Acme", content="Led a team of 4."
+                )
+            ],
+        )
+
 
 class TailorAgent(unittest.TestCase):
     def setUp(self):
+        self.bank = _bank()
         self.saver = InMemorySaver()
         self.saver_patch, self.pg_patch = _patch_infra(tailor, self.saver)
         self.pg = self.pg_patch.start()
@@ -459,6 +526,7 @@ class TailorAgent(unittest.TestCase):
                 profile if profile is not None else tailor_profile(),
                 "openrouter:test/model",
                 usage if usage is not None else _usage(),
+                memory=self.bank,
             )
         return outcome, model_cls.return_value
 
@@ -673,6 +741,107 @@ class TailorAgent(unittest.TestCase):
         self.assertAlmostEqual(usage["cost_usd"], 0.001)
         self.assertEqual(usage["generation_ids"], ["gen-1", "gen-2"])
 
+    def test_profile_tool_carries_the_memory_bank(self):
+        self.bank = _bank([ACME_FACT])
+        _, model = self._run([tc("get_user_profile", {}), self._ask(tc_id="tc-2")])
+        payload = json.loads(model.calls[1][-1].content)
+        self.assertEqual(payload["experiences"][0]["company_name"], "Acme")
+        self.assertEqual(payload["memory"], [ACME_FACT])
+
+    def test_system_prompt_carries_memory_rules(self):
+        _, model = self._run([self._ask()])
+        self.assertIn(memory.MEMORY_RULES, model.calls[0][0].content)
+
+    def test_remember_facts_saves_and_reports_ids(self):
+        self.bank.save.return_value = memory.MemorySaveResult(
+            saved=[
+                memory.MemoryFact(id=9, topic="Engineer at Acme", content="Led 4."),
+                memory.MemoryFact(id=4, topic="Engineer at Acme", content="3M a day."),
+            ]
+        )
+        _, model = self._run(
+            [
+                _remember(
+                    # Whitespace around a fact is trimmed before it's stored.
+                    ("Engineer at Acme ", "  Led 4."),
+                    ("Engineer at Acme", "3M a day.", 4),
+                ),
+                self._ask(tc_id="tc-2"),
+            ]
+        )
+        self.assertIn("remember_facts", [t.name for t in model.bound_tools])
+        self.assertEqual(
+            self.bank.save.call_args.args[0],
+            [
+                memory.NewMemoryFact(topic="Engineer at Acme", content="Led 4."),
+                memory.NewMemoryFact(
+                    topic="Engineer at Acme", content="3M a day.", replaces_id=4
+                ),
+            ],
+        )
+        # The ids come back so a later correction in the same run can
+        # replace a fact it just saved.
+        self.assertIn("ids 9, 4", _last_tool_msg(model).content)
+
+    def test_remember_facts_reports_a_full_bank(self):
+        self.bank.save.return_value = memory.MemorySaveResult(full=2)
+        _, model = self._run(
+            [_remember(("General", "a"), ("General", "b")), self._ask(tc_id="tc-2")]
+        )
+        content = _last_tool_msg(model).content
+        self.assertIn("memory is full", content)
+        self.assertIn("replaces_id", content)
+
+    def test_remember_facts_turns_away_a_bad_batch_unsaved(self):
+        too_long = "x" * (memory.MAX_FACT_CHARS + 1)
+        _, model = self._run(
+            [
+                _remember(("General", "fine"), ("General", too_long), (" ", "ok")),
+                self._ask(tc_id="tc-2"),
+            ]
+        )
+        # Nothing in a batch is stored until all of it is valid, so the
+        # agent can resend the whole batch without duplicating the good ones.
+        self.bank.save.assert_not_called()
+        content = _last_tool_msg(model).content
+        self.assertIn("Nothing was saved", content)
+        self.assertIn("Fact 2", content)
+        self.assertIn("Fact 3", content)
+
+    def test_remember_facts_survives_a_failing_save(self):
+        self.bank.save.side_effect = RuntimeError("db down")
+        outcome, model = self._run(
+            [_remember(("General", "a")), self._ask(tc_id="tc-2")]
+        )
+        # Memory is a nice-to-have: a failed save mustn't sink the run.
+        self.assertEqual(outcome.status, "waiting")
+        self.assertIn("Couldn't save", _last_tool_msg(model).content)
+
+    def test_remember_beside_a_question_saves_again_on_resume(self):
+        # A resumed interrupt re-runs its whole tool node, so a fact saved in
+        # the same turn as a question is saved twice. save_memory_facts has
+        # to be idempotent for exactly this.
+        both = ai(
+            tool_calls=[
+                {
+                    "name": "remember_facts",
+                    "args": {"facts": [{"topic": "General", "content": "a"}]},
+                    "id": "tc-1",
+                    "type": "tool_call",
+                },
+                {
+                    "name": "ask_clarifying_question",
+                    "args": {"question": "Team size?"},
+                    "id": "tc-2",
+                    "type": "tool_call",
+                },
+            ]
+        )
+        self._run([both])
+        self.assertEqual(self.bank.save.call_count, 1)
+        self._run([self._ask(tc_id="tc-3")], answer="4 people")
+        self.assertEqual(self.bank.save.call_count, 2)
+
     def _verify_feedback(self, resume):
         _, model = self._run([self._verify_call(resume), self._ask()])
         return _last_tool_msg(model).content
@@ -785,8 +954,13 @@ class TailorAgent(unittest.TestCase):
             self.assertRaises(GraphRecursionError),
         ):
             tailor.build_and_invoke_agent(
-                "run-1", None, tailor_run(), tailor_profile(),
-                "openrouter:test/model", _usage(),
+                "run-1",
+                None,
+                tailor_run(),
+                tailor_profile(),
+                "openrouter:test/model",
+                _usage(),
+                memory=self.bank,
             )
         calls = len(model_cls.return_value.calls)
         self.assertLessEqual(calls, tailor.RECURSION_LIMIT // 2 + 1)
@@ -854,6 +1028,40 @@ class TailorAgent(unittest.TestCase):
         )
         self.assertFalse(usage["all_costed"])
         self.assertIn("gen-9", usage["generation_ids"])
+
+
+class MemoryChecks(unittest.TestCase):
+    def test_accepts_valid_facts(self):
+        facts = [
+            memory.NewMemoryFact(topic="General", content="Speaks Spanish."),
+            memory.NewMemoryFact(
+                topic="t" * memory.MAX_TOPIC_CHARS,
+                content="c" * memory.MAX_FACT_CHARS,
+                replaces_id=3,
+            ),
+        ]
+        self.assertEqual(memory.check_new_facts(facts), [])
+
+    def test_names_each_bad_fact(self):
+        problems = memory.check_new_facts(
+            [
+                memory.NewMemoryFact(topic="General", content="ok"),
+                memory.NewMemoryFact(topic="", content="ok"),
+                memory.NewMemoryFact(topic="General", content="   "),
+                memory.NewMemoryFact(
+                    topic="t" * (memory.MAX_TOPIC_CHARS + 1), content="ok"
+                ),
+                memory.NewMemoryFact(
+                    topic="General", content="c" * (memory.MAX_FACT_CHARS + 1)
+                ),
+            ]
+        )
+        self.assertEqual(len(problems), 4)
+        self.assertTrue(problems[0].startswith("Fact 2"))
+        self.assertIn("topic", problems[0])
+        self.assertTrue(problems[1].startswith("Fact 3"))
+        self.assertIn(str(memory.MAX_TOPIC_CHARS), problems[2])
+        self.assertIn(str(memory.MAX_FACT_CHARS), problems[3])
 
 
 def _doc():

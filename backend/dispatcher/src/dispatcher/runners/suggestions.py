@@ -9,11 +9,14 @@ from ..env_vars import PG_URL, SUGGESTIONS_MODEL
 from .db_ops import (
     complete_suggestion,
     default_model_spec,
+    discard_orphaned_thread,
     fetch_suggestion_rows,
+    load_memory_bank,
     record_token_usage,
     set_suggestion_failed,
     set_suggestion_question,
     set_suggestion_result,
+    suggestion_exists,
     usage_job_id,
 )
 from .generic import RunnerError
@@ -56,6 +59,13 @@ class SuggestionsRunner(LocalThreadJobRunner):
 
                     rows = fetch_suggestion_rows(pg_conn, session_id)
                     if not rows:
+                        if not suggestion_exists(pg_conn, session_id):
+                            # Dismissed, or the account deleted, before the
+                            # job ran: ack it instead of dead-lettering a
+                            # message that carries the user's text.
+                            print(f"Suggestion {session_id} no longer exists, dropped")
+                            return
+                        # The row is there but its bullet join is empty.
                         raise RunnerError("Session not found")
 
                     user_id = rows[0].user_id
@@ -65,9 +75,16 @@ class SuggestionsRunner(LocalThreadJobRunner):
                     if not model_spec:
                         model_spec = SUGGESTIONS_MODEL
 
+                    memory = load_memory_bank(pg_conn, user_id, "SUGGESTION")
                     try:
                         outcome = build_and_invoke_agent(
-                            session_id, answer, rows, model_spec, usage, prompt
+                            session_id,
+                            answer,
+                            rows,
+                            model_spec,
+                            usage,
+                            prompt,
+                            memory=memory,
                         )
                     except Exception as e:
                         # Leave the session resumable — the checkpointed graph is
@@ -90,6 +107,16 @@ class SuggestionsRunner(LocalThreadJobRunner):
                             "Agent finished without submitting suggestions"
                         )
                 finally:
+                    if user_id and session_id:
+                        # Dismissed (or the account deleted) while the agent
+                        # ran: its checkpoints outlived the row's cleanup.
+                        try:
+                            if discard_orphaned_thread(
+                                pg_conn, "user_suggestion", session_id
+                            ):
+                                print(f"Suggestion {session_id} deleted mid-run")
+                        except Exception as e:
+                            print(f"Orphaned-thread check failed: {e}")
                     if (
                         user_id
                         and session_id

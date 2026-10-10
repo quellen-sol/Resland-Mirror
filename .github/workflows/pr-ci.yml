@@ -84,3 +84,7 @@ jobs:
       - name: Test backend/dispatcher
         working-directory: backend/dispatcher
         run: uv run --frozen pytest --cov
+
+      - name: Test backend/resland-mcp
+        working-directory: backend/resland-mcp
+        run: uv run --frozen pytest --cov

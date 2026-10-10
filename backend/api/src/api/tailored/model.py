@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from pydantic import BaseModel, Field
 
 MAX_JOB_DESCRIPTION_CHARS = 10_000
@@ -46,6 +48,35 @@ class TailorRunResult(BaseModel):
     summary: str | None = None
     experiences: list[TailorRunResultExperience] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
+
+
+# A tailored resume written outside the tailor agent (the personal MCP
+# server). Same shape as a run result, except bullets are free text: the
+# experiences point at base profile ids so the header fields come from the
+# profile, and skills are grouped by their base category on save.
+TailoredBulletText = Annotated[str, Field(max_length=MAX_TAILORED_BULLET_CHARS)]
+
+
+class CreateTailoredExperience(BaseModel):
+    experience_id: int
+    bullets: list[TailoredBulletText] = Field(
+        default_factory=list, max_length=MAX_TAILORED_ITEMS
+    )
+
+
+class CreateTailoredRequest(BaseModel):
+    company_name: str | None = Field(default=None, max_length=MAX_TAILORED_FIELD_CHARS)
+    role: str | None = Field(default=None, max_length=MAX_TAILORED_FIELD_CHARS)
+    job_description: str = Field(min_length=1, max_length=MAX_JOB_DESCRIPTION_CHARS)
+    summary: TailoredBulletText | None = None
+    experiences: list[CreateTailoredExperience] = Field(
+        min_length=1, max_length=MAX_TAILORED_ITEMS
+    )
+    skills: list[str] = Field(default_factory=list, max_length=MAX_TAILORED_ITEMS)
+
+
+class CreateTailoredResponse(BaseModel):
+    id: str
 
 
 class TailoredResumeListItem(BaseModel):
