@@ -447,6 +447,20 @@ model UserDsaProgress {
   @@index([user_id])
 }
 
+// Accounts erased through DELETE /account. Holds only the Auth0 id, and only
+// until the Auth0 login is gone (an API sweeper retries that) and every
+// session issued before the deletion has expired (3 days). Until then the
+// API and the frontend reject sessions and tokens issued before requested_at,
+// so a still-signed-in device can't rebuild the account. No FK: the user row
+// is already gone.
+model AccountDeletion {
+  auth0_id         String    @id
+  requested_at     DateTime  @default(now())
+  auth0_deleted_at DateTime?
+
+  @@map("account_deletion")
+}
+
 // Where a visit came from, decided on its first page. Later pages in the same
 // visit are INTERNAL.
 enum TrafficSource {

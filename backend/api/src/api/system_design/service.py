@@ -9,6 +9,7 @@ from shared.system_design.diagram import normalize_scene, parse_scene
 
 from ..balance import require_balance, validate_model_choice
 from ..deps import AmqpClientDep, PgConnection
+from ..user_row import share_user_row
 from . import db, model
 
 # Sessions the candidate can still write to.
@@ -282,15 +283,18 @@ async def take_turn(
                 },
             )
 
-    if text and action != "retry":
-        await db.add_candidate_message(pg_conn, session_id, row.phase, text)
-
     next_phase = None
     if action == "advance":
         next_phase = rubric.next_phase(row.phase)
     elif action == "finish":
         next_phase = "FEEDBACK"
-    await db.begin_turn(pg_conn, session_id, next_phase=next_phase)
+    # The row lock keeps an account deletion from missing (or racing) the
+    # candidate's message and the new turn.
+    async with pg_conn.transaction():
+        await share_user_row(pg_conn, user_id)
+        if text and action != "retry":
+            await db.add_candidate_message(pg_conn, session_id, row.phase, text)
+        await db.begin_turn(pg_conn, session_id, next_phase=next_phase)
     # Commit before publishing — the dispatcher's write must land after ours.
     await pg_conn.commit()
     await _publish(amqp_client, session_id, action, text or None)

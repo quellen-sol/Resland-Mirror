@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'b8efd6dafa6fc9099e70e37bcab76c6104321edfc9b4844bebdb9e14ac5c518d'>;
+  StorageHashBase<'2a58999b51b3503b8c6569732cb669bc995b8dc9956278b249faa686b3f7b57c'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -240,6 +240,11 @@ type DefaultLiteralValue<CodecId extends string, Encoded> = CodecId extends keyo
 
 export type FieldOutputTypes = {
   readonly public: {
+    readonly AccountDeletion: {
+      readonly auth0_id: CodecTypes['pg/text@1']['output'];
+      readonly requested_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+      readonly auth0_deleted_at: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+    };
     readonly BalancePurchase: {
       readonly id: CodecTypes['pg/text@1']['output'];
       readonly user_id: CodecTypes['pg/text@1']['output'];
@@ -457,6 +462,11 @@ export type FieldOutputTypes = {
 };
 export type FieldInputTypes = {
   readonly public: {
+    readonly AccountDeletion: {
+      readonly auth0_id: CodecTypes['pg/text@1']['input'];
+      readonly requested_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+      readonly auth0_deleted_at: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+    };
     readonly BalancePurchase: {
       readonly id: CodecTypes['pg/text@1']['input'];
       readonly user_id: CodecTypes['pg/text@1']['input'];
@@ -674,6 +684,11 @@ export type FieldInputTypes = {
 };
 export type StorageColumnTypes = {
   readonly public: {
+    readonly account_deletion: {
+      readonly auth0_deleted_at: CodecTypes['pg/timestamptz-temporal@1']['output'] | null;
+      readonly auth0_id: CodecTypes['pg/text@1']['output'];
+      readonly requested_at: CodecTypes['pg/timestamptz-temporal@1']['output'];
+    };
     readonly balance_purchase: {
       readonly amount_cents: CodecTypes['pg/int4@1']['output'];
       readonly cents: CodecTypes['pg/int4@1']['output'];
@@ -891,6 +906,11 @@ export type StorageColumnTypes = {
 };
 export type StorageColumnInputTypes = {
   readonly public: {
+    readonly account_deletion: {
+      readonly auth0_deleted_at: CodecTypes['pg/timestamptz-temporal@1']['input'] | null;
+      readonly auth0_id: CodecTypes['pg/text@1']['input'];
+      readonly requested_at: CodecTypes['pg/timestamptz-temporal@1']['input'];
+    };
     readonly balance_purchase: {
       readonly amount_cents: CodecTypes['pg/int4@1']['input'];
       readonly cents: CodecTypes['pg/int4@1']['input'];
@@ -1124,6 +1144,30 @@ type ContractBase = Omit<
         readonly kind: 'postgres-schema';
         readonly entries: {
           readonly table: {
+            readonly account_deletion: {
+              columns: {
+                readonly auth0_id: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: false;
+                };
+                readonly requested_at: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: false;
+                  readonly default: { readonly kind: 'function'; readonly expression: 'now()' };
+                };
+                readonly auth0_deleted_at: {
+                  readonly nativeType: 'timestamptz';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                  readonly nullable: true;
+                };
+              };
+              primaryKey: { readonly columns: readonly ['auth0_id'] };
+              uniques: readonly [];
+              indexes: readonly [];
+              foreignKeys: readonly [];
+            };
             readonly balance_purchase: {
               columns: {
                 readonly id: {
@@ -2840,12 +2884,48 @@ type ContractBase = Omit<
       readonly namespace: 'public' & NamespaceId;
       readonly model: 'UserDsaProgress';
     };
+    readonly account_deletion: {
+      readonly namespace: 'public' & NamespaceId;
+      readonly model: 'AccountDeletion';
+    };
     readonly page_view: { readonly namespace: 'public' & NamespaceId; readonly model: 'PageView' };
   };
   readonly domain: {
     readonly namespaces: {
       readonly public: {
         readonly models: {
+          readonly AccountDeletion: {
+            readonly fields: {
+              readonly auth0_id: {
+                readonly nullable: false;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
+              readonly requested_at: {
+                readonly nullable: false;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+              readonly auth0_deleted_at: {
+                readonly nullable: true;
+                readonly type: {
+                  readonly kind: 'scalar';
+                  readonly codecId: 'pg/timestamptz-temporal@1';
+                };
+              };
+            };
+            readonly relations: Record<string, never>;
+            readonly storage: {
+              readonly table: 'account_deletion';
+              readonly namespaceId: 'public';
+              readonly fields: {
+                readonly auth0_id: { readonly column: 'auth0_id' };
+                readonly requested_at: { readonly column: 'requested_at' };
+                readonly auth0_deleted_at: { readonly column: 'auth0_deleted_at' };
+              };
+            };
+          };
           readonly BalancePurchase: {
             readonly fields: {
               readonly id: {

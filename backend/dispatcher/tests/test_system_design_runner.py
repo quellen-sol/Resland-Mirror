@@ -66,9 +66,11 @@ class SystemDesignRunnerTask(unittest.TestCase):
         self.db.default_model_spec.return_value = None
         self.db.fetch_system_design_transcript.return_value = []
         self.db.record_token_usage.return_value = 0.5
+        self.db.discard_orphaned_thread.return_value = False
         names = [
             "complete_system_design_session",
             "default_model_spec",
+            "discard_orphaned_thread",
             "fetch_system_design_session",
             "fetch_system_design_transcript",
             "record_token_usage",
@@ -104,9 +106,40 @@ class SystemDesignRunnerTask(unittest.TestCase):
     def test_missing_session_id_fails(self):
         self.assertEqual(self.run_job({"action": "start"}), "FAILED")
 
-    def test_session_not_found_fails(self):
+    def test_deleted_session_is_dropped_not_dead_lettered(self):
+        # Dismissed, or the account deleted, before the turn ran: ack the
+        # job instead of dead-lettering the candidate's message.
         self.db.fetch_system_design_session.return_value = None
-        self.assertEqual(self.run_job({"session_id": "s1"}), "FAILED")
+        self.assertEqual(
+            self.run_job(
+                {"session_id": "s1", "action": "message", "text": "my answer"}
+            ),
+            "COMPLETED",
+        )
+        self.agent.run_interview_turn.assert_not_called()
+        self.db.set_system_design_notice.assert_not_called()
+
+    def test_session_deleted_before_grading_is_dropped(self):
+        self.agent.run_interview_turn.return_value = sd.InterviewTurnOutcome(
+            reply="That's time.", interview_over=True
+        )
+        self.db.fetch_system_design_session.side_effect = [
+            started(phase="DEEP_DIVE"),
+            None,
+        ]
+        self.assertEqual(
+            self.run_job({"session_id": "s1", "action": "message", "text": "hi"}),
+            "COMPLETED",
+        )
+        self.agent.grade_interview.assert_not_called()
+        self.db.set_system_design_notice.assert_not_called()
+
+    def test_finished_job_cleans_up_a_thread_orphaned_mid_run(self):
+        self.db.fetch_system_design_session.return_value = started()
+        self.run_job({"session_id": "s1", "action": "message", "text": "hi"})
+        self.db.discard_orphaned_thread.assert_called_once_with(
+            self.conn, "user_system_design_session", "s1"
+        )
 
     def test_redelivered_turn_is_a_no_op(self):
         self.db.fetch_system_design_session.return_value = started(last_turn_id="t1")

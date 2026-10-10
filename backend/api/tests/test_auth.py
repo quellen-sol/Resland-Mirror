@@ -86,29 +86,52 @@ class VerifyToken(unittest.TestCase):
 
 
 class RequireAuth0Id(unittest.IsolatedAsyncioTestCase):
+    async def _call(self, authorization, *, claims=None, revoked=False):
+        pg = MagicMock(name="pg_conn")
+        check = AsyncMock(return_value=revoked)
+        with (
+            patch.object(auth, "_verify_claims", return_value=claims or {}),
+            patch.object(auth, "token_revoked", new=check),
+        ):
+            result = await auth.require_auth0_id(pg_conn=pg, authorization=authorization)
+        return result, check, pg
+
     async def test_missing_header_401(self):
         with self.assertRaises(HTTPException) as ctx:
-            await auth.require_auth0_id(None)
+            await self._call(None)
         self.assertEqual(ctx.exception.status_code, 401)
 
     async def test_non_bearer_scheme_401(self):
         with self.assertRaises(HTTPException) as ctx:
-            await auth.require_auth0_id("Basic abc")
+            await self._call("Basic abc")
         self.assertEqual(ctx.exception.status_code, 401)
 
     async def test_verify_failure_401(self):
         with (
-            patch.object(auth, "_verify_token", side_effect=ValueError("bad")),
+            patch.object(auth, "_verify_claims", side_effect=ValueError("bad")),
             self.assertRaises(HTTPException) as ctx,
         ):
-            await auth.require_auth0_id("Bearer x")
+            await auth.require_auth0_id(pg_conn=MagicMock(), authorization="Bearer x")
         self.assertEqual(ctx.exception.status_code, 401)
 
     async def test_valid_token_returns_sub(self):
-        with patch.object(auth, "_verify_token", return_value="auth0|u1"):
-            self.assertEqual(
-                await auth.require_auth0_id("Bearer tok"), "auth0|u1"
+        sub, check, pg = await self._call(
+            "Bearer tok", claims={"sub": "auth0|u1", "iat": 1_700_000_000}
+        )
+        self.assertEqual(sub, "auth0|u1")
+        # Checked against account_deletion on the request's own connection.
+        check.assert_awaited_once_with(pg, "auth0|u1", 1_700_000_000)
+
+    async def test_token_of_a_deleted_account_401(self):
+        with self.assertRaises(HTTPException) as ctx:
+            await self._call(
+                "Bearer tok", claims={"sub": "auth0|u1", "iat": 1}, revoked=True
             )
+        self.assertEqual(ctx.exception.status_code, 401)
+
+    async def test_token_without_iat_counts_as_old(self):
+        _, check, _ = await self._call("Bearer tok", claims={"sub": "auth0|u1"})
+        self.assertIsNone(check.await_args.args[2])
 
 
 def _admin_conn(row):

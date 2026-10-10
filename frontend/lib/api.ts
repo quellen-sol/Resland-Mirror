@@ -1,5 +1,7 @@
 "use client";
 
+import { filenameFromContentDisposition } from "./download";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -57,11 +59,11 @@ export function describeApiError(error: unknown): string {
   return String(error);
 }
 
-export async function apiFetch(
+async function apiRequest(
   accessToken: string,
   path: string,
   init?: RequestInit,
-) {
+): Promise<Response> {
   const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
   if (!apiBaseUrl) {
     throw new ApiError(0, "API base URL is not configured");
@@ -85,8 +87,46 @@ export async function apiFetch(
     throw new ApiError(0, "Can't reach the Resland API");
   }
   if (!res.ok) throw new ApiError(res.status, await res.text());
+  return res;
+}
+
+export async function apiFetch(
+  accessToken: string,
+  path: string,
+  init?: RequestInit,
+) {
+  const res = await apiRequest(accessToken, path, init);
   if (res.status === 204) return null;
   return res.json();
+}
+
+/** GET a binary response (e.g. the data export) and hand it to the browser
+ *  as a file download. Uses the server's Content-Disposition name when it's
+ *  readable, else `fallbackFilename`; returns the name used. */
+export async function apiDownload(
+  accessToken: string,
+  path: string,
+  fallbackFilename: string,
+  timeoutMs = 120_000,
+): Promise<string> {
+  const res = await apiRequest(accessToken, path, {
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const blob = await res.blob();
+  const filename = filenameFromContentDisposition(
+    res.headers.get("Content-Disposition"),
+    fallbackFilename,
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  // Revoking right away can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return filename;
 }
 
 export interface ModelActionCost {

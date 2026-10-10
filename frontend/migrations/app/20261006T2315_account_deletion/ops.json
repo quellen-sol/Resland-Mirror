@@ -1,0 +1,41 @@
+[
+  {
+    "id": "table.account_deletion",
+    "label": "Create table \"account_deletion\"",
+    "summary": "Creates table \"account_deletion\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "table",
+        "name": "account_deletion"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure table \"account_deletion\" does not exist",
+        "sql": "SELECT (to_regclass($1)) IS NULL AS \"result\"",
+        "params": [
+          "\"public\".\"account_deletion\""
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "create table \"account_deletion\"",
+        "sql": "CREATE TABLE \"public\".\"account_deletion\" (\n  \"auth0_deleted_at\" timestamptz,\n  \"auth0_id\" text NOT NULL,\n  \"requested_at\" timestamptz DEFAULT (now()) NOT NULL,\n  PRIMARY KEY (\"auth0_id\")\n)",
+        "params": []
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify table \"account_deletion\" exists",
+        "sql": "SELECT (to_regclass($1)) IS NOT NULL AS \"result\"",
+        "params": [
+          "\"public\".\"account_deletion\""
+        ]
+      }
+    ]
+  }
+]

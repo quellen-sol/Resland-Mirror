@@ -11,6 +11,14 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY") or ""
 PG_URL = os.getenv("PG_URL") or ""
 AUTH0_DOMAIN = os.getenv("AUTH0_DOMAIN") or ""
 AUTH0_AUDIENCE = os.getenv("AUTH0_AUDIENCE") or ""
+# Machine-to-machine app for the Auth0 Management API (read:users,
+# delete:users) — account export reads the login profile, account deletion
+# deletes it. Deletion refuses to start while these are unset.
+AUTH0_MGMT_CLIENT_ID = os.getenv("AUTH0_MGMT_CLIENT_ID") or ""
+AUTH0_MGMT_CLIENT_SECRET = os.getenv("AUTH0_MGMT_CLIENT_SECRET") or ""
+# Only needed when AUTH0_DOMAIN is a custom domain: the Management API is
+# served on the tenant's canonical <tenant>.<region>.auth0.com domain.
+AUTH0_MGMT_DOMAIN = os.getenv("AUTH0_MGMT_DOMAIN") or ""
 
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY") or ""
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET") or ""

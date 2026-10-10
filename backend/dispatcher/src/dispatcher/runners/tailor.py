@@ -9,6 +9,7 @@ from ..env_vars import PG_URL, TAILOR_MODEL
 from .db_ops import (
     complete_tailor_run,
     default_model_spec,
+    discard_orphaned_thread,
     fetch_tailor_profile,
     fetch_tailor_run,
     record_token_usage,
@@ -62,7 +63,11 @@ class TailorRunner(LocalThreadJobRunner):
 
                     run = fetch_tailor_run(pg_conn, run_id)
                     if not run:
-                        raise RunnerError("Tailor run not found")
+                        # Dismissed, or the account deleted, before the job
+                        # ran: ack it instead of dead-lettering a message
+                        # that carries the user's answer.
+                        print(f"Tailor run {run_id} no longer exists, dropped")
+                        return
 
                     user_id = run.user_id
                     model_spec = run.model
@@ -99,6 +104,16 @@ class TailorRunner(LocalThreadJobRunner):
                                 "Agent finished without submitting a tailored resume"
                             )
                 finally:
+                    if user_id and run_id:
+                        # Dismissed (or the account deleted) while the agent
+                        # ran: its checkpoints outlived the row's cleanup.
+                        try:
+                            if discard_orphaned_thread(
+                                pg_conn, "user_tailor_run", run_id
+                            ):
+                                print(f"Tailor run {run_id} deleted mid-run")
+                        except Exception as e:
+                            print(f"Orphaned-thread check failed: {e}")
                     if (
                         user_id
                         and run_id

@@ -148,6 +148,14 @@ const SECTIONS: {
         "What format are exports?",
         "Resumes export as editable Word (.docx) documents so you can make final tweaks before sending them out.",
       ],
+      [
+        "How do I download or delete my data?",
+        "Open Account & Data from the dashboard menu. Download My Data gives you a .zip of everything Resland stores about your account: your profile, tailored resumes, suggestions, interview transcripts, purchases, and the files you uploaded. Delete Account permanently erases your profile, files and history and removes your sign-in. Records of purchases and charges are kept for accounting, no longer linked to you.",
+      ],
+      [
+        "What happens to my balance if I delete my account?",
+        "It's lost. Unused balance isn't refunded when you delete your account, and the page shows how much you have before you confirm. As long as you keep your account, your balance never expires.",
+      ],
     ],
   },
 ];
