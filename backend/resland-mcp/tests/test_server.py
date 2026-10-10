@@ -15,7 +15,9 @@ import httpx2
 from mcp import Client
 from mcp.server.mcpserver.exceptions import ToolError
 from resland_mcp.api import ReslandApi
+from resland_mcp.prompts import INSTRUCTIONS, TAILORING_GUIDE
 from resland_mcp.server import create_server, libreoffice_to_pdf
+from shared.memory import MEMORY_RULES
 from shared.writing import BULLET_WRITING_RULES
 
 from .helpers import FakeHttp, body, settings
@@ -75,6 +77,7 @@ class Tools(ServerTest):
         self.assertEqual(
             tools,
             {
+                "get_tailoring_guide",
                 "get_profile",
                 "list_memory",
                 "remember_facts",
@@ -236,6 +239,27 @@ class LibreOffice(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(pdf.read_bytes().startswith(b"%PDF"))
 
 
+class Guide(ServerTest):
+    async def test_guide_tool_returns_the_site_rules(self):
+        # Clients that don't surface MCP prompts (Claude Desktop) still get
+        # the rules: every client supports tools.
+        result = await self.call("get_tailoring_guide")
+        self.assertFalse(result.is_error)
+        text = result.content[0].text
+        self.assertEqual(text, TAILORING_GUIDE)
+        self.assertIn(BULLET_WRITING_RULES, text)
+        self.assertIn(MEMORY_RULES, text)
+        self.assertIn("save_tailored_resume", text)
+        self.assertEqual(self.fake.requests, [])
+        # Models mirror the punctuation they're shown (see shared.writing).
+        self.assertNotIn("\u2014", text)
+
+    def test_server_instructions_point_at_the_guide(self):
+        self.assertIn("get_tailoring_guide", INSTRUCTIONS)
+        # Claude Code truncates server instructions at 2,048 characters.
+        self.assertLess(len(INSTRUCTIONS), 2048)
+
+
 class Prompt(ServerTest):
     async def test_tailor_prompt_carries_the_posting_and_the_site_rules(self):
         async with Client(self.server) as client:
@@ -247,8 +271,7 @@ class Prompt(ServerTest):
         self.assertIn("<job_posting>\nBuild payment rails\n</job_posting>", text)
         self.assertIn("Target company: Globex", text)
         self.assertIn("Target role: (not given)", text)
-        self.assertIn(BULLET_WRITING_RULES, text)
-        self.assertIn("remember_facts", text)
-        self.assertIn("save_tailored_resume", text)
+        # The prompt wraps the same guide the tool returns.
+        self.assertIn(TAILORING_GUIDE, text)
         # Models mirror the punctuation they're shown (see shared.writing).
         self.assertNotIn("—", text)
