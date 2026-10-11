@@ -33,6 +33,7 @@ export interface ExperienceForm {
   id?: number;
   companyName: string;
   title: string;
+  location: string;
   startDate: string;
   endDate: string;
   description: string;
@@ -79,6 +80,7 @@ export const emptyProfileValues: ProfileFormValues = {
     {
       companyName: "",
       title: "",
+      location: "",
       startDate: "",
       endDate: "",
       description: "",
@@ -173,6 +175,7 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
 const emptyExperience: ExperienceForm = {
   companyName: "",
   title: "",
+  location: "",
   startDate: "",
   endDate: "",
   description: "",
@@ -399,23 +402,37 @@ export default function ProfileForm({
                     className={inputCls}
                   />
                 </Field>
-                <DateField
-                  label="Start Date"
-                  required
-                  value={exp.startDate}
-                  onChange={(v) =>
-                    updateAt<ExperienceForm>("experiences", i, {
-                      startDate: v,
-                    })
-                  }
-                />
-                <DateField
-                  label="End Date"
-                  value={exp.endDate}
-                  onChange={(v) =>
-                    updateAt<ExperienceForm>("experiences", i, { endDate: v })
-                  }
-                />
+                <Field label="Location">
+                  <Input
+                    value={exp.location}
+                    onChange={(e) =>
+                      updateAt<ExperienceForm>("experiences", i, {
+                        location: e.target.value,
+                      })
+                    }
+                    placeholder="Remote or City, ST"
+                    className={inputCls}
+                  />
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <DateField
+                    label="Start Date"
+                    required
+                    value={exp.startDate}
+                    onChange={(v) =>
+                      updateAt<ExperienceForm>("experiences", i, {
+                        startDate: v,
+                      })
+                    }
+                  />
+                  <DateField
+                    label="End Date"
+                    value={exp.endDate}
+                    onChange={(v) =>
+                      updateAt<ExperienceForm>("experiences", i, { endDate: v })
+                    }
+                  />
+                </div>
               </div>
               <Field label="Description">
                 <Textarea

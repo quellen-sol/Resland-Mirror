@@ -342,6 +342,10 @@ class DbOpsPg(unittest.TestCase):
         )
         e_new = self._experience(company="NewCo", created_at="2024-01-01")
         e_old = self._experience(company="OldCo", created_at="2020-01-01")
+        self.conn.execute(
+            "UPDATE user_base_experience SET location = 'Remote' WHERE id = %s",
+            (e_new,),
+        )
         self._bullet(e_old, "old b", order=0)
         self._bullet(e_new, "new b", order=0)
         self.conn.execute(
@@ -367,6 +371,9 @@ class DbOpsPg(unittest.TestCase):
             [e.company_name for e in profile.experiences], ["NewCo", "OldCo"]
         )
         self.assertEqual(profile.experiences[0].bullet, "new b")
+        self.assertEqual(
+            [e.location for e in profile.experiences], ["Remote", None]
+        )
         self.assertEqual(profile.skills[0].name, "Python")
         self.assertEqual(profile.education[0].institution, "MIT")
         self.assertEqual(profile.projects[0].name, "Proj")
@@ -677,6 +684,7 @@ class DbOpsPg(unittest.TestCase):
                     start_date="2020",
                     end_date="2023",
                     bullets=[UserExperienceBullet(text="b1")],
+                    location="Remote",
                 )
             ],
             skills=[UserSkillByCategory(category="Langs", skills=["Python"])],
@@ -717,6 +725,10 @@ class DbOpsPg(unittest.TestCase):
         ):
             n = self.conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
             self.assertEqual(n, 1, table)
+        location = self.conn.execute(
+            "SELECT location FROM user_base_experience WHERE user_id='u1'"
+        ).fetchone()[0]
+        self.assertEqual(location, "Remote")
 
     def test_upsert_user_profile_writes_skill_sort_order(self):
         self._user()
@@ -770,13 +782,12 @@ class DbOpsPg(unittest.TestCase):
         )
         db_ops.upsert_user_profile(self.conn, "u1", profile)
 
-        companies = [
-            r[0]
-            for r in self.conn.execute(
-                "SELECT company_name FROM user_base_experience WHERE user_id='u1'"
-            ).fetchall()
-        ]
-        self.assertEqual(companies, ["NewCo"])
+        companies = self.conn.execute(
+            "SELECT company_name, location FROM user_base_experience"
+            " WHERE user_id='u1'"
+        ).fetchall()
+        # A role without a location stores NULL, not "".
+        self.assertEqual(companies, [("NewCo", None)])
         skills = [
             r[0]
             for r in self.conn.execute(

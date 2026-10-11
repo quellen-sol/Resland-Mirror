@@ -22,6 +22,7 @@ export default async function TailorPage() {
             id: e.id,
             title: e.title,
             company_name: e.company_name,
+            location: e.location,
             start_date: e.start_date,
             end_date: e.end_date,
           }))}

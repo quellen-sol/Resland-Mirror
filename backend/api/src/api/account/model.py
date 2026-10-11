@@ -60,6 +60,7 @@ EXPORT_SECTIONS: tuple[ExportSection, ...] = (
             "id",
             "company_name",
             "title",
+            "location",
             "start_date",
             "end_date",
             "description",

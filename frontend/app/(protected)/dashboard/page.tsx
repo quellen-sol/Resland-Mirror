@@ -232,7 +232,11 @@ export default async function DashboardPage() {
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="font-medium text-zinc-100">
                     {exp.title}
-                    <span className="text-zinc-400"> · {exp.company_name}</span>
+                    <span className="text-zinc-400">
+                      {" "}
+                      · {exp.company_name}
+                      {exp.location && ` · ${exp.location}`}
+                    </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2 text-xs text-zinc-500">
                     {fmtDate(exp.start_date)} – {fmtDate(exp.end_date)}

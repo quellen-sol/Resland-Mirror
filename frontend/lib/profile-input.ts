@@ -16,6 +16,7 @@ export function toProfileInput(values: ProfileFormValues): SaveProfileInput {
         id: e.id,
         companyName: e.companyName,
         title: e.title,
+        location: e.location.trim() || null,
         startDate: e.startDate,
         endDate: e.endDate || null,
         description: e.description || null,

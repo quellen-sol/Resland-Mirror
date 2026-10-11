@@ -33,7 +33,7 @@ import type {
 } from '@prisma/orm-postgres/contract/types';
 
 export type StorageHash =
-  StorageHashBase<'376e701151882455ac9a9290b31faefbaf5d512847d139694f39f2a9a7745c4f'>;
+  StorageHashBase<'e57874e4160e37047d9c7a327d3afe64d5dc4a6cc03ab9d61d23cd63841e31da'>;
 export type ExecutionHash = ExecutionHashBase<string>;
 export type ProfileHash =
   ProfileHashBase<'3916f444a8a17ad749191acf9e08dad97d1a327b88c2f1d45d12f240296aa8b2'>;
@@ -330,6 +330,7 @@ export type FieldOutputTypes = {
       readonly user_id: CodecTypes['pg/text@1']['output'];
       readonly company_name: CodecTypes['pg/text@1']['output'];
       readonly title: CodecTypes['pg/text@1']['output'];
+      readonly location: CodecTypes['pg/text@1']['output'] | null;
       readonly start_date: CodecTypes['pg/text@1']['output'];
       readonly end_date: CodecTypes['pg/text@1']['output'] | null;
       readonly description: CodecTypes['pg/text@1']['output'] | null;
@@ -561,6 +562,7 @@ export type FieldInputTypes = {
       readonly user_id: CodecTypes['pg/text@1']['input'];
       readonly company_name: CodecTypes['pg/text@1']['input'];
       readonly title: CodecTypes['pg/text@1']['input'];
+      readonly location: CodecTypes['pg/text@1']['input'] | null;
       readonly start_date: CodecTypes['pg/text@1']['input'];
       readonly end_date: CodecTypes['pg/text@1']['input'] | null;
       readonly description: CodecTypes['pg/text@1']['input'] | null;
@@ -793,6 +795,7 @@ export type StorageColumnTypes = {
       readonly description: CodecTypes['pg/text@1']['output'] | null;
       readonly end_date: CodecTypes['pg/text@1']['output'] | null;
       readonly id: CodecTypes['pg/int4@1']['output'];
+      readonly location: CodecTypes['pg/text@1']['output'] | null;
       readonly start_date: CodecTypes['pg/text@1']['output'];
       readonly title: CodecTypes['pg/text@1']['output'];
       readonly user_id: CodecTypes['pg/text@1']['output'];
@@ -1024,6 +1027,7 @@ export type StorageColumnInputTypes = {
       readonly description: CodecTypes['pg/text@1']['input'] | null;
       readonly end_date: CodecTypes['pg/text@1']['input'] | null;
       readonly id: CodecTypes['pg/int4@1']['input'];
+      readonly location: CodecTypes['pg/text@1']['input'] | null;
       readonly start_date: CodecTypes['pg/text@1']['input'];
       readonly title: CodecTypes['pg/text@1']['input'];
       readonly user_id: CodecTypes['pg/text@1']['input'];
@@ -1784,6 +1788,11 @@ type ContractBase = Omit<
                   readonly nativeType: 'text';
                   readonly codecId: 'pg/text@1';
                   readonly nullable: false;
+                };
+                readonly location: {
+                  readonly nativeType: 'text';
+                  readonly codecId: 'pg/text@1';
+                  readonly nullable: true;
                 };
                 readonly start_date: {
                   readonly nativeType: 'text';
@@ -3520,6 +3529,10 @@ type ContractBase = Omit<
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
               };
+              readonly location: {
+                readonly nullable: true;
+                readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
+              };
               readonly start_date: {
                 readonly nullable: false;
                 readonly type: { readonly kind: 'scalar'; readonly codecId: 'pg/text@1' };
@@ -3558,6 +3571,7 @@ type ContractBase = Omit<
                 readonly user_id: { readonly column: 'user_id' };
                 readonly company_name: { readonly column: 'company_name' };
                 readonly title: { readonly column: 'title' };
+                readonly location: { readonly column: 'location' };
                 readonly start_date: { readonly column: 'start_date' };
                 readonly end_date: { readonly column: 'end_date' };
                 readonly description: { readonly column: 'description' };

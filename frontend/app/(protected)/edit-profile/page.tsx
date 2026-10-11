@@ -31,6 +31,7 @@ export default async function EditProfilePage() {
       id: e.id,
       companyName: e.company_name,
       title: e.title,
+      location: e.location ?? "",
       startDate: toDateString(e.start_date),
       endDate: toDateString(e.end_date),
       description: e.description ?? "",
@@ -60,6 +61,7 @@ export default async function EditProfilePage() {
       {
         companyName: "",
         title: "",
+        location: "",
         startDate: "",
         endDate: "",
         description: "",

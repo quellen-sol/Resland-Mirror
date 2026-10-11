@@ -1247,6 +1247,13 @@
                   "kind": "scalar"
                 }
               },
+              "location": {
+                "nullable": true,
+                "type": {
+                  "codecId": "pg/text@1",
+                  "kind": "scalar"
+                }
+              },
               "start_date": {
                 "nullable": false,
                 "type": {
@@ -1302,6 +1309,9 @@
                 },
                 "id": {
                   "column": "id"
+                },
+                "location": {
+                  "column": "location"
                 },
                 "start_date": {
                   "column": "start_date"
@@ -3588,6 +3598,11 @@
                   "nativeType": "int4",
                   "nullable": false
                 },
+                "location": {
+                  "codecId": "pg/text@1",
+                  "nativeType": "text",
+                  "nullable": true
+                },
                 "start_date": {
                   "codecId": "pg/text@1",
                   "nativeType": "text",
@@ -5101,7 +5116,7 @@
         "kind": "postgres-schema"
       }
     },
-    "storageHash": "376e701151882455ac9a9290b31faefbaf5d512847d139694f39f2a9a7745c4f"
+    "storageHash": "e57874e4160e37047d9c7a327d3afe64d5dc4a6cc03ab9d61d23cd63841e31da"
   },
   "capabilities": {
     "postgres": {
