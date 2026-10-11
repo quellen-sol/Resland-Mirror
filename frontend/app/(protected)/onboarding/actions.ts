@@ -13,6 +13,7 @@ export interface ExperienceInput {
   id?: number;
   companyName: string;
   title: string;
+  location: string | null;
   startDate: string;
   endDate: string | null;
   description: string | null;
@@ -102,6 +103,7 @@ export async function saveManualProfile(input: SaveProfileInput) {
       user_id: user.auth0_id,
       company_name: exp.companyName,
       title: exp.title,
+      location: exp.location,
       start_date: exp.startDate,
       end_date: exp.endDate,
       description: exp.description,

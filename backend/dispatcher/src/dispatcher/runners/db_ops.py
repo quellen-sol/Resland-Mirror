@@ -402,6 +402,7 @@ def fetch_tailor_profile(pg_client: Connection, user_id: str) -> TailorProfile:
                 e.id AS experience_id,
                 e.company_name,
                 e.title,
+                e.location,
                 e.start_date,
                 e.end_date,
                 e.description,
@@ -895,13 +896,15 @@ def upsert_user_profile(
         for experience in profile.experience:
             experience_id = pg_client.execute(
                 """
-                INSERT INTO user_base_experience (user_id, company_name, title, start_date, end_date)
-                VALUES (%s, %s, %s, %s, %s) RETURNING id
+                INSERT INTO user_base_experience
+                    (user_id, company_name, title, location, start_date, end_date)
+                VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
                 """,
                 [
                     user_id,
                     experience.company,
                     experience.position,
+                    (experience.location or "").strip() or None,
                     experience.start_date,
                     experience.end_date,
                 ],

@@ -35,18 +35,19 @@ def _clean(value: str | None, max_chars: int = MAX_TAILOR_FIELD_CHARS) -> str | 
 async def _experience_meta(
     pg_conn: PgConnection, user_id: str, exp_ids: list[int]
 ) -> dict[int, tuple]:
-    """id → (company_name, title, start_date, end_date) for the run's refs."""
+    """id → (company_name, title, start_date, end_date, location) for the
+    run's refs."""
     if not exp_ids:
         return {}
     rows = await resume_export._fetch_all(
         pg_conn,
         """
-        SELECT id, company_name, title, start_date, end_date
+        SELECT id, company_name, title, start_date, end_date, location
         FROM user_base_experience WHERE user_id = %s AND id = ANY(%s)
         """,
         (user_id, exp_ids),
     )
-    return {r[0]: (r[1], r[2], r[3], r[4]) for r in rows}
+    return {r[0]: (r[1], r[2], r[3], r[4], r[5]) for r in rows}
 
 
 async def _skill_categories(pg_conn: PgConnection, user_id: str) -> dict[str, str | None]:
@@ -118,6 +119,7 @@ async def save_from_run(pg_conn: PgConnection, user_id: str, run_id: str) -> str
                 title=meta[1],
                 start_date=meta[2],
                 end_date=meta[3],
+                location=meta[4],
                 bullets=[b.text for b in exp.bullets],
             )
         )
@@ -153,8 +155,8 @@ async def create_tailored(
 ) -> model.CreateTailoredResponse:
     """Save a tailored resume written outside the tailor agent (the personal
     MCP server) as a board entry. Experience ids resolve against the user's
-    base profile like a run's do, so the snapshot's company/title/dates are
-    the profile's own."""
+    base profile like a run's do, so the snapshot's company/title/dates and
+    location are the profile's own."""
     exp_ids = [e.experience_id for e in req.experiences]
     if len(set(exp_ids)) != len(exp_ids):
         raise HTTPException(status_code=422, detail="Each experience_id may appear once")
@@ -168,13 +170,16 @@ async def create_tailored(
 
     experiences = []
     for exp in req.experiences:
-        company_name, title, start_date, end_date = exp_meta[exp.experience_id]
+        company_name, title, start_date, end_date, location = exp_meta[
+            exp.experience_id
+        ]
         experiences.append(
             model.TailoredExperienceContent(
                 company_name=company_name,
                 title=title,
                 start_date=start_date,
                 end_date=end_date,
+                location=location,
                 bullets=[b.strip() for b in exp.bullets if b.strip()],
             )
         )
@@ -297,6 +302,7 @@ def _tailored_render_content(
                 start_date=e.start_date,
                 end_date=e.end_date,
                 bullets=[b for b in e.bullets if b.strip()],
+                location=e.location,
             )
             for e in snapshot.experiences
         ],

@@ -18,10 +18,8 @@ resource "aws_iam_policy" "resland_user_policy" {
       },
       {
         # Account export and deletion list a user's files under
-        # resumes/<auth0_id>/; without this, ListObjectsV2 is denied.
-        # TODO: not applied to the live account yet. Apply this (terraform
-        # apply in terraform/durable) before deploying /account export and
-        # deletion, or both fail with a 502 at the S3 listing step.
+        # resumes/<auth0_id>/; without this, ListObjectsV2 is denied and
+        # both fail with a 502 at the S3 listing step. Applied 2026-10-10.
         Effect   = "Allow"
         Action   = ["s3:ListBucket"]
         Resource = aws_s3_bucket.resland_user_resumes.arn

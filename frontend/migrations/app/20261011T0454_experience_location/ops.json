@@ -1,0 +1,44 @@
+[
+  {
+    "id": "column.public.user_base_experience.location",
+    "label": "Add column \"location\" to \"user_base_experience\"",
+    "operationClass": "additive",
+    "target": {
+      "id": "postgres",
+      "details": {
+        "schema": "public",
+        "objectType": "column",
+        "name": "location",
+        "table": "user_base_experience"
+      }
+    },
+    "precheck": [
+      {
+        "description": "ensure column \"location\" is missing",
+        "sql": "SELECT NOT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_base_experience",
+          "location"
+        ]
+      }
+    ],
+    "execute": [
+      {
+        "description": "add column \"location\"",
+        "sql": "ALTER TABLE \"public\".\"user_base_experience\" ADD COLUMN \"location\" text"
+      }
+    ],
+    "postcheck": [
+      {
+        "description": "verify column \"location\" exists",
+        "sql": "SELECT EXISTS (SELECT 1 AS \"one\" FROM \"information_schema\".\"columns\" WHERE (\"table_schema\" = $1 AND \"table_name\" = $2 AND \"column_name\" = $3)) AS \"result\"",
+        "params": [
+          "public",
+          "user_base_experience",
+          "location"
+        ]
+      }
+    ]
+  }
+]

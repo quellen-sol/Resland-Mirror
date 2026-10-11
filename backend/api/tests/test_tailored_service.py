@@ -107,7 +107,7 @@ class SaveFromRun(unittest.IsolatedAsyncioTestCase):
             [
                 _Result(),  # get_tailored_by_run
                 one(_run_row(status="WAITING_FOR_INPUT")),
-                _Result([(1, "Acme", "Engineer", "2020", "2023")]),
+                _Result([(1, "Acme", "Engineer", "2020", "2023", None)]),
                 _Result([("Python", "Languages"), ("Go", "Languages")]),
                 _Result(rowcount=1),
             ]
@@ -127,7 +127,7 @@ class SaveFromRun(unittest.IsolatedAsyncioTestCase):
                 _Result(),  # get_tailored_by_run → no existing entry
                 one(_run_row()),
                 # _experience_meta
-                _Result([(1, "Acme", "Engineer", "2020", "2023")]),
+                _Result([(1, "Acme", "Engineer", "2020", "2023", "Remote")]),
                 # _skill_categories
                 _Result([("Python", "Languages"), ("Go", "Languages")]),
                 _Result(rowcount=1),  # insert
@@ -144,6 +144,7 @@ class SaveFromRun(unittest.IsolatedAsyncioTestCase):
         content = json.loads(params[6])
         self.assertEqual(content["summary"], "Tailored summary")
         self.assertEqual(content["experiences"][0]["company_name"], "Acme")
+        self.assertEqual(content["experiences"][0]["location"], "Remote")
         self.assertEqual(content["experiences"][0]["bullets"], ["Built x"])
         self.assertEqual(
             content["skill_groups"],
@@ -187,8 +188,8 @@ class Create(unittest.IsolatedAsyncioTestCase):
                 # _experience_meta — in id order, not the request's order
                 _Result(
                     [
-                        (1, "Initech", "Engineer", "2019", "2022"),
-                        (2, "Acme", "Senior Engineer", "2022", None),
+                        (1, "Initech", "Engineer", "2019", "2022", None),
+                        (2, "Acme", "Senior Engineer", "2022", None, "Remote"),
                     ]
                 ),
                 _Result([("Python", "Languages"), ("Go", "Languages")]),
@@ -206,10 +207,13 @@ class Create(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(content["summary"], "Tailored summary")
         # The request's experience order wins; blank bullets are dropped.
         self.assertEqual(
-            [(e["company_name"], e["title"], e["end_date"], e["bullets"]) for e in content["experiences"]],
             [
-                ("Acme", "Senior Engineer", None, ["Led x", "Built y"]),
-                ("Initech", "Engineer", "2022", ["Ran z"]),
+                (e["company_name"], e["title"], e["end_date"], e["location"], e["bullets"])
+                for e in content["experiences"]
+            ],
+            [
+                ("Acme", "Senior Engineer", None, "Remote", ["Led x", "Built y"]),
+                ("Initech", "Engineer", "2022", None, ["Ran z"]),
             ],
         )
         # Skills not in the base profile land in an uncategorized group.
@@ -222,7 +226,7 @@ class Create(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_unknown_experience_id_422(self):
-        pg = _Pg([_Result([(1, "Initech", "Engineer", "2019", "2022")])])
+        pg = _Pg([_Result([(1, "Initech", "Engineer", "2019", "2022", None)])])
         with self.assertRaises(HTTPException) as ctx:
             await service.create_tailored(pg, "u1", _create_req())
         self.assertEqual(ctx.exception.status_code, 422)
@@ -411,9 +415,18 @@ class RenderContent(unittest.TestCase):
         content = service._tailored_render_content(_tailored_row(), base)
         self.assertEqual(content.summary, "Tailored summary")
         self.assertEqual(content.experiences[0].company, "Acme")
+        # Saved before experiences had a location: the key is absent.
+        self.assertIsNone(content.experiences[0].location)
         self.assertEqual(content.experiences[0].bullets, ["Built x"])
         self.assertEqual(content.skill_groups[0].skills, ["Python", "Go"])
         self.assertEqual(content.source, "tailored:t1")
+
+    def test_snapshot_location_renders(self):
+        snapshot = json.loads(_tailored_row().content)
+        snapshot["experiences"][0]["location"] = "Remote"
+        row = _tailored_row(content=json.dumps(snapshot))
+        content = service._tailored_render_content(row, ResumeContent())
+        self.assertEqual(content.experiences[0].location, "Remote")
 
     def test_empty_bullets_dropped_from_render(self):
         row = _tailored_row(

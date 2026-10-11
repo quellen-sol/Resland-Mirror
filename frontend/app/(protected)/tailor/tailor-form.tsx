@@ -67,6 +67,7 @@ interface ExperienceMeta {
   id: number;
   title: string;
   company_name: string;
+  location: string | null;
   start_date: string;
   end_date: string | null;
 }
@@ -578,6 +579,7 @@ export default function TailorForm({
                                 <span className="text-zinc-400">
                                   {" "}
                                   · {meta.company_name}
+                                  {meta.location && ` · ${meta.location}`}
                                 </span>
                               )}
                             </span>

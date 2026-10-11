@@ -59,6 +59,9 @@ ROLE_DATES = "dates"
 # entry_sub.
 ROLE_EDUCATION_TITLE = "education_title"
 ROLE_EDUCATION_SUB = "education_sub"
+# An experience's location ("Remote"), when the source styles it apart;
+# falls back to the look of the entry part it follows.
+ROLE_ENTRY_LOCATION = "entry_location"
 ALL_ROLES = (
     ROLE_NAME,
     ROLE_CONTACT,
@@ -116,6 +119,10 @@ _ALIGNMENTS = {
     "justify": WD_ALIGN_PARAGRAPH.JUSTIFY,
 }
 
+# ECMA-376 2nd edition renamed `w:jc` left/right to start/end. Newer Word and
+# Google Docs write them, but python-docx only maps the old names.
+_JC_ALIASES = {"start": "left", "end": "right"}
+
 
 def _known_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
     names = {f.name for f in fields(cls)}
@@ -165,6 +172,12 @@ class FormatProfile:
     # True when the source orders experience lines company first —
     # "Company - Title" instead of "Title - Company".
     entry_title_tail_first: bool = False
+    # Experience location ("Remote"): the separator that appends it to the
+    # entry line ("Title | Company | Remote"), or its own line under the
+    # entry. None = the entry_title_separator, or ", " where that's a word
+    # or bracket.
+    entry_location_separator: str | None = None
+    entry_location_on_own_line: bool = False
     # Education and project lines keep their own order, separator and
     # trailing-part look: "Institution - Degree" doesn't follow from
     # "Company - Title". None falls back to the experience value.
@@ -248,6 +261,7 @@ class ResumeExperience:
     start_date: str
     end_date: str | None
     bullets: list[str] = field(default_factory=list)
+    location: str | None = None
 
 
 @dataclass
@@ -383,6 +397,21 @@ def _last_text_run(para: Paragraph):
     return _first_text_run(para)
 
 
+def _para_alignment(para: Paragraph):
+    """`para.alignment` read off the raw `w:jc`, since python-docx raises on
+    values it has no member for: start/end read as left/right, anything
+    else (`numTab`) as undeclared."""
+    pPr = para._p.pPr
+    jc = pPr.jc if pPr is not None else None
+    if jc is None:
+        return None
+    val = jc.get(qn("w:val"))
+    try:
+        return WD_ALIGN_PARAGRAPH.from_xml(_JC_ALIASES.get(val, val))
+    except ValueError:
+        return None
+
+
 def _para_style(para: Paragraph) -> RoleStyle:
     """Resolve a paragraph's effective look: direct run props fall back to
     the paragraph style. Unknown values stay None — the renderer then falls
@@ -413,7 +442,7 @@ def _run_style(run, para: Paragraph) -> RoleStyle:
         getattr(getattr(style_font, "color", None), "rgb", None),
     )
 
-    alignment = para.alignment
+    alignment = _para_alignment(para)
     if alignment is None and style is not None:
         alignment = getattr(style, "alignment", None)
 
@@ -516,6 +545,25 @@ def _join_token(between: str) -> str | None:
     return None
 
 
+def _join_separator(between: str, after: str) -> str | None:
+    """The separator as rendered (" | ", ", ", " (") from the text between
+    two entry parts; `after` is what follows the second part, which must
+    close a bracket the separator opens."""
+    between = " ".join(between.split())
+    token = _join_token(between) if between else None
+    if token is None:
+        return None
+    if token in _BRACKETS:
+        if not after.lstrip().startswith(_BRACKETS[token]):
+            return None
+        return f" {token}"
+    # Punctuation joins take no leading space:
+    # "Title, Company", not "Title , Company".
+    if token[0] in ",;:.":
+        return f"{token} "
+    return f" {token} "
+
+
 def _title_separator(
     text: str, head: str, tail: str, strict: bool = False
 ) -> tuple[str, bool] | None:
@@ -536,19 +584,9 @@ def _title_separator(
         j = low.find(second.lower(), i + len(first)) if i >= 0 else -1
         if i < 0 or j <= i:
             continue
-        between = " ".join(text[i + len(first) : j].split())
-        token = _join_token(between) if between else None
-        if token is None:
-            continue
-        if token in _BRACKETS:
-            if not text[j + len(second) :].lstrip().startswith(_BRACKETS[token]):
-                continue
-            return f" {token}", tail_first
-        # Punctuation joins take no leading space:
-        # "Title, Company", not "Title , Company".
-        if token[0] in ",;:.":
-            return f"{token} ", tail_first
-        return f" {token} ", tail_first
+        sep = _join_separator(text[i + len(first) : j], text[j + len(second) :])
+        if sep is not None:
+            return sep, tail_first
     if strict:
         return None
     # The dash inside "2020 – Present" isn't the title separator.
@@ -574,6 +612,62 @@ def _entry_parts(entry_text: str, head: str, tail: str, tail_first: bool):
     li = _offset_after(entry_text, lead)
     ti = _offset_after(entry_text, trail, li + len(lead) if li >= 0 else 0)
     return li, ti
+
+
+# A tab or a wide run of spaces floats what follows to the right — it
+# isn't joined to the text before it.
+_GAP = re.compile(r"\t| {3,}")
+
+
+def _entry_location(lines: list, experiences: list) -> tuple[int, int, str | None] | None:
+    """Where the source prints an experience location, read off the first
+    entry that has one: (line index, offset, separator). On the entry line
+    the offset is the location's and the separator what joins it to the
+    entry part before it (None when a gap floats it right instead). On its
+    own line under the entry the offset is -1."""
+    for exp in experiences:
+        location = (getattr(exp, "location", None) or "").strip()
+        parts = [p for p in (exp.position, exp.company) if p]
+        if not location or not parts:
+            continue
+        entry_lines = sorted({i for p in parts for i in _match_all(lines, p)})
+        for i in entry_lines:
+            text = lines[i].text
+            # Past whichever entry part ends last, so a city inside the
+            # company name ("Denver Health") isn't taken for the location.
+            # A part matched only through whitespace normalization has no
+            # raw offset; then the line can't anchor an inline location.
+            start = max(
+                (at + len(p) for p in parts if (at := _offset_after(text, p)) >= 0),
+                default=-1,
+            )
+            at = _offset_after(text, location, start) if start >= 0 else -1
+            if at >= 0:
+                between = text[start:at]
+                sep = (
+                    None
+                    if _GAP.search(between)
+                    else _join_separator(between, text[at + len(location) :])
+                )
+                return i, at, sep
+            for j in range(i + 1, min(i + 3, len(lines))):
+                if _norm(lines[j].text).startswith(_norm(location)):
+                    return j, -1, None
+    return None
+
+
+def _pin_entry_location_role(roles: dict[str, RoleStyle], own_line: bool, tail_sub: bool):
+    """A captured location look that inherits its font or size gets them
+    from the entry role it would otherwise fall back to, which the capture
+    already pinned to the source's typeface."""
+    style = roles.get(ROLE_ENTRY_LOCATION)
+    if style is None:
+        return
+    base = roles[ROLE_ENTRY_SUB if own_line or tail_sub else ROLE_ENTRY_TITLE]
+    if style.font_name is None:
+        style.font_name = base.font_name
+    if style.size_pt is None:
+        style.size_pt = base.size_pt
 
 
 def _styles_differ(a: RoleStyle, b: RoleStyle) -> bool:
@@ -1064,6 +1158,22 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
                             dates_style = _para_style(paras[j])
                             break
 
+    # Experience location: chained onto the entry line after the company
+    # ("Title | Company | Remote"), or on its own line under the entry.
+    entry_location_separator: str | None = None
+    entry_location_on_own_line = False
+    found = _entry_location(paras, profile.experience)
+    if found is not None:
+        loc_idx, loc_at, entry_location_separator = found
+        entry_location_on_own_line = loc_at < 0
+        loc_para = paras[loc_idx]
+        if entry_location_on_own_line:
+            roles[ROLE_ENTRY_LOCATION] = _para_style(loc_para)
+        else:
+            loc_run = _run_at_offset(loc_para, loc_at)
+            if loc_run is not None:
+                roles[ROLE_ENTRY_LOCATION] = _run_style(loc_run, loc_para)
+
     # Education and project lines: their own order, separator, and
     # leading/trailing looks (same position rule as experience).
     edu_separator: str | None = None
@@ -1316,6 +1426,8 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
         entry_title_separator=entry_title_separator,
         entry_title_tail_sub=tail_sub,
         entry_title_tail_first=tail_first,
+        entry_location_separator=entry_location_separator,
+        entry_location_on_own_line=entry_location_on_own_line,
         education_title_separator=edu_separator,
         education_title_tail_first=edu_tail_first,
         education_title_tail_sub=edu_tail_sub,
@@ -1360,6 +1472,7 @@ def capture_format_profile(doc: _Document, profile: Any) -> FormatProfile:
             style.font_name = default_font[0]
         if style.size_pt is None and default_font[1]:
             style.size_pt = default_font[1]
+    _pin_entry_location_role(captured.roles, entry_location_on_own_line, tail_sub)
     return captured
 
 
@@ -1645,6 +1758,19 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
                             dates_style = _style(lines[j])
                             break
 
+    # Experience location, same placements as the docx path.
+    entry_location_separator: str | None = None
+    entry_location_on_own_line = False
+    found = _entry_location(lines, profile.experience)
+    if found is not None:
+        loc_idx, loc_at, entry_location_separator = found
+        entry_location_on_own_line = loc_at < 0
+        loc_line = lines[loc_idx]
+        roles[ROLE_ENTRY_LOCATION] = _pdf_style_role(
+            loc_line.style_at(max(loc_at, 0)),
+            base=_style(loc_line) if entry_location_on_own_line else None,
+        )
+
     # Education and project lines: their own order, separator, and
     # leading/trailing looks (same position rule as experience).
     edu_separator: str | None = None
@@ -1848,6 +1974,8 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
         entry_title_separator=entry_title_separator,
         entry_title_tail_sub=tail_sub,
         entry_title_tail_first=tail_first,
+        entry_location_separator=entry_location_separator,
+        entry_location_on_own_line=entry_location_on_own_line,
         education_title_separator=edu_separator,
         education_title_tail_first=edu_tail_first,
         education_title_tail_sub=edu_tail_sub,
@@ -1882,6 +2010,7 @@ def capture_format_profile_pdf(doc: PdfDoc, profile: Any) -> FormatProfile:
         if role in _BODY_SIZED_ROLES and dominant[1]:
             fallback.size_pt = dominant[1]
         captured.roles[role] = fallback
+    _pin_entry_location_role(captured.roles, entry_location_on_own_line, tail_sub)
     return captured
 
 
@@ -1989,13 +2118,15 @@ def _entry_header(
     sep: str | None = None,
     tail_first: bool = False,
     tail_sub: bool | None = None,
+    location: str | None = None,
 ):
     """One entry heading: title + optional tail (company) joined by the
     section's separator in the section's order, dates floated right through
     a tab stop. Styles follow position like the capture: the leading part
     gets the title role, and when the source styles its trailing part
     lighter (the section's tail_sub, else entry_title_tail_sub) that part
-    runs in the sub role."""
+    runs in the sub role. An experience's location ends the title chain,
+    or takes its own line under it, in the look of the part it follows."""
     title_style = fmt.roles.get(title_role, fmt.role(ROLE_ENTRY_TITLE))
     sub_style = fmt.roles.get(sub_role, fmt.role(ROLE_ENTRY_SUB))
     dates_style = fmt.roles.get(ROLE_DATES, sub_style)
@@ -2003,18 +2134,28 @@ def _entry_header(
     closer = _BRACKETS.get(sep.strip(), "")
     if tail_sub is None:
         tail_sub = fmt.entry_title_tail_sub
+    location = (location or "").strip()
+    own_line_location = bool(location) and fmt.entry_location_on_own_line
+    location_style = fmt.roles.get(
+        ROLE_ENTRY_LOCATION,
+        sub_style if own_line_location or (tail and tail_sub) else title_style,
+    )
 
     def _title_runs(para: Paragraph):
         if not tail:
             _write_run(para, title, title_style)
-            return
-        lead, trail = (tail, title) if tail_first else (title, tail)
-        _write_run(para, lead, title_style)
-        _write_run(
-            para,
-            f"{sep}{trail}{closer}",
-            sub_style if tail_sub else title_style,
-        )
+        else:
+            lead, trail = (tail, title) if tail_first else (title, tail)
+            _write_run(para, lead, title_style)
+            _write_run(
+                para,
+                f"{sep}{trail}{closer}",
+                sub_style if tail_sub else title_style,
+            )
+        if location and not own_line_location:
+            loc_sep = _entry_location_separator(fmt)
+            loc_closer = _BRACKETS.get(loc_sep.strip(), "")
+            _write_run(para, f"{loc_sep}{location}{loc_closer}", location_style)
 
     if fmt.dates_on_title_line and dates:
         para = doc.add_paragraph()
@@ -2025,12 +2166,28 @@ def _entry_header(
         _title_runs(para)
         _write_run(para, "\t", dates_style)
         _write_run(para, dates, dates_style)
+        if own_line_location:
+            _role_para(doc, location, location_style)
     else:
         para = doc.add_paragraph()
         _apply_role(para, title_style)
         _title_runs(para)
+        if own_line_location:
+            _role_para(doc, location, location_style)
         if dates:
             _role_para(doc, dates, dates_style)
+
+
+def _entry_location_separator(fmt: FormatProfile) -> str:
+    """The captured location separator, else the title separator — except
+    a word ("at") or bracket, which would misread: "Engineer at Acme at
+    Remote". Those fall back to ", "."""
+    if fmt.entry_location_separator is not None:
+        return fmt.entry_location_separator
+    token = fmt.entry_title_separator.strip()
+    if token in _BRACKETS or token.lower() in _SEPARATOR_WORDS:
+        return ", "
+    return fmt.entry_title_separator
 
 
 def _section_header(doc: _Document, section: str, fmt: FormatProfile):
@@ -2179,6 +2336,7 @@ def render_docx(content: ResumeContent, fmt: FormatProfile) -> bytes:
                     _dates(exp.start_date, exp.end_date, fmt),
                     fmt,
                     tail_first=fmt.entry_title_tail_first,
+                    location=exp.location,
                 )
                 for bullet in exp.bullets:
                     _bullet_para(doc, bullet, fmt)
