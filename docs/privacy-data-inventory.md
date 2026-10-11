@@ -6,7 +6,7 @@ how long it is kept. Hand this to whoever drafts the policies (lawyer or
 generator), and update it whenever a data flow changes. A policy that
 contradicts this file is a policy that says something untrue.
 
-Snapshot of `master` at `20a502d` (account deletion and export, the memory
+Snapshot of `master` at `9f9d834` (account deletion and export, the memory
 bank, and resland-mcp merged), 2026-10-10, plus the owner's answers about
 production hosting and policy decisions from 2026-10-06. Section 8 lists what
 is still open.
@@ -54,8 +54,8 @@ is still open.
   - On account deletion, the balance is forfeited, and billing records are
     kept de-identified.
 - **Self-serve deletion and export:** merged (#81) as the Account & Data page
-  (`/account`). In production it also needs the S3 `ListBucket` grant, which
-  isn't applied yet, and the Auth0 Management API credentials (§8).
+  (`/account`). The S3 `ListBucket` grant it needs is applied; in production
+  it also needs the Auth0 Management API credentials (§8).
 
 ## 1. What we collect
 
@@ -382,15 +382,15 @@ These must stay true, or the policy and the copy must change together:
 - Balance never expires and refunds are discretionary.
 - Billing records are kept de-identified on deletion.
 - Contact email, mailing address, and governing law are set.
-- Self-serve account deletion and data export merged (#81).
+- Self-serve account deletion and data export merged (#81). The S3
+  `ListBucket` grant they need is applied (`resland-user-policy` v3, checked
+  2026-10-10).
 - A resume re-upload no longer orphans the checkpoints of the suggestions it
   deletes.
 
 **Still to do**
-1. Make account deletion and export work in production. Apply the S3
-   `ListBucket` grant in `terraform/durable` (`iam.tf` marks it as not
-   applied; without it, both fail with a 502 at the S3 listing step). Give the
-   Railway API service the Auth0 Management API app's credentials (see #81).
+1. Make account deletion and export work in production: give the Railway API
+   service the Auth0 Management API app's credentials (see #81).
 2. Pin `RESUME_PARSER_MODEL`, plus the `SUGGESTIONS_MODEL` and `TAILOR_MODEL`
    fallbacks, to OpenAI or Claude models in Railway, so `openrouter/auto` can't
    route outside the vendors the policy names.
