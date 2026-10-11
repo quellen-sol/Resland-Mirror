@@ -17,14 +17,17 @@ from fastapi import HTTPException
 OTHER = "u2"
 
 
-async def _experience(pg, user_id, company, title, start, end, bullets, created_at):
+async def _experience(
+    pg, user_id, company, title, start, end, bullets, created_at, location=None
+):
     res = await pg.execute(
         """
         INSERT INTO user_base_experience
-            (user_id, company_name, title, start_date, end_date, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+            (user_id, company_name, title, location, start_date, end_date,
+             created_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
         """,
-        (user_id, company, title, start, end, created_at),
+        (user_id, company, title, location, start, end, created_at),
     )
     exp_id = (await res.fetchone())[0]
     bullet_ids = []
@@ -68,6 +71,7 @@ async def profile(pg, user):
         None,
         ["Led x", "Built y"],
         "2025-01-01",
+        location="Remote",
     )
     bare_id, _ = await _experience(
         pg, user, "Hooli", "Intern", "2018", "2018", [], "2023-01-01"
@@ -119,6 +123,7 @@ async def test_profile_reads_the_users_rows_in_display_order(pg, profile):
         profile["bare"],
     ]
     acme = resp.experiences[0]
+    assert [e.location for e in resp.experiences] == ["Remote", None, None]
     assert [b.id for b in acme.bullets] == profile["new_bullets"]
     assert [b.text for b in acme.bullets] == ["Led x", "Built y"]
     assert resp.experiences[2].bullets == []
@@ -257,10 +262,12 @@ async def test_create_tailored_round_trips_through_get(pg, profile):
         "Staff Engineer",
         "Build payment rails",
     )
-    assert [(e.company_name, e.bullets) for e in got.content.experiences] == [
-        ("Acme", ["Built the rails"]),
-        ("Hooli", []),
-        ("Initech", ["Ran z"]),
+    assert [
+        (e.company_name, e.location, e.bullets) for e in got.content.experiences
+    ] == [
+        ("Acme", "Remote", ["Built the rails"]),
+        ("Hooli", None, []),
+        ("Initech", None, ["Ran z"]),
     ]
     assert [(g.category, g.skills) for g in got.content.skill_groups] == [
         ("Data", ["Kafka"]),

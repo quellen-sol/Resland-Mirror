@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "contract:emit": "prisma contract emit",
-    "test": "node --test lib/auth0.test.js lib/skills.test.js lib/dashboard-menu.test.js lib/system-design.test.js lib/live-demo.test.js lib/maintenance.test.js lib/suggestions.test.js lib/dsa.test.js lib/seo.test.js lib/traffic.test.js lib/account.test.js lib/download.test.js lib/memory.test.js",
+    "test": "node --test lib/auth0.test.js lib/skills.test.js lib/dashboard-menu.test.js lib/system-design.test.js lib/live-demo.test.js lib/maintenance.test.js lib/suggestions.test.js lib/dsa.test.js lib/seo.test.js lib/traffic.test.js lib/account.test.js lib/download.test.js lib/memory.test.js lib/tailored.test.js",
     "test:dsa-examples": "node --test lib/dsa-examples.test.js",
     "test:dsa-links": "node --test lib/dsa-links.test.js"
   },

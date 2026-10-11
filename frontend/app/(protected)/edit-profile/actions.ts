@@ -48,6 +48,7 @@ export async function saveProfileEdit(input: SaveProfileInput) {
       const fields = {
         company_name: exp.companyName,
         title: exp.title,
+        location: exp.location,
         start_date: exp.startDate,
         end_date: exp.endDate,
         description: exp.description,

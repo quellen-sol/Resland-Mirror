@@ -74,6 +74,17 @@ export default function TailoredEditor({
     setContent(fn);
   }
 
+  function setLocation(expIdx: number, location: string) {
+    mutateContent((c) => ({
+      ...c,
+      experiences: c.experiences.map((e, i) =>
+        i === expIdx
+          ? { ...e, location: location.trim() ? location : null }
+          : e,
+      ),
+    }));
+  }
+
   function setBullet(expIdx: number, bulletIdx: number, text: string) {
     mutateContent((c) => ({
       ...c,
@@ -303,6 +314,13 @@ export default function TailoredEditor({
                   {fmtDate(exp.start_date)} – {fmtDate(exp.end_date)}
                 </span>
               </div>
+              <Input
+                value={exp.location ?? ""}
+                onChange={(e) => setLocation(ei, e.target.value)}
+                aria-label="Location"
+                placeholder="Location (e.g. Remote or City, ST)"
+                className={`h-7 sm:max-w-72 ${inputClass}`}
+              />
               {exp.bullets.map((bullet, bi) => (
                 <div key={bi} className="flex items-start gap-2">
                   <Textarea

@@ -66,6 +66,9 @@ model UserBaseExperience {
   user         User      @relation(fields: [user_id], references: [auth0_id])
   company_name String
   title        String
+  // Where the role was based, as the resume writes it ("Remote",
+  // "Denver, CO"). Optional — many resumes omit it.
+  location     String?
   start_date   String
   end_date     String?
   description  String?

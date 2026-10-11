@@ -29,26 +29,31 @@ def _pg(header=HEADER, links=(), exps=(), skills=(), edu=(), projects=()):
 
 class GetProfile(unittest.IsolatedAsyncioTestCase):
     async def test_groups_bullets_under_their_experience_in_order(self):
+        # (id, company, title, location, start, end, description) + bullet
+        acme_row = (2, "Acme", "Senior Engineer", "Remote", "2022", None, None)
+        initech_row = (1, "Initech", "Engineer", None, "2019", "2022", "Payments")
         pg = _pg(
             exps=[
-                (2, "Acme", "Senior Engineer", "2022", None, None, 20, "Led x"),
-                (2, "Acme", "Senior Engineer", "2022", None, None, 21, "Built y"),
-                (1, "Initech", "Engineer", "2019", "2022", "Payments", 10, "Ran z"),
+                (*acme_row, 20, "Led x"),
+                (*acme_row, 21, "Built y"),
+                (*initech_row, 10, "Ran z"),
             ]
         )
         profile = await service.get_profile(pg, "u1")
         self.assertEqual([e.id for e in profile.experiences], [2, 1])
         acme = profile.experiences[0]
         self.assertEqual(acme.company_name, "Acme")
+        self.assertEqual(acme.location, "Remote")
         self.assertIsNone(acme.end_date)
         self.assertEqual(
             [(b.id, b.text) for b in acme.bullets], [(20, "Led x"), (21, "Built y")]
         )
         self.assertEqual(profile.experiences[1].description, "Payments")
+        self.assertIsNone(profile.experiences[1].location)
 
     async def test_experience_without_bullets_keeps_an_empty_list(self):
         # LEFT JOIN: a bullet-less experience comes back with NULL bullet cols.
-        pg = _pg(exps=[(3, "Hooli", "Intern", "2018", "2018", None, None, None)])
+        pg = _pg(exps=[(3, "Hooli", "Intern", None, "2018", "2018", None, None, None)])
         profile = await service.get_profile(pg, "u1")
         self.assertEqual(profile.experiences[0].bullets, [])
 

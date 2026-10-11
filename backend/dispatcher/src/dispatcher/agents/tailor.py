@@ -173,6 +173,7 @@ class TailorExperienceRow(BaseModel):
     experience_id: int
     company_name: str
     title: str
+    location: str | None = None
     start_date: str
     end_date: str | None
     description: str | None

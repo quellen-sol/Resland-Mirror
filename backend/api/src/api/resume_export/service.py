@@ -65,7 +65,7 @@ async def _fetch_resume_content(pg_conn: PgConnection, user_id: str) -> ResumeCo
     exp_rows = await _fetch_all(
         pg_conn,
         """
-        SELECT id, company_name, title, start_date, end_date
+        SELECT id, company_name, title, start_date, end_date, location
         FROM user_base_experience WHERE user_id = %s
         ORDER BY created_at DESC
         """,
@@ -132,6 +132,7 @@ async def _fetch_resume_content(pg_conn: PgConnection, user_id: str) -> ResumeCo
                 start_date=r[3],
                 end_date=r[4],
                 bullets=bullets_by_exp.get(r[0], []),
+                location=r[5],
             )
             for r in exp_rows
         ],

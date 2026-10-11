@@ -18,6 +18,7 @@ from shared.docgen import (
     CONTACT_STACKED,
     ROLE_DATES,
     ROLE_EDUCATION_SUB,
+    ROLE_ENTRY_LOCATION,
     ROLE_ENTRY_SUB,
     ROLE_ENTRY_TITLE,
     FormatProfile,
@@ -31,6 +32,7 @@ from shared.docgen import (
     _title_separator,
     capture_format_profile,
     capture_format_profile_pdf,
+    content_source_hash,
     default_format_profile,
     render_docx,
 )
@@ -58,6 +60,7 @@ class _Exp:
     start_date: str
     end_date: str | None
     bullets: list = field(default_factory=list)
+    location: str = ""
 
 
 @dataclass
@@ -495,6 +498,239 @@ class StackedContact(unittest.TestCase):
         self.assertEqual(fmt.contact_layout, CONTACT_INLINE)
         paras = _paras(render_docx(_content(), fmt))
         self.assertEqual(paras[1].text, "jane@x.com | 555-1234 | Denver, CO")
+
+
+def _located_profile(*locations: str) -> _Profile:
+    """Two Acme/Globex roles; the given locations go on them in order."""
+    profile = _profile()
+    profile.experience = [
+        _Exp("Acme Corp", "Senior Engineer", "Jan 2020", None, [_Bullet("Built the thing")]),
+        _Exp("Globex", "Engineer", "Jun 2017", "Dec 2019", [_Bullet("Shipped the other thing")]),
+    ]
+    for exp, location in zip(profile.experience, locations):
+        exp.location = location
+    return profile
+
+
+def _located_content(*locations: str | None) -> ResumeContent:
+    content = _content()
+    content.experiences = [
+        ResumeExperience("Acme Corp", "Senior Engineer", "Jan 2020", None, ["Built the thing"]),
+        ResumeExperience("Globex", "Engineer", "Jun 2017", "Dec 2019", ["Shipped the other thing"]),
+    ]
+    for exp, location in zip(content.experiences, locations):
+        exp.location = location
+    return content
+
+
+def _entry_doc(*entries) -> Document:
+    """An experience section whose entry lines are each given as run
+    specs (text, bold, italic); a str entry is a plain paragraph."""
+    doc = Document()
+    doc.add_paragraph("Jane Doe")
+    doc.add_paragraph("jane@x.com | 555-1234 | Denver, CO")
+    doc.add_paragraph("EXPERIENCE")
+    for entry in entries:
+        if isinstance(entry, str):
+            doc.add_paragraph(entry)
+        else:
+            _runs(doc.add_paragraph(), *entry)
+    return doc
+
+
+_PIPE_CHAIN = (
+    (
+        ("Senior Engineer", True, True),
+        (" | ", False, True),
+        ("Acme Corp | Remote                         Jan 2020 - Present", False, True),
+    ),
+    "• Built the thing",
+    (
+        ("Engineer", True, True),
+        (" | ", False, True),
+        ("Globex | Denver, CO                         Jun 2017 - Dec 2019", False, True),
+    ),
+    "• Shipped the other thing",
+)
+
+
+class ExperienceLocation(unittest.TestCase):
+    """An experience's location ("Remote") renders where the source puts
+    it: chained onto the entry line with the source's separator, or on its
+    own line under the entry."""
+
+    def test_entry_without_location_is_unchanged(self):
+        para = _para(_paras(render_docx(_located_content(None, ""), default_format_profile())), "Acme")
+        self.assertEqual(para.text, "Senior Engineer — Acme Corp\tJan 2020 – Present")
+
+    def test_default_chains_location_with_the_title_separator(self):
+        paras = _paras(render_docx(_located_content("Remote", None), default_format_profile()))
+        self.assertEqual(
+            _para(paras, "Acme").text, "Senior Engineer — Acme Corp — Remote\tJan 2020 – Present"
+        )
+        self.assertEqual(_para(paras, "Globex").text, "Engineer — Globex\tJun 2017 – Dec 2019")
+
+    def test_default_avoids_word_and_bracket_separators(self):
+        fmt = default_format_profile()
+        for title_sep, expected in (
+            (" at ", "Senior Engineer at Acme Corp, Remote"),
+            (" (", "Senior Engineer (Acme Corp), Remote"),
+        ):
+            fmt.entry_title_separator = title_sep
+            para = _para(_paras(render_docx(_located_content("Remote"), fmt)), "Acme")
+            self.assertEqual(para.text.split("\t")[0], expected)
+
+    def test_location_follows_the_trailing_part_look(self):
+        fmt = default_format_profile()
+        fmt.entry_title_tail_sub = True
+        para = _para(_paras(render_docx(_located_content("Remote"), fmt)), "Acme")
+        location_run = next(r for r in para.runs if "Remote" in r.text)
+        self.assertTrue(location_run.font.italic)
+        self.assertFalse(location_run.font.bold)
+
+    def test_profile_from_before_location_loads(self):
+        old = asdict(default_format_profile())
+        del old["entry_location_separator"]
+        del old["entry_location_on_own_line"]
+        old["entry_title_separator"] = " | "
+        fmt = FormatProfile.from_dict(json.loads(json.dumps(old)))
+        para = _para(_paras(render_docx(_located_content("Remote"), fmt)), "Acme")
+        self.assertEqual(para.text, "Senior Engineer | Acme Corp | Remote\tJan 2020 – Present")
+
+    def test_location_is_part_of_the_source_hash(self):
+        fmt = default_format_profile()
+        self.assertNotEqual(
+            content_source_hash(_located_content(None), fmt=fmt),
+            content_source_hash(_located_content("Remote"), fmt=fmt),
+        )
+
+    def test_docx_pipe_chain(self):
+        """"Title | Company | Remote      dates": the location joins the
+        chain with the source's own separator and look."""
+        fmt = capture_format_profile(_entry_doc(*_PIPE_CHAIN), _located_profile("Remote", "Denver, CO"))
+        self.assertEqual(fmt.entry_location_separator, " | ")
+        self.assertFalse(fmt.entry_location_on_own_line)
+        self.assertTrue(fmt.roles[ROLE_ENTRY_LOCATION].italic)
+        self.assertFalse(fmt.roles[ROLE_ENTRY_LOCATION].bold)
+        paras = _paras(render_docx(_located_content("Remote", "Denver, CO"), fmt))
+        acme = _para(paras, "Acme")
+        self.assertEqual(acme.text, "Senior Engineer | Acme Corp | Remote\tJan 2020 - Present")
+        self.assertTrue(next(r for r in acme.runs if "Remote" in r.text).font.italic)
+        self.assertEqual(
+            _para(paras, "Globex").text, "Engineer | Globex | Denver, CO\tJun 2017 - Dec 2019"
+        )
+
+    def test_docx_comma_after_company(self):
+        doc = _entry_doc(
+            (("Senior Engineer", True, False), (" — Acme Corp, Denver, CO\tJan 2020 – Present", False, False)),
+        )
+        fmt = capture_format_profile(doc, _located_profile("Denver, CO"))
+        self.assertEqual(fmt.entry_location_separator, ", ")
+        para = _para(_paras(render_docx(_located_content("Denver, CO"), fmt)), "Acme")
+        self.assertEqual(para.text, "Senior Engineer — Acme Corp, Denver, CO\tJan 2020 – Present")
+
+    def test_docx_bracketed_location_closes(self):
+        doc = _entry_doc(
+            (("Senior Engineer at Acme Corp (Remote)\tJan 2020 – Present", False, False),),
+        )
+        fmt = capture_format_profile(doc, _located_profile("Remote"))
+        self.assertEqual(fmt.entry_location_separator, " (")
+        para = _para(_paras(render_docx(_located_content("Remote"), fmt)), "Acme")
+        self.assertEqual(para.text, "Senior Engineer at Acme Corp (Remote)\tJan 2020 – Present")
+
+    def test_docx_own_line_under_the_entry(self):
+        doc = _entry_doc(
+            (("Acme Corp", True, False), (" - Senior Engineer\tJan 2020 – Present", False, False)),
+            (("Remote", False, True),),
+            "• Built the thing",
+        )
+        fmt = capture_format_profile(doc, _located_profile("Remote"))
+        self.assertTrue(fmt.entry_location_on_own_line)
+        self.assertTrue(fmt.roles[ROLE_ENTRY_LOCATION].italic)
+        paras = _paras(render_docx(_located_content("Remote"), fmt))
+        entry = _para(paras, "Acme")
+        self.assertEqual(entry.text, "Acme Corp - Senior Engineer\tJan 2020 – Present")
+        below = paras[paras.index(entry) + 1]
+        self.assertEqual(below.text, "Remote")
+        self.assertTrue(below.runs[0].font.italic)
+
+    def test_docx_own_line_comes_before_own_line_dates(self):
+        fmt = default_format_profile()
+        fmt.dates_on_title_line = False
+        fmt.entry_location_on_own_line = True
+        paras = _paras(render_docx(_located_content("Remote"), fmt))
+        i = paras.index(_para(paras, "Acme"))
+        self.assertEqual([p.text for p in paras[i : i + 3]], [
+            "Senior Engineer — Acme Corp", "Remote", "Jan 2020 – Present",
+        ])
+
+    def test_location_only_on_a_later_role_is_still_found(self):
+        doc = _entry_doc(
+            (("Senior Engineer | Acme Corp\tJan 2020 – Present", False, False),),
+            (("Engineer | Globex | Remote\tJun 2017 – Dec 2019", False, False),),
+        )
+        fmt = capture_format_profile(doc, _located_profile("", "Remote"))
+        self.assertEqual(fmt.entry_location_separator, " | ")
+
+    def test_entry_matched_only_after_whitespace_folding_does_not_crash(self):
+        doc = _entry_doc(
+            (("Senior  Engineer | Acme Corp | Remote\tJan 2020 – Present", False, False),),
+        )
+        profile = _located_profile("Remote")
+        profile.experience[0].company = "Acme  Corp"
+        fmt = capture_format_profile(doc, profile)
+        self.assertIsNone(fmt.entry_location_separator)
+
+    def test_location_on_the_right_gap_keeps_the_fallback(self):
+        """A location floated right ("Acme Corp      Remote") isn't joined
+        by a separator: the renderer's chained fallback stands in."""
+        doc = _entry_doc(
+            (("Senior Engineer — Acme Corp\tRemote", False, False),),
+        )
+        fmt = capture_format_profile(doc, _located_profile("Remote"))
+        self.assertIsNone(fmt.entry_location_separator)
+        self.assertFalse(fmt.entry_location_on_own_line)
+
+    def test_pdf_pipe_chain(self):
+        lines = [
+            _pdf_line("Jane Doe", 60, size=22, bold=True),
+            _pdf_line("jane@x.com | 555-1234 | Denver, CO", 90),
+            _pdf_line("EXPERIENCE", 120, bold=True),
+            _pdf_line(
+                "Senior Engineer | Acme Corp | Remote    Jan 2020 – Present",
+                140,
+                [
+                    _run("Senior Engineer", bold=True),
+                    _run(" | Acme Corp | "),
+                    _run("Remote", italic=True),
+                    _run("    Jan 2020 – Present", x0=450),
+                ],
+            ),
+            _pdf_line("• Built the thing", 156, x0=90),
+        ]
+        doc = PdfDoc(pages=[PdfPage(number=0, width=612.0, height=792.0, lines=lines)])
+        fmt = capture_format_profile_pdf(doc, _located_profile("Remote"))
+        self.assertEqual(fmt.entry_location_separator, " | ")
+        self.assertFalse(fmt.entry_location_on_own_line)
+        self.assertTrue(fmt.roles[ROLE_ENTRY_LOCATION].italic)
+        para = _para(_paras(render_docx(_located_content("Remote"), fmt)), "Acme")
+        self.assertEqual(para.text, "Senior Engineer | Acme Corp | Remote\tJan 2020 – Present")
+
+    def test_pdf_own_line(self):
+        lines = [
+            _pdf_line("Jane Doe", 60, size=22, bold=True),
+            _pdf_line("jane@x.com | 555-1234 | Denver, CO", 90),
+            _pdf_line("EXPERIENCE", 120, bold=True),
+            _pdf_line("Senior Engineer, Acme Corp    Jan 2020 – Present", 140, bold=True),
+            _pdf_line("Remote", 156, [_run("Remote", italic=True)]),
+            _pdf_line("• Built the thing", 172, x0=90),
+        ]
+        doc = PdfDoc(pages=[PdfPage(number=0, width=612.0, height=792.0, lines=lines)])
+        fmt = capture_format_profile_pdf(doc, _located_profile("Remote"))
+        self.assertTrue(fmt.entry_location_on_own_line)
+        paras = _paras(render_docx(_located_content("Remote"), fmt))
+        i = paras.index(_para(paras, "Acme"))
+        self.assertEqual(paras[i + 1].text, "Remote")
 
 
 if __name__ == "__main__":

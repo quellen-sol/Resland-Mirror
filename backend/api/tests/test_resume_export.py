@@ -26,7 +26,7 @@ def _content_pg():
         [
             [("Jane", "j@x.com", "555", "NYC", "My summary")],  # user
             [("https://gh",)],  # links
-            [(11, "Acme", "Eng", "2020", None)],  # experiences
+            [(11, "Acme", "Eng", "2020", None, "Remote")],  # experiences
             [(11, "Built x"), (11, "Shipped y")],  # bullets
             [("Python", "Langs"), ("Go", "Langs")],  # skills
             [("MIT", "BS", "CS", "2016", "2020", "")],  # education
@@ -45,6 +45,7 @@ class FetchResumeContent(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             content.experiences[0].bullets, ["Built x", "Shipped y"]
         )
+        self.assertEqual(content.experiences[0].location, "Remote")
         self.assertEqual(content.skill_groups[0].skills, ["Python", "Go"])
         self.assertEqual(content.education[0].institution, "MIT")
         self.assertEqual(content.projects[0].name, "Proj")

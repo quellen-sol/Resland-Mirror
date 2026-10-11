@@ -93,6 +93,11 @@ def _seed(conn) -> dict:
             (USER, name, title, start, created),
         ).fetchone()[0]
         ids[name] = exp_id
+        if name == "Acme":
+            conn.execute(
+                "UPDATE user_base_experience SET location = 'Remote' WHERE id = %s",
+                (exp_id,),
+            )
         for order, text in enumerate(bullets):
             conn.execute(
                 """
@@ -187,6 +192,11 @@ class Contract(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(updated["role"], "Principal")
             self.assertEqual(updated["content"]["summary"], "Data platform engineer.")
+            # A full-content update keeps each experience's location.
+            self.assertEqual(
+                [e["location"] for e in updated["content"]["experiences"]],
+                ["Remote", None],
+            )
 
             listed = await self.call(client, "list_tailored_resumes")
             self.assertEqual([i["id"] for i in listed["items"]], [created["id"]])

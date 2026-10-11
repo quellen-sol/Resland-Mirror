@@ -5,6 +5,8 @@
 export interface TailoredExperienceContent {
   company_name: string;
   title: string;
+  // Older snapshots predate this key; parseTailoredContent fills in null.
+  location: string | null;
   start_date: string;
   end_date: string | null;
   bullets: string[];
@@ -30,6 +32,7 @@ export function parseTailoredContent(raw: string): TailoredContent | null {
       experiences: parsed.experiences.map((e) => ({
         company_name: e.company_name ?? "",
         title: e.title ?? "",
+        location: e.location ?? null,
         start_date: e.start_date ?? "",
         end_date: e.end_date ?? null,
         bullets: Array.isArray(e.bullets) ? e.bullets : [],

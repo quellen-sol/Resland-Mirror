@@ -158,6 +158,7 @@ class Tools(ServerTest):
                 {
                     "company_name": "Acme",
                     "title": "Engineer",
+                    "location": "Remote",
                     "start_date": "2020",
                     "end_date": None,
                     "bullets": ["Built x"],

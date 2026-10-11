@@ -1126,6 +1126,36 @@ class DocxParserAgent(unittest.TestCase):
         tools["submit_user_profile"].invoke({"profile": profile})
         self.assertIs(out.profile_queue.get_nowait(), profile)
 
+    def test_submitted_experience_location_is_optional(self):
+        """The model's JSON arrives as dicts: a role with a location keeps
+        it, and one without still parses rather than failing the call."""
+        out, _, _, tools = self._build()
+        role = {
+            "company": "Acme",
+            "position": "Eng",
+            "start_date": "2020",
+            "end_date": "2023",
+            "bullets": [{"text": "b1"}],
+        }
+        tools["submit_user_profile"].invoke(
+            {
+                "profile": {
+                    "summary": "",
+                    "basic_info": {
+                        "name": "Jane", "email": "", "phone": "", "location": ""
+                    },
+                    "experience": [{**role, "location": "Remote"}, role],
+                    "skills": [],
+                    "education": [],
+                    "projects": [],
+                }
+            }
+        )
+        profile = out.profile_queue.get_nowait()
+        self.assertEqual(
+            [e.location for e in profile.experience], ["Remote", ""]
+        )
+
     def test_agent_parse_docx_invokes_and_returns_queue(self):
         out, agent, _, _ = self._build()
         with patch.object(

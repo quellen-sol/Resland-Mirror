@@ -45,6 +45,7 @@ class TailoredExperience(BaseModel):
 class EditedExperience(BaseModel):
     company_name: str
     title: str
+    location: str | None = None
     start_date: str
     end_date: str | None = None
     bullets: list[str]

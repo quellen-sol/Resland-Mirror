@@ -13,6 +13,8 @@ MAX_TAILORED_ITEMS = 200
 class TailoredExperienceContent(BaseModel):
     company_name: str = ""
     title: str = ""
+    # Snapshots saved before experiences had a location load as None.
+    location: str | None = None
     start_date: str = ""
     end_date: str | None = None
     bullets: list[str] = Field(default_factory=list, max_length=MAX_TAILORED_ITEMS)

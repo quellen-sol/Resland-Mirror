@@ -36,8 +36,8 @@ async def fetch_experience_bullets(pg_conn: PgConnection, user_id: str):
     return await _fetch_all(
         pg_conn,
         """
-        SELECT e.id, e.company_name, e.title, e.start_date, e.end_date,
-               e.description, b.id, b.bullet
+        SELECT e.id, e.company_name, e.title, e.location, e.start_date,
+               e.end_date, e.description, b.id, b.bullet
         FROM user_base_experience e
         LEFT JOIN user_base_experience_bullet b ON b.user_experience_id = e.id
         WHERE e.user_id = %s
