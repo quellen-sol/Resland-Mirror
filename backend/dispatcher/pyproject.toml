@@ -1,7 +1,7 @@
 [project]
 name = "dispatcher"
 version = "0.1.0"
-description = "Add your description here"
+description = "Resland dispatcher: AMQP consumers, LangGraph agents and resume layout parsers"
 readme = "README.md"
 authors = [
     { name = "quellen-sol", email = "52678959+quellen-sol@users.noreply.github.com" }

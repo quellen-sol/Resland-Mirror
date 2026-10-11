@@ -11,6 +11,7 @@ Run: .venv/bin/python -m unittest backend.dispatcher.tests.test_agents -v
 
 import io
 import json
+import re
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -1135,6 +1136,65 @@ class DocxParserAgent(unittest.TestCase):
         agent.invoke.assert_called_once_with(
             {"messages": [{"role": "user", "content": "Parse this document"}]}
         )
+
+
+# OpenRouter's regex prompt-injection guardrail, copied from
+# https://openrouter.ai/docs/guides/features/guardrails/prompt-injection.
+# It scans the system prompt too, and in block mode a match 403s every call
+# ("Request blocked: prompt injection patterns detected") whatever the user
+# sent.
+_OPENROUTER_INJECTION_PATTERNS = [
+    r"ignore\s+(all\s+)?(previous|prior)\s+((?:safety|security|system|operational|internal|core|original|initial|existing|given|stated|provided|defined|specified|established)\s+)?(instructions?|rules?|guidelines?|constraints?|directives?)",
+    r"disregard\s+(all\s+)?(previous|prior|above)\s+(instructions?|rules?|guidelines?|constraints?|directives?)",
+    r"forget\s+(all\s+)?(previous|prior|above)\s+(instructions?|rules?|guidelines?|constraints?|directives?)",
+    r"new\s+instructions?:",
+    r"do\s+not\s+follow\s+(the\s+)?(system|developer|previous|original)",
+    r"supersedes?\s+(all\s+)?(prior|previous)\s+(instructions?|rules?|guidelines?|constraints?|directives?)",
+    r"(all\s+)?(previous|prior)\s+instructions?\s+(are|is)\s+(void|invalid|null|obsolete|cancelled|revoked)",
+    r"you\s+are\s+now\s+(in\s+)?developer\s+mode",
+    r"enter\s+(developer|admin|debug|maintenance)\s+mode",
+    r"activate\s+(developer|admin|debug|jailbreak)\s+mode",
+    r"\bsystem\s+override\b",
+    r"override\s+(your\s+)?(instructions?|rules?|guidelines?|constraints?|directives?)",
+    r"reveal\s+((?:your?|yoru|yuor|the|my|its|his|her|our|their)\s+)?((?:(?:full|hidden|complete|internal|secret|original|entire|exact|actual|real)\s+){0,2})((?:system|systme|sysetm|systemp?)\s+)?prompt\b",
+    r"show\s+(me\s+)?((?:your?|yoru|yuor|the|my|its|his|her|our|their)\s+)((?:system|systme|sysetm|systemp?)\s+)?prompt\b",
+    r"what\s+(are|were)\s+(your\s+)?(exact\s+)?instructions",
+    r"repeat\s+(the\s+)?(text|instructions?)\s+(above|before)",
+    r"output\s+(your\s+)?(initial|original|system)\s+(prompt|instructions?)",
+    r"you\s+are\s+no\s+longer\s+(bound|restricted|limited)",
+    r"act\s+as\s+if\s+(you('re|\s+are)\s+)?not\s+bound",
+    r"pretend\s+(you('re|\s+are)\s+)?(a\s+)?different\s+(ai|assistant|model)",
+    r"you\s+are\s+now\s+(?:(?:a|an)\s+)?\w+.{0,40}(without\s+(any\s+)?restrict|ignor\w*\s+(all|any|every|prev)|bypass|unrestrict|unlimit|obey\s+only|no\s+(rules|limits|restrict|boundari))",
+    r"jailbreak(ed)?\s+(mode|prompt)",
+    r"bypass\s+(your\s+)?(safety|security|content|ethical)\s+(filters?|measures?|guidelines?|restrictions?)",
+    r"disable\s+(your\s+)?(safety|security|content)\s+(filters?|measures?)",
+    r"(ignore|disregard)\s+(all\s+)?(your\s+)?(safety|security|ethical|content)\s+(guidelines?|rules?|restrictions?|measures?|filters?|polic(?:y|ies)|protocols?)",
+    r"<\s*(?:/\s*)?system\s*/?>",
+    r"<\s*(?:/\s*)?(assistant|developer|tool|function)\s*/?>",
+    r"\][^\S\n]*\n\s*\[?(system|assistant|user)\]?:",
+    r"\[\s*(System\s*Message|System|Assistant|Internal)\s*\]",
+    r"(?m)^\s*System:\s+",
+]
+
+
+class PromptsPassOpenRouterGuardrail(unittest.TestCase):
+    def test_system_prompts_match_no_injection_pattern(self):
+        from dispatcher.agents import system_design
+
+        prompts = {
+            "docx parser": docx_parser.DOCX_AGENT_PARSER_SYSTEM_PROMPT,
+            "pdf parser": docx_parser.PDF_AGENT_PARSER_SYSTEM_PROMPT,
+            "suggestions": suggestions.SUGGESTIONS_SYSTEM_PROMPT,
+            "suggestions review": suggestions.REVIEW_PROMPT,
+            "tailor": tailor.TAILOR_SYSTEM_PROMPT,
+            "interviewer": system_design.INTERVIEWER_SYSTEM_PROMPT,
+            "brief": system_design.BRIEF_SYSTEM_PROMPT,
+            "grader": system_design.GRADER_SYSTEM_PROMPT,
+        }
+        for name, prompt in prompts.items():
+            for pattern in _OPENROUTER_INJECTION_PATTERNS:
+                with self.subTest(prompt=name, pattern=pattern):
+                    self.assertIsNone(re.search(pattern, prompt, re.IGNORECASE))
 
 
 if __name__ == "__main__":

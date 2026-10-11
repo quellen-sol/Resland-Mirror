@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 
 import docx
 from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.shared import Pt
 
 from shared.docgen import (
@@ -520,6 +522,29 @@ class CaptureEdgeCases(unittest.TestCase):
         for role in ALL_ROLES:
             self.assertIn(role, fmt.roles)
         self.assertEqual(fmt.columns, 1)
+
+    def test_start_end_alignment_reads_as_left_right(self):
+        # Newer Word and Google Docs write `start`/`end`, which python-docx
+        # has no enum member for — reading them used to fail the whole job.
+        doc = _resume_doc()
+        _set_jc(doc.paragraphs[0], "end")  # name
+        _set_jc(doc.paragraphs[3], "start")  # summary → body
+        fmt = capture_format_profile(doc, _sample_profile())
+        self.assertEqual(fmt.roles[ROLE_NAME].alignment, "right")
+        self.assertEqual(fmt.roles[ROLE_BODY].alignment, "left")
+
+    def test_unmapped_alignment_is_left_undeclared(self):
+        doc = _resume_doc()
+        _set_jc(doc.paragraphs[0], "numTab")
+        fmt = capture_format_profile(doc, _sample_profile())
+        self.assertIsNone(fmt.roles[ROLE_NAME].alignment)
+
+
+def _set_jc(para, val: str):
+    """Write a raw `<w:jc w:val=…>` — python-docx refuses values it can't map."""
+    jc = OxmlElement("w:jc")
+    jc.set(qn("w:val"), val)
+    para._p.get_or_add_pPr().append(jc)
 
 
 def _pdf_line(
