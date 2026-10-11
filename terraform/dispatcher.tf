@@ -9,7 +9,7 @@ variable "langsmith_api_key" {
 module "dispatcher" {
   source = "./modules/ecs"
 
-  image             = "690473803923.dkr.ecr.us-east-2.amazonaws.com/api:latest"
+  image             = local.api_image
   cluster_name      = "resland-live"
   service_name      = "dispatcher"
   vpc_id            = data.aws_vpc.main.id

@@ -15,11 +15,12 @@ backend/dispatcher/   AMQP consumers + LangGraph agents (tailor, suggestions, pa
 backend/shared/       Shared library: AMQP client, job dataclasses, pdfdoc, db helpers -> pytest
 backend/resland-mcp/  Personal MCP server (Claude Code/Desktop): profile, memory, tailored board -> pytest
 frontend/             Next.js 16 app (UI, Auth0, Prisma-Next contract)              -> node --test
-terraform/            Infra definitions
+terraform/            AWS version of the deployment (ECS Fargate, Amazon MQ, RDS); prod runs on Railway.
+                      Only terraform/durable/ (S3 bucket + IAM user for resume files) is live
 compose.yml           Local stack: api, dispatcher, amqp (rabbitmq:4-management), postgres:18
-deploy.sh             Build + push image to ECR, force ECS redeploy (us-east-2), cluster resland-live
+deploy.sh             Build + push image to ECR, force ECS redeploy (for the AWS setup in terraform/)
 Dockerfile            Single image for both api and dispatcher (`uv run api` / `uv run dispatcher`)
-docs/                 Design docs (billing plan, UX specs)
+docs/                 Design docs (billing plan)
 .devin/skills/        Rich testing playbooks — read the relevant one before deep testing work
 ```
 
@@ -189,8 +190,9 @@ step 4 gets sent back.
 - Frontend: **read `frontend/AGENTS.md` and `frontend/node_modules/next/dist/docs/` first** — Next 16
   differs from most training data. Server components by default; keep API access in `lib/api.ts`.
 - Secrets: never commit `.env`/`.env.local` or credentials. AWS/OpenRouter/Stripe/Auth0 values are
-  injected at runtime (ECS task definitions / local env files, both untracked).
-- Deploys: `./deploy.sh` is owner-run; agents build and test locally only unless explicitly asked.
+  injected at runtime (Railway service variables / local env files, both untracked).
+- Deploys: Railway builds `master` when a push touches a service's watched files; deploying is
+  the owner's call, so agents build and test locally only unless explicitly asked.
 
 ## Reviewing
 

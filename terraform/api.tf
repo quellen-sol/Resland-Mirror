@@ -35,7 +35,7 @@ variable "resland_amqp_password" {
 module "api" {
   source = "./modules/ecs"
 
-  image                = "690473803923.dkr.ecr.us-east-2.amazonaws.com/api:latest"
+  image                = local.api_image
   cluster_name         = "resland-live"
   service_name         = "api"
   vpc_id               = data.aws_vpc.main.id

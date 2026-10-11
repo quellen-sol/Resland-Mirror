@@ -1,7 +1,7 @@
 #!/bin/bash
 
 AWS_REGION=us-east-2
-AWS_ACCOUNT_ID=690473803923
+AWS_ACCOUNT_ID=${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text)}
 MY_DIR=$(dirname $0)
 
 # build image
