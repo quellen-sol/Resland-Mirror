@@ -281,13 +281,10 @@ The README in the archive says what's left out.
   `api` ECR repository) **no longer exists**. Checked in `us-east-2` on
   2026-10-06: no RDS instances or snapshots, no MQ brokers, no `resland-live`
   ECS cluster, no load balancers, no ECR repository. Only the S3 bucket is
-  live. `terraform/` (apart from `durable/`), `deploy.sh`, and the deploy notes
-  in `AGENTS.md` are stale.
+  live. Its Terraform, `deploy.sh` and the ECS notes in `AGENTS.md` have been
+  removed; only `terraform/durable/` (the bucket and its IAM user) remains.
 - The S3 settings above come from AWS defaults, not from Terraform, so
   nothing in the repo stops them from changing.
-- `.dockerignore` excludes only the root `.env`, so a local `docker build`
-  bakes `backend/dispatcher/.env` (API keys included) into the image. Railway
-  builds from git, where `.env` is ignored, so production isn't affected.
 
 ## 6. What the site already promises
 
@@ -387,6 +384,10 @@ These must stay true, or the policy and the copy must change together:
   2026-10-10).
 - A resume re-upload no longer orphans the checkpoints of the suggestions it
   deletes.
+- The stale AWS deploy path (`terraform/` outside `durable/`, `deploy.sh`, the
+  ECS notes in `AGENTS.md`) is removed.
+- `.dockerignore` excludes `.env` files at any depth, so a local `docker build`
+  no longer bakes `backend/*/.env` (API keys included) into the image.
 
 **Still to do**
 1. Make account deletion and export work in production: give the Railway API
@@ -398,19 +399,16 @@ These must stay true, or the policy and the copy must change together:
    weekly Postgres backups.
 4. Sign Railway's DPA. Confirm the DPAs for Stripe, Auth0, OpenRouter,
    LangSmith, and AWS; most are incorporated into their terms automatically.
-5. Remove the stale AWS deploy path: `terraform/` outside `durable/`,
-   `deploy.sh`, and the ECS/ECR notes in `AGENTS.md`. The resources
-   themselves are already gone.
-6. Retention: add a TTL to the dead-letter queues, a `page_view` retention
+5. Retention: add a TTL to the dead-letter queues, a `page_view` retention
    window, and a cleanup for the checkpoints of abandoned sessions.
-7. Self-host the Excalidraw fonts (`EXCALIDRAW_ASSET_PATH`), or list esm.sh.
-8. Update the Help page's privacy answer (§6).
-9. Publish `/privacy`, `/terms`, and a refund policy. Add them to the footer
+6. Self-host the Excalidraw fonts (`EXCALIDRAW_ASSET_PATH`), or list esm.sh.
+7. Update the Help page's privacy answer (§6).
+8. Publish `/privacy`, `/terms`, and a refund policy. Add them to the footer
    `LEGAL_LINKS` and `app/sitemap.ts`, and set Checkout's
    `consent_collection.terms_of_service = "required"`.
-10. Disconnect the Vercel GitHub app, or check that its preview deployments
+9. Disconnect the Vercel GitHub app, or check that its preview deployments
     don't get production credentials (§2).
-11. Decide whether resland-mcp is offered to users. If it is, cover
+10. Decide whether resland-mcp is offered to users. If it is, cover
     connecting third-party AI clients in the policy (§1.9).
-12. Narrow the export card's "everything Resland stores about you", or name
+11. Narrow the export card's "everything Resland stores about you", or name
     what's left out (§6).

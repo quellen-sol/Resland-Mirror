@@ -112,17 +112,17 @@ LLM usage is metered against a prepaid USD balance — `user.balance_cents`, a
 
 | Var | Where | Notes |
 | --- | --- | --- |
-| `STRIPE_SECRET_KEY` | `backend/api/.env` | `sk_test_...` for dev, `sk_live_...` in prod (terraform var) |
+| `STRIPE_SECRET_KEY` | `backend/api/.env` | `sk_test_...` for dev, `sk_live_...` in prod (Railway variable) |
 | `STRIPE_WEBHOOK_SECRET` | `backend/api/.env` | `whsec_...` from `stripe listen` (dev) or the dashboard endpoint (prod) |
 | `FRONTEND_BASE_URL` | `backend/api/.env` | checkout success/cancel redirect target |
 | `NEXT_PUBLIC_API_BASE_URL` | frontend env | e.g. `http://localhost:3001` |
 
-Production (`terraform/api.tf`): `stripe_secret_key` and
-`stripe_webhook_secret` are sensitive TF vars. Register the webhook endpoint
+Production: `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are variables on
+the Railway API service, never in the repo. Register the webhook endpoint
 in Stripe → Developers → Webhooks: `https://<api-host>/stripe/webhook`,
 events `checkout.session.completed`, `checkout.session.expired`,
-`charge.refunded`. `FRONTEND_BASE_URL` is `https://resland.org` in terraform —
-verify. `MAINTENANCE_MODE` in `api.tf` only seeds the
+`charge.refunded`. `FRONTEND_BASE_URL` is `https://resland.org` there —
+verify. `MAINTENANCE_MODE` only seeds the
 `site_settings.maintenance_mode` row on first read — afterwards the flag is
 toggled from `/admin` (Site settings). Confirm the seed value is intentional
 before launch. Restricted keys are preferable to secret keys if
@@ -256,7 +256,7 @@ dashboard (payments minus refunds) each release cycle.
       dispute policy).
 - [ ] Live webhook endpoint registered with `checkout.session.completed`,
       `checkout.session.expired`, `charge.refunded`.
-- [ ] Live keys set via terraform vars; test keys nowhere near prod env.
+- [ ] Live keys set as Railway variables; test keys nowhere near prod env.
 - [ ] `site_settings` flags reviewed in `/admin` (maintenance mode + payments
       paused).
 - [ ] `TOKEN_PACKS` pricing and `model_pricing` seed data signed off.

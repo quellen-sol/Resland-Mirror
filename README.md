@@ -59,7 +59,7 @@ free data structures and algorithms study center.
 | Data | PostgreSQL 18, schema defined as a Prisma-Next contract |
 | Auth | Auth0 (Next.js session, JWT bearer tokens to the API, device flow for the MCP server) |
 | MCP | MCP Python SDK (stdio server for Claude Code and Claude Desktop) |
-| Infra | Vercel (frontend). AWS: ECS Fargate, Amazon MQ, RDS, S3, ALB, Route 53, ACM. Terraform. Docker. |
+| Infra | Railway (frontend, API, dispatcher, Postgres, RabbitMQ). AWS S3 via Terraform. Docker. |
 | Tooling | uv workspace, pnpm, ruff, pytest, `node --test`, GitHub Actions |
 
 ## Architecture
@@ -387,7 +387,7 @@ frontend/
                 billing, account, admin
   content/dsa/  Study center topics, with runnable examples in five languages
   prisma/       contract.prisma, the database schema for the whole system
-terraform/      AWS infrastructure (ECS, Amazon MQ, RDS, S3, DNS)
+terraform/      The S3 bucket and IAM user for resume files
 docs/           Design docs
 compose.yml     Local RabbitMQ, Postgres, API and dispatcher
 AGENTS.md       Contributor guide: toolchain, conventions, pitfalls
@@ -424,17 +424,14 @@ erase and export lists, so nothing new can be left behind.
 
 ## Infrastructure
 
-The frontend is hosted on Vercel, which also builds a preview deployment for every pull
-request. The API and dispatcher run on AWS in `us-east-2`, defined in
-[`terraform/`](terraform/):
+Everything runs in one [Railway](https://railway.com) project: the frontend
+(resland.org), the API (api.resland.org), the dispatcher, Postgres and RabbitMQ. Railway
+builds each service from `master` when a push touches its files. The API and the
+dispatcher build the same [`Dockerfile`](Dockerfile) and differ only in their start
+command. Postgres and RabbitMQ are reachable only over Railway's private network.
 
-- **ECS Fargate.** One service for the API behind an ALB with an ACM certificate, and one
-  for the dispatcher. Both come from a reusable module and the same image.
-- **Amazon MQ** for RabbitMQ 4, **RDS** for Postgres, **Route 53** for DNS.
-- **S3** for uploads and generated documents. It lives in a separate Terraform state
-  (`terraform/durable/`), so tearing down the rest of the stack can't touch user files.
-
-[`deploy.sh`](deploy.sh) builds the image, pushes it to ECR and redeploys both services.
+Uploaded resumes and generated documents live in S3. The bucket and the IAM user the
+services sign in with are defined in [`terraform/durable/`](terraform/durable/).
 
 ## Running locally
 
