@@ -15,10 +15,12 @@ backend/dispatcher/   AMQP consumers + LangGraph agents (tailor, suggestions, pa
 backend/shared/       Shared library: AMQP client, job dataclasses, pdfdoc, db helpers -> pytest
 backend/resland-mcp/  Personal MCP server (Claude Code/Desktop): profile, memory, tailored board -> pytest
 frontend/             Next.js 16 app (UI, Auth0, Prisma-Next contract)              -> node --test
-terraform/durable/    S3 bucket + IAM user for resume files (everything else runs on Railway)
+terraform/            AWS version of the deployment (ECS Fargate, Amazon MQ, RDS); prod runs on Railway.
+                      Only terraform/durable/ (S3 bucket + IAM user for resume files) is live
 compose.yml           Local stack: api, dispatcher, amqp (rabbitmq:4-management), postgres:18
+deploy.sh             Build + push image to ECR, force ECS redeploy (for the AWS setup in terraform/)
 Dockerfile            Single image for both api and dispatcher (`uv run api` / `uv run dispatcher`)
-docs/                 Design docs (billing plan, personal-data inventory)
+docs/                 Design docs (billing plan)
 .devin/skills/        Rich testing playbooks — read the relevant one before deep testing work
 ```
 
